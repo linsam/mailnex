@@ -1,0 +1,46 @@
+Goals:
+    be like mailx, supporting the useful bits of bsd-mailx and heirloom-mailx.
+    Add features that most people expect should have been implemented long ago
+        * PGP format signing/encryption
+        * subpart referencing and display (e.g. syntax to explicitly save an
+          attachment without having to 'write /dev/null' and work your way
+          through all of the parts)
+        * readline or similar
+        * notifications (in particular, new mail received)
+        * address book search while selecting email addresses
+            * support external program (e.g. khard)
+            * possibly support "recent" addresses, like kmail used to
+              (kmail still has the feature, but it currently only stores
+              the username and host with no other data, like full name)
+        * Somewhat better calendar support
+            for example, a multipart/alternative with a text/calendar part
+            should default to displaying a processed version of the text/
+            calendar part instead of defaulting to the text/plain. There
+            are some emailers (google? outlook.com?) that send a set of
+            text/plain,text/html,text/calendar and leave the text/plain
+            and text/html EMPTY! very frustrating!
+        * Support accellerated full-body search
+            * posibly using Xapian, Sphinx, or Lucene, or "notmuch"
+        * Support storing mail lists (not mailing lists) into variables, like
+          vim registers
+            * mostly useful for saving search results for re-use.
+              for example, I'll do a complicated IMAP style search that takes
+              2 minutes. I want to read the 3rd result, then the 5th, then
+              review the list again or whatever. In current heirloom-mailx,
+              the moment I move to a particular message, that replaces the
+              current mail list with that one message, so to retrieve the list
+              I have to reperform the 2 minute search.
+            * Support searching within a mail list.
+              For example, I perform one search which gives me a list of say
+              50 messages. I'd like to refine the search without running over
+              the entire list again. I should be able to do a new search that
+              only looks at those 50 messages.
+        * Support different pagers and CRT values based on command and
+          possibly terminal type
+            * e.g. CRT full screen for the find command, but 0 for viewing
+              mail.
+            * Might want to disable paging or have a very bit CRT when using
+              tmux so that you get its scroll-back buffer instead.
+        * Support better editing of message structure
+            * Biggest example is being able to edit an attachement, even
+              when there isn't a real file backing it.
