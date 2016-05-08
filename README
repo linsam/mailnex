@@ -44,3 +44,98 @@ Goals:
         * Support better editing of message structure
             * Biggest example is being able to edit an attachement, even
               when there isn't a real file backing it.
+
+Other projects (or, why another mail client):
+
+  I had been a user of kmail for a LONG time. Then they went and broke it in
+  the move to KDE4 (apparently it works great for the developers, but for me
+  and a bunch of other people, it started doing strange and horrible things
+  to our IMAP folders and started forgetting the people we email).
+
+  At that point, I did a big overview of alternative mail programs, and
+  ended up settling on heirloom-mailx (openssl version from Ubuntu) because
+  it was very fast and required very little setup to Just Work™.
+
+  After I started this project (like, seriously, day 3) I ran accross 'sup' which
+  wasn't in my previous overview. It has some of the same goals as me and an
+  interesting philosophy statement. However, I'm continuing this project because
+  I generally like the mailx interface (sup appears to try to have a GUI/TUI
+  approach like cone, pine, and mutt), and because I also want something I can
+  hack on, and I don't know ruby. Additionally, the sup homepage appears
+  defunct right now.
+
+
+  * sup - designed to be FAST and handle mailing lists especially well. It
+    uses xapian for search, which is the same decision I made. Developer liked
+    mutt as their primary MUA originally. Then they liked how GMail dealt with
+    threads and search, but not the implementation (top posting, HTML, single
+    level threads)
+
+    It also borrows from mutt, emacs, and vi for efficiency of console use.
+
+    Used to support remote mail, but now delegates that. Delegation is a good
+    unix move, but I haven't enjoyed delegators. In particular, they suggest
+    offlineimap to synchronize local maildi with a remote imap host. However,
+    maildir doesn't have a good way to show which side has the more recent
+    data (in particular, flags) for a given message, making synchronization
+    when both sides change something impossible to get right. While I applaud
+    using small programs to do stuff well, I think a mail viewer needs to support
+    remote protocols as a primary function, or utilize a medium that can
+    support it (e.g. not using IMAP or maildir)
+
+  * cone - the first terminal mail program I used; originally I set it up
+    while still using kmail for when I logged in remotely (GUI over internet
+    sucks). Not particularly easy to configure, bad color schemes, not a lot
+    of features (or, I didn't invest enough time)
+
+  * mailx - POSIX email viewer. heirloom's version supports S/MIME, IMAP, and
+    some other niceties. Very fast. Supports calling programs based on
+    mime-type to produce text representations for console viewing. Doesn't
+    require much out-of-the-box configuration, but has many config options
+    with account and destination override-ability. (I like how it, like vim,
+    can be run vanilla and is usable)
+
+    OTOH, lacks important things like line editing, address book (closest
+    thing is aliases), OpenPGP (GPG) support (they recommend inline
+    clear-sign) and reasonable handling of search results. Search is also
+    based on either support in the IMAP server or by fetching messages and
+    doing local search at the time of the search query. This makes header
+    searches slow and content searches very slow, though still not as bad as
+    some other clients.
+
+  * kmail - Very featureful client. Supports (or supported) OpenPGP, S/MIME,
+    multiple identites, multiple accounts, filtering, addressbook and calendar
+    integration (with KDEPIM, not 'generic').
+
+    One of the best features that was *almost* implemented right was its
+    thread view options. There are times when you want to see threads and
+    times when you don't. It allowed you to have multiple tabs open and you
+    could have two tabs to the same mail box open with different threading on
+    each. Unfortunately, your thread selections from the menu applied to all
+    of kmail and just didn't update an old tab until you changed boxes, so you
+    couldn't switch between, say, sent and INBOX on any tab without losing
+    settings.
+
+    It had both sorting and aggregation options (unlike others that group
+    those together). My favorite set was aggregating by thread but listing
+    each thread in the order of most recent message within the thread. Other
+    clients seem to prefer to sort by thread leader, which results in missing
+    something if someone replies to a month or year old thread if you don't
+    pay attention to the unread count. (KMail made that mode impossible when
+    one of the akonadi issues resulted in all messages being marked as unread
+    after every sync with the server. It didn't like setting the \Seen flag
+    for some reason.). This ordering is somewhat close to gmail.
+
+    Requires a GUI and KDE. More recent versions split the viewer from the
+    client, which is now a local server backend that integrates into a search
+    and information caching database (akonadi backed by mysql). In theory this
+    is good because you can get new mail notifications when your viewer is
+    closed, and searching for stuff should be very fast. In practice, things
+    got out of sync, search often didn't work, and the backing database could
+    grow to enormous sizes. Somewhere along the line they also switched to
+    DBus for communication between components, which in my experience breaks a
+    *lot*, and when it does, you get either weird error messages or weird
+    behavior or both.
+
+  * mutt - haven't used it yet. I've heard lots of good things and some bad
+    things. I'm mostly against its mbox format of choice.
