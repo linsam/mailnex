@@ -257,6 +257,19 @@ def print_mail(C, index):
     s = subprocess.Popen("less", stdin=subprocess.PIPE)
     s.communicate(data[0][1] + data[1][1])
 
+def show_mail(C, index):
+    """Show the raw, unprocessed message"""
+    M = C.connection
+    # TODO: Decorate with a connection_check
+    if not M:
+        print "no connection"
+        return
+    M.select()
+    ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+    import subprocess
+    s = subprocess.Popen("less", stdin=subprocess.PIPE)
+    s.communicate(data[0][1] + data[1][1])
+
 def unpackStruct(data, depth=1, value=""):
     if isinstance(data[0], list):
         # We are multipart
@@ -518,6 +531,10 @@ def interact():
             print_structure(C, line[10:])
         elif line == "h" or line == "headers":
             headers(C)
+        elif line == "p" or line == "print":
+            print_mail(C, C.currentMessage)
+        elif line == "show":
+            show_mail(C, C.currentMessage)
         elif line.isdigit():
             print_mail(C, int(line))
             C.currentMessage = int(line)
@@ -555,3 +572,5 @@ def interact():
 if __name__ == "__main__":
     import sys
     interact()
+
+# 2357
