@@ -35,6 +35,8 @@ import xapian
 import os
 import sys
 import imaplib
+import email
+import mailbox
 import getpass
 imaplib._MAXLINE *= 10
 import re
@@ -46,35 +48,7 @@ class Context(object):
         self.connection = None
 
 def test():
-    M = imaplib.IMAP4("localhost")
-    #print dir(M)
-    #print M.capabilities
-    if "STARTTLS" in M.capabilities:
-        if hasattr(M, "starttls"):
-            res = M.starttls()
-        else:
-            print "Warning! Server supports TLS, but we don't!"
-            print "Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later"
-    M.login(getpass.getuser(), getpass.getpass())
-    res = M.list()
-    print res
-    res = M.lsub()
-    for i in res[1]:
-        print i
-    res = M.namespace()
-    print res
-    M.select()
-    M.close()
-    M.logout()
-    return
-    i = 1
-    while True:
-        try:
-            typ,data = M.fetch(i,'(FLAGS)')
-        except:
-            break
-        print i, imaplib.ParseFlags(data[0])
-        i += 1
+    pass
 
 def processAtoms(text):
     """Process a set of IMAP ATOMs
@@ -102,7 +76,7 @@ def processAtoms(text):
         a string whose value is a double quote.
 
     This implementation is currently incomplete. It doesn't handle the \ escape
-    in quoted strings, it doesn't interpret leteral strings at all, and
+    in quoted strings, it doesn't interpret literal strings at all, and
     accepts quotes anywhere.
     """
 
@@ -212,6 +186,11 @@ def connect(C, args):
     C.connection = M
     typ,data = M.select()
     print typ, data
+    # Normally, you'd scan for the first flagged or new message and set that
+    # (probably by issuing a SEARCH to the server). For now, we'll hard code
+    # it to 1.
+    C.currentMessage = 1
+    C.lastMessage = int(data[0])
 
 def indexInbox(C):
     #M = imaplib.IMAP4("localhost")
@@ -220,7 +199,6 @@ def indexInbox(C):
     if not M:
         print "No connection :-("
         return
-    M.select()
     i = 1
     seen=0
 
@@ -266,8 +244,6 @@ def indexInbox(C):
             break
     print 
     print "Done!"
-    M.close()
-    M.logout()
 
 def print_mail(C, index):
     M = C.connection
@@ -287,13 +263,13 @@ def unpackStruct(data, depth=1, value=""):
         for i in range(len(data)):
             if not isinstance(data[i], list):
                 break
-        print "%s%*s%s/%s" % (value, depth * 2, " ", "multipart", data[i])
+        print "%s   %s/%s" % (value, "multipart", data[i])
         j = 1
         for dat in data[:i]:
             unpackStruct(dat, depth + 1, value + '.' + str(j))
             j += 1
     else:
-        print "%s%*s%s/%s" % (value, depth * 2, " ", data[0], data[1])
+        print "%s   %s/%s" % (value, data[0], data[1])
 
 def print_structure(C, index):
     M = C.connection
@@ -321,13 +297,45 @@ def print_structure(C, index):
             return
         unpackStruct(d[1], value=val)
 
+# 254 area is interesting; actually uses literals :-/
 
 def headers(C):
     M = C.connection
     if not M:
         print "no connection"
         return
-    print "TBD"
+    rows = 25 # TODO get from terminal
+    start = C.currentMessage / rows * rows
+    # alternatively, start = C.currentMessage - (C.currentMessage % rows)
+    start += 1 # IMAP is 1's based
+    last = start + rows - 1
+    if last > C.lastMessage:
+        last = C.lastMessage
+    typ, data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
+    # TODO: get rid of i and use d[0] instead?
+    i = start
+    for d in data:
+        try:
+            d = processAtoms(d)
+        except:
+            print "  %i  (error parsing envelope!)" % i
+            continue
+        try:
+            if i == C.currentMessage:
+                print "> %(num)s %(date)31s %(subject)s" % {
+                        'num': d[0],
+                        'date': d[1][1][0],
+                        'subject': d[1][1][1],
+                        }
+            else:
+                print "  %(num)s %(date)31s %(subject)s" % {
+                        'num': d[0],
+                        'date': d[1][1][0],
+                        'subject': d[1][1][1],
+                        }
+        except:
+            print "  %i  (error displaying. Data follows)" % i, repr(d)
+        i += 1
 
 def namespace(C):
     M = C.connection
@@ -508,33 +516,42 @@ def interact():
             testq(C, line[6:])
         elif line[:9] == "structure":
             print_structure(C, line[10:])
+        elif line == "h" or line == "headers":
+            headers(C)
         elif line.isdigit():
             print_mail(C, int(line))
+            C.currentMessage = int(line)
+            lastcommand = ""
         elif line == "":
             # Repeat/continue
             if lastcommand=="search":
                 lastsearchpos += 10
                 search(C, lastsearch, offset=lastsearchpos)
             else:
-                print "TBD: next message"
+                # Next message
+                # TODO: mailx has a special case, which is when it picks the
+                # message, e.g. when opening a box and it picks the first
+                # flagged or unread message. In which case, the implicit
+                # "next" command shows the message marked as current.
+                #
+                # Plan: Have both currentMessage and nextMessage. Typically
+                # they are different, but can be the same.
+                #
+                # TODO: extension to mailx: Next could mean next in a list;
+                # e.g. a saved list or results of f/search command or custom
+                # list or whatever.
+                # Ideally, we'd mention the active list in the prompt. Ideally
+                # we'd also list what the implicit command is in the prompt
+                # (e.g. next or search continuation)
+                if (C.currentMessage == C.lastMessage):
+                    print "at EOF"
+                else:
+                    C.currentMessage += 1
+                    print_mail(C, C.currentMessage)
 
         else:
             print "bad command"
 
 if __name__ == "__main__":
     import sys
-    #index("/home/john", "./db2/")
-    #search("./db2/", " ".join(sys.argv[1:]))
-    if len(sys.argv) < 2 or "-h" in sys.argv or "--help" in sys.argv or sys.argv[1] == "help":
-        print "Usage:"
-        print "   index"
-        print "   search [terms]"
-        print "   interact"
-    elif sys.argv[1] == "index":
-        indexInbox()
-    elif sys.argv[1] == "search":
-        search("./maildb1/", " ".join(sys.argv[2:]))
-    elif sys.argv[1] == "interact":
-        interact()
-    else:
-        print "Unknown command '%s'. Try help" % sys.argv[1]
+    interact()
