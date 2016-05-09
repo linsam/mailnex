@@ -38,6 +38,7 @@ import os
 import sys
 import re
 import threading
+from functools import wraps
 # xapian search engine
 import xapian
 # various email helpers
@@ -60,6 +61,16 @@ class Context(object):
     def __init__(self):
         object.__init__(self)
         self.connection = None
+
+# Some decorators
+def needsConnection(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not self.C.connection:
+            print "no connection"
+        else:
+            return func(self, *args, **kwargs)
+    return wrapper
 
 def unpackStruct(data, depth=1, value=""):
     if isinstance(data[0], list):
@@ -277,14 +288,12 @@ class Cmd(cmd.Cmd):
         C.currentMessage = 1
         C.lastMessage = int(data[0])
 
+    @needsConnection
     def do_index(self, args):
         #M = imaplib.IMAP4("localhost")
         #M.login("john", getpass.getpass())
         C = self.C
         M = C.connection
-        if not M:
-            print "No connection :-("
-            return
         i = 1
         seen=0
 
@@ -331,6 +340,7 @@ class Cmd(cmd.Cmd):
         print 
         print "Done!"
 
+    @needsConnection
     def do_print(self, args):
         C = self.C
         M = C.connection
@@ -342,23 +352,16 @@ class Cmd(cmd.Cmd):
                 return
         else:
             index = C.currentMessage
-        # TODO: Decorate with a connection_check
-        if not M:
-            print "no connection"
-            return
         ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         s.communicate(data[0][1] + data[1][1])
 
+    @needsConnection
     def do_show(self, args):
         """Show the raw, unprocessed message"""
         C = self.C
         M = C.connection
-        # TODO: Decorate with a connection_check
-        if not M:
-            print "no connection"
-            return
         if args:
             try:
                 index = int(args)
@@ -372,16 +375,10 @@ class Cmd(cmd.Cmd):
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         s.communicate(data[0][1] + data[1][1])
 
+    @needsConnection
     def do_structure(self, args):
         C = self.C
         M = C.connection
-        # TODO: Decorate with a connection_check
-        if not M:
-            print "no connection"
-            return
-        if not M:
-            print "no connection"
-            return
         if args:
             try:
                 index = int(args)
@@ -412,12 +409,10 @@ class Cmd(cmd.Cmd):
 
 # 254 area is interesting; actually uses literals :-/
 
+    @needsConnection
     def do_headers(self, args):
         C = self.C
         M = C.connection
-        if not M:
-            print "no connection"
-            return
         rows = 25 # TODO get from terminal
         start = C.currentMessage / rows * rows
         # alternatively, start = C.currentMessage - (C.currentMessage % rows)
@@ -451,6 +446,7 @@ class Cmd(cmd.Cmd):
                 print "  %i  (error displaying. Data follows)" % i, repr(d)
             i += 1
 
+    @needsConnection
     def do_namespace(self, args):
         C = self.C
         M = C.connection
