@@ -1,0 +1,25 @@
+Some of the design decisions made:
+
+    * use of cmd module instead of custom. This module mostly does what I
+      would have done anyway, with a few inconveniences I can overlook in the
+      interest of saving time.
+    
+    * readline: Python's readline interface is pretty rudimentary. A lot of
+      the medium to advanced functionality isn't available. Still, quicker
+      than rolling my own.
+
+    * Threads vs. eventloop. I much prefer eventloops. It keeps things fairly
+      simple. Resource locking is usually not needed and passing info from
+      one part of the program to another is a snap. However, many python
+      libraries don't support this style. They want to be blockers or their
+      own event loops. I might be able to fake it with imaplib by overriding
+      the I/O functions. Readline is a breaker though. The bindings appear to
+      be C functions. I cannot override that, and they didn't provide the
+      injection functions one would need to implement it.
+
+      So, we have to resort to threads anyway, so we might as well be like
+      Windows apps and have one thread for each of everything (1 for UI, 1
+      each for every network connection, etc). Stupid waste of resources, but
+      to do it cleaner I'd have to write this in C and implement all of the
+      python modules I'm using in C, or rewrite the python modules to be event
+      based, and write my own readline wrapper.

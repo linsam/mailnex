@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+debug = 0
+
 #  Search indexing
 #  ---------------
 # Terms:
@@ -31,24 +33,47 @@
 # Namespace: rfc2342
 #
 
-import xapian
+# standard stuff
 import os
 import sys
+import re
+import threading
+# xapian search engine
+import xapian
+# various email helpers
 import imaplib
+imaplib._MAXLINE *= 10
 import email
 import mailbox
+# password prompter
 import getpass
-imaplib._MAXLINE *= 10
-import re
+# Password manager
 import keyring
+# Configuration and other directory management
+import xdg.BaseDirectory
+# shell helper
+import cmd
+
+confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
 class Context(object):
     def __init__(self):
         object.__init__(self)
         self.connection = None
 
-def test():
-    pass
+def unpackStruct(data, depth=1, value=""):
+    if isinstance(data[0], list):
+        # We are multipart
+        for i in range(len(data)):
+            if not isinstance(data[i], list):
+                break
+        print "%s   %s/%s" % (value, "multipart", data[i])
+        j = 1
+        for dat in data[:i]:
+            unpackStruct(dat, depth + 1, value + '.' + str(j))
+            j += 1
+    else:
+        print "%s   %s/%s" % (value, data[0], data[1])
 
 def processAtoms(text):
     """Process a set of IMAP ATOMs
@@ -156,325 +181,341 @@ def processAtoms(text):
     #print "leftover", curtext
     return curlist
 
-def testq(C, text):
-    try:
-        print processAtoms(text)
-    except Exception,ev:
-        print ev
-
-
-def connect(C, args):
-    if C.connection:
-        print "disconnecting"
-        C.connection.close()
-        C.connection.logout()
-    print "Connecting to '%s'" % args
-    M = imaplib.IMAP4(args)
-    #print dir(M)
-    print M.capabilities
-    if "STARTTLS" in M.capabilities:
-        if hasattr(M, "starttls"):
-            res = M.starttls()
+class Cmd(cmd.Cmd):
+    def help_hidden_commands(self):
+        print "The following are hidden commands:"
+        print
+        print "  h   -> headers"
+        print "  p   -> print"
+        print "  q   -> quit"
+        print "  x   -> exit"
+    def default(self, args):
+        c,a,l = self.parseline(args)
+        if c == 'h':
+            return self.do_headers(a)
+        elif c == 'p':
+            return self.do_print(a)
+        elif c == 'q':
+            return self.do_quit(a)
+        elif c == 'x':
+            return self.do_exit(a)
+        elif c == 'EOF':
+            # Exit or Quit? Maybe make it configurable? What does mailx do?
+            print
+            return self.do_exit(a)
+        elif args.isdigit():
+            self.C.currentMessage = int(args)
+            self.do_print("")
+            self.C.lastcommand=""
         else:
-            print "Warning! Server supports TLS, but we don't!"
-            print "Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later"
-    pass_ =  keyring.get_password("mailnex",getpass.getuser())
-    if not pass_:
-        pass_ = getpass.getpass()
-    typ,data = M.login(getpass.getuser(), pass_)
-    print typ, data
-    C.connection = M
-    typ,data = M.select()
-    print typ, data
-    # Normally, you'd scan for the first flagged or new message and set that
-    # (probably by issuing a SEARCH to the server). For now, we'll hard code
-    # it to 1.
-    C.currentMessage = 1
-    C.lastMessage = int(data[0])
+            print "Unknown command",c
+    def emptyline(self):
+        # repeat/continue last command
+        if self.C.lastcommand=="search":
+            self.C.lastsearchpos += 10
+            self.do_search(lastsearch, offset=self.C.lastsearchpos)
+        else:
+            # Next message
+            # TODO: mailx has a special case, which is when it picks the
+            # message, e.g. when opening a box and it picks the first
+            # flagged or unread message. In which case, the implicit
+            # "next" command shows the message marked as current.
+            #
+            # Plan: Have both currentMessage and nextMessage. Typically
+            # they are different, but can be the same.
+            #
+            # TODO: extension to mailx: Next could mean next in a list;
+            # e.g. a saved list or results of f/search command or custom
+            # list or whatever.
+            # Ideally, we'd mention the active list in the prompt. Ideally
+            # we'd also list what the implicit command is in the prompt
+            # (e.g. next or search continuation)
+            if (self.C.currentMessage == self.C.lastMessage):
+                print "at EOF"
+            else:
+                self.C.currentMessage += 1
+                self.do_print("")
 
-def indexInbox(C):
-    #M = imaplib.IMAP4("localhost")
-    #M.login("john", getpass.getpass())
-    M = C.connection
-    if not M:
-        print "No connection :-("
-        return
-    i = 1
-    seen=0
-
-    db = xapian.WritableDatabase(C.dbpath, xapian.DB_CREATE_OR_OPEN)
-    termgenerator = xapian.TermGenerator()
-    termgenerator.set_stemmer(xapian.Stem("en"))
-
-    while True:
+    def do_testq(self, text):
         try:
-            typ,data = M.fetch(i, '(UID BODYSTRUCTURE)')
-            #print typ
-            #print data
-            typ,data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
-            #print typ
-            #print data
-            #print data[0][1]
-            #print "------------ Message %i -----------" % i
-            #print data[1][1]
-
-            headers = data[0][1]
-            # TODO: Proper header parsing
-            headers = headers.split("\r\n")
-            origh = headers
-            headers = filter(lambda x: "content-type:" in x.lower(), headers)
-            #print headers
-            #if len(headers) == 0:
-            #    print data[1][1]
-            print "\r%i"%i,
-            sys.stdout.flush()
-            doc = xapian.Document()
-            termgenerator.set_document(doc)
-            #TODO index subject, from, to, cc, etc.
-            termgenerator.index_text(data[1][1])
-            # Support full document retrieval but without reference info
-            # (we'll have to fully rebuild the db to get new stuff. TODO:
-            # store UID and such)
-            doc.set_data(data[0][1])
-            idterm = u"Q" + str(i)
-            doc.add_boolean_term(idterm)
-            db.replace_document(idterm, doc)
-            i += 1
-        except:
-            break
-    print 
-    print "Done!"
-
-def print_mail(C, index):
-    M = C.connection
-    # TODO: Decorate with a connection_check
-    if not M:
-        print "no connection"
-        return
-    M.select()
-    ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
-    import subprocess
-    s = subprocess.Popen("less", stdin=subprocess.PIPE)
-    s.communicate(data[0][1] + data[1][1])
-
-def show_mail(C, index):
-    """Show the raw, unprocessed message"""
-    M = C.connection
-    # TODO: Decorate with a connection_check
-    if not M:
-        print "no connection"
-        return
-    M.select()
-    ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-    import subprocess
-    s = subprocess.Popen("less", stdin=subprocess.PIPE)
-    s.communicate(data[0][1] + data[1][1])
-
-def unpackStruct(data, depth=1, value=""):
-    if isinstance(data[0], list):
-        # We are multipart
-        for i in range(len(data)):
-            if not isinstance(data[i], list):
-                break
-        print "%s   %s/%s" % (value, "multipart", data[i])
-        j = 1
-        for dat in data[:i]:
-            unpackStruct(dat, depth + 1, value + '.' + str(j))
-            j += 1
-    else:
-        print "%s   %s/%s" % (value, data[0], data[1])
-
-def print_structure(C, index):
-    M = C.connection
-    # TODO: Decorate with a connection_check
-    if not M:
-        print "no connection"
-        return
-    res, data = M.fetch(index, '(BODYSTRUCTURE)')
-    #print data
-    for entry in data:
-        #print entry
-        try:
-            # We should get a list of the form (ID, DATA)
-            # where DATA is a list of the form ("BODYSTRUCTURE", struct)
-            # and where struct is the actual structure
-            d = processAtoms(entry)
-            val = str(d[0])
-            d = d[1]
-        except Exception, ev:
+            print processAtoms(text)
+        except Exception,ev:
             print ev
+
+    def do_connect(self, args):
+        """Connect to the given imap host using local username.
+
+        You should use the folder command once that's working instead.
+
+        This function should eventually dissappear."""
+        C = self.C
+        if C.connection:
+            print "disconnecting"
+            C.connection.close()
+            C.connection.logout()
+        print "Connecting to '%s'" % args
+        M = imaplib.IMAP4(args)
+        #print dir(M)
+        print M.capabilities
+        if "STARTTLS" in M.capabilities:
+            if hasattr(M, "starttls"):
+                res = M.starttls()
+            else:
+                print "Warning! Server supports TLS, but we don't!"
+                print "Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later"
+        pass_ =  keyring.get_password("mailnex",getpass.getuser())
+        if not pass_:
+            pass_ = getpass.getpass()
+        typ,data = M.login(getpass.getuser(), pass_)
+        print typ, data
+        C.connection = M
+        typ,data = M.select()
+        print typ, data
+        # Normally, you'd scan for the first flagged or new message and set that
+        # (probably by issuing a SEARCH to the server). For now, we'll hard code
+        # it to 1.
+        C.currentMessage = 1
+        C.lastMessage = int(data[0])
+
+    def do_index(self, args):
+        #M = imaplib.IMAP4("localhost")
+        #M.login("john", getpass.getpass())
+        C = self.C
+        M = C.connection
+        if not M:
+            print "No connection :-("
             return
-        if d[0] != "BODYSTRUCTURE":
-            print "fail?"
-            print d
+        i = 1
+        seen=0
+
+        db = xapian.WritableDatabase(C.dbpath, xapian.DB_CREATE_OR_OPEN)
+        termgenerator = xapian.TermGenerator()
+        termgenerator.set_stemmer(xapian.Stem("en"))
+
+        while True:
+            try:
+                typ,data = M.fetch(i, '(UID BODYSTRUCTURE)')
+                #print typ
+                #print data
+                typ,data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
+                #print typ
+                #print data
+                #print data[0][1]
+                #print "------------ Message %i -----------" % i
+                #print data[1][1]
+
+                headers = data[0][1]
+                # TODO: Proper header parsing
+                headers = headers.split("\r\n")
+                origh = headers
+                headers = filter(lambda x: "content-type:" in x.lower(), headers)
+                #print headers
+                #if len(headers) == 0:
+                #    print data[1][1]
+                print "\r%i"%i,
+                sys.stdout.flush()
+                doc = xapian.Document()
+                termgenerator.set_document(doc)
+                #TODO index subject, from, to, cc, etc.
+                termgenerator.index_text(data[1][1])
+                # Support full document retrieval but without reference info
+                # (we'll have to fully rebuild the db to get new stuff. TODO:
+                # store UID and such)
+                doc.set_data(data[0][1])
+                idterm = u"Q" + str(i)
+                doc.add_boolean_term(idterm)
+                db.replace_document(idterm, doc)
+                i += 1
+            except:
+                break
+        print 
+        print "Done!"
+
+    def do_print(self, args):
+        C = self.C
+        M = C.connection
+        if args:
+            try:
+                index = int(args)
+            except:
+                print "bad arguments"
+                return
+        else:
+            index = C.currentMessage
+        # TODO: Decorate with a connection_check
+        if not M:
+            print "no connection"
             return
-        unpackStruct(d[1], value=val)
+        ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
+        import subprocess
+        s = subprocess.Popen("less", stdin=subprocess.PIPE)
+        s.communicate(data[0][1] + data[1][1])
+
+    def do_show(self, args):
+        """Show the raw, unprocessed message"""
+        C = self.C
+        M = C.connection
+        # TODO: Decorate with a connection_check
+        if not M:
+            print "no connection"
+            return
+        if args:
+            try:
+                index = int(args)
+            except:
+                print "bad arguments"
+                return
+        else:
+            index = C.currentMessage
+        ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+        import subprocess
+        s = subprocess.Popen("less", stdin=subprocess.PIPE)
+        s.communicate(data[0][1] + data[1][1])
+
+    def do_structure(self, args):
+        C = self.C
+        M = C.connection
+        # TODO: Decorate with a connection_check
+        if not M:
+            print "no connection"
+            return
+        if not M:
+            print "no connection"
+            return
+        if args:
+            try:
+                index = int(args)
+            except:
+                print "bad arguments"
+                return
+        else:
+            index = C.currentMessage
+        res, data = M.fetch(index, '(BODYSTRUCTURE)')
+        #print data
+        for entry in data:
+            #print entry
+            try:
+                # We should get a list of the form (ID, DATA)
+                # where DATA is a list of the form ("BODYSTRUCTURE", struct)
+                # and where struct is the actual structure
+                d = processAtoms(entry)
+                val = str(d[0])
+                d = d[1]
+            except Exception, ev:
+                print ev
+                return
+            if d[0] != "BODYSTRUCTURE":
+                print "fail?"
+                print d
+                return
+            unpackStruct(d[1], value=val)
 
 # 254 area is interesting; actually uses literals :-/
 
-def headers(C):
-    M = C.connection
-    if not M:
-        print "no connection"
-        return
-    rows = 25 # TODO get from terminal
-    start = C.currentMessage / rows * rows
-    # alternatively, start = C.currentMessage - (C.currentMessage % rows)
-    start += 1 # IMAP is 1's based
-    last = start + rows - 1
-    if last > C.lastMessage:
-        last = C.lastMessage
-    typ, data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
-    # TODO: get rid of i and use d[0] instead?
-    i = start
-    for d in data:
+    def do_headers(self, args):
+        C = self.C
+        M = C.connection
+        if not M:
+            print "no connection"
+            return
+        rows = 25 # TODO get from terminal
+        start = C.currentMessage / rows * rows
+        # alternatively, start = C.currentMessage - (C.currentMessage % rows)
+        start += 1 # IMAP is 1's based
+        last = start + rows - 1
+        if last > C.lastMessage:
+            last = C.lastMessage
+        typ, data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
+        # TODO: get rid of i and use d[0] instead?
+        i = start
+        for d in data:
+            try:
+                d = processAtoms(d)
+            except:
+                print "  %i  (error parsing envelope!)" % i
+                continue
+            try:
+                if i == C.currentMessage:
+                    print "> %(num)s %(date)31s %(subject)s" % {
+                            'num': d[0],
+                            'date': d[1][1][0],
+                            'subject': d[1][1][1],
+                            }
+                else:
+                    print "  %(num)s %(date)31s %(subject)s" % {
+                            'num': d[0],
+                            'date': d[1][1][0],
+                            'subject': d[1][1][1],
+                            }
+            except:
+                print "  %i  (error displaying. Data follows)" % i, repr(d)
+            i += 1
+
+    def do_namespace(self, args):
+        C = self.C
+        M = C.connection
+        res,data = M.namespace()
+        #print res
         try:
-            d = processAtoms(d)
-        except:
-            print "  %i  (error parsing envelope!)" % i
-            continue
-        try:
-            if i == C.currentMessage:
-                print "> %(num)s %(date)31s %(subject)s" % {
-                        'num': d[0],
-                        'date': d[1][1][0],
-                        'subject': d[1][1][1],
-                        }
+            data = processAtoms(data[0])
+        except Exception, ev:
+            print ev
+            return
+        print "Personal namespaces:"
+        for i in data[0]:
+            print i
+        print "Other user's namespaces:"
+        for i in data[1]:
+            print i
+        print "Shared namespaces:"
+        for i in data[2]:
+            print i
+
+    def do_search(self, args, offset=0, pagesize=10):
+        C = self.C
+        C.lastsearch = args
+        C.lastsearchpos = offset
+        C.lastcommand="search"
+        dbpath = C.dbpath
+        db = xapian.Database(dbpath)
+
+        queryparser = xapian.QueryParser()
+        queryparser.set_stemmer(xapian.Stem("en"))
+        queryparser.set_stemming_strategy(queryparser.STEM_SOME)
+        queryparser.add_prefix("file", "S")
+        queryparser.set_database(db)
+        query = queryparser.parse_query(args, queryparser.FLAG_BOOLEAN | queryparser.FLAG_WILDCARD)
+        enquire = xapian.Enquire(db)
+        enquire.set_query(query)
+        matches = []
+        data = []
+        for match in enquire.get_mset(offset, pagesize):
+            fname = match.document.get_data()
+            data.append(fname)
+            fname = fname.split('\r\n')
+            fname = filter(lambda x: x.lower().startswith("subject: "), fname)
+            if len(fname) == 0:
+                fname = "(no subject)"
             else:
-                print "  %(num)s %(date)31s %(subject)s" % {
-                        'num': d[0],
-                        'date': d[1][1][0],
-                        'subject': d[1][1][1],
-                        }
-        except:
-            print "  %i  (error displaying. Data follows)" % i, repr(d)
-        i += 1
+                fname = fname[0]
+            print u"%(rank)i (%(perc)3s %(weight)s): #%(docid)3.3i %(title)s" % {
+                    'rank': match.rank + 1,
+                    'docid': match.docid,
+                    'title': fname,
+                    'perc': match.percent,
+                    'weight': match.weight,
+                    }
+            matches.append(match.docid)
 
-def namespace(C):
-    M = C.connection
-    res,data = M.namespace()
-    #print res
-    try:
-        data = processAtoms(data[0])
-    except Exception, ev:
-        print ev
-        return
-    print "Personal namespaces:"
-    for i in data[0]:
-        print i
-    print "Other user's namespaces:"
-    for i in data[1]:
-        print i
-    print "Shared namespaces:"
-    for i in data[2]:
-        print i
+        #print data[0]
 
+    def do_quit(self, args):
+        # TODO: Synchronize and quit
+        sys.exit(0)
 
-def index(datapath, dbpath):
-    db = xapian.WritableDatabase(dbpath, xapian.DB_CREATE_OR_OPEN)
-    termgenerator = xapian.TermGenerator()
-    termgenerator.set_stemmer(xapian.Stem("en"))
-    for root, dirs, files in os.walk(datapath):
-        files = filter(lambda x: x.endswith('.txt'), files)
-        for f in files:
-            if len(root) > 1 and root.endswith('/'):
-                root = root[:-1]
-            title = root+'/'+f
-            print title,
-            ident = hash(title) & 0xffffffff
-            print ident
-            # create and register document
-            doc = xapian.Document()
-            termgenerator.set_document(doc)
-            # index fields
-            termgenerator.index_text(title, 1, 'S')
-            # index general search
-            termgenerator.index_text(title)
-            termgenerator.increase_termpos()
-            termgenerator.index_text(open(title).read())
-            # Set the data. Some setups put a JSON set of fields for display
-            # purposes. We'll just store the filename for now, esp. since
-            # that's just about all we're storing anyway.
-            doc.set_data(title)
-            # Not sure about this identifier stuff; copied from example
-            idterm = u"Q" + str(ident)
-            doc.add_boolean_term(idterm)
-            db.replace_document(idterm, doc)
-
-def search(C, querystring, offset=0, pagesize=10):
-    dbpath = C.dbpath
-    db = xapian.Database(dbpath)
-
-    queryparser = xapian.QueryParser()
-    queryparser.set_stemmer(xapian.Stem("en"))
-    queryparser.set_stemming_strategy(queryparser.STEM_SOME)
-    queryparser.add_prefix("file", "S")
-    queryparser.set_database(db)
-    query = queryparser.parse_query(querystring, queryparser.FLAG_BOOLEAN | queryparser.FLAG_WILDCARD)
-    enquire = xapian.Enquire(db)
-    enquire.set_query(query)
-    matches = []
-    data = []
-    for match in enquire.get_mset(offset, pagesize):
-        fname = match.document.get_data()
-        data.append(fname)
-        fname = fname.split('\r\n')
-        fname = filter(lambda x: x.lower().startswith("subject: "), fname)
-        if len(fname) == 0:
-            fname = "(no subject)"
-        else:
-            fname = fname[0]
-        print u"%(rank)i (%(perc)3s %(weight)s): #%(docid)3.3i %(title)s" % {
-                'rank': match.rank + 1,
-                'docid': match.docid,
-                'title': fname,
-                'perc': match.percent,
-                'weight': match.weight,
-                }
-        matches.append(match.docid)
-
-    #print data[0]
-
-#def compl(*args, **kwargs):
-    #print
-    #print "  Compl:"
-    #print "    args:", args
-    #print "    kwargs:", kwargs
-    #print "    buffer:", repr(readline.get_line_buffer())
-    #print "    type:", repr(readline.get_completion_type())
-    #print "    range:", repr(readline.get_begidx(), readline.get_endidx())
-    #print "    delims:", repr(readline.get_completer_delims())
-    #readline.redisplay()
-    #print >>sys.stderr, "wjat"
-    #print "wjat"
-    #print "wjat"
-    #print "wjat"
-def compl(text, state):
-    #print type(state), state
-    #print "    type:", repr(readline.get_completion_type())
-    if state < 2:
-        return "hello%i"% state
-    return None
-
-commands="help search quit exit reply print pipe".split()
-
-def cmdcompl(text, state):
-    #print
-    #print "text",text
-    #print "state",state
-    #print "cmds",commands
-    matches = [val for val in commands if val.startswith(text)]
-    #print "match",matches
-    if len(matches) > state:
-        return matches[state]
-    return None
-
-def dispmatch(substitution, matches, longestlen):
-    print "sub:",substitution
-    i = 0
-    for m in matches:
-        print i, m
-        i += 1
+    def do_exit(self, args):
+        # TODO: Disconnect but not synchronize and quit
+        sys.exit(0)
 
 def interact():
     import readline
@@ -486,88 +527,21 @@ def interact():
     readline.parse_and_bind("tab: complete")
     import atexit
     atexit.register(readline.write_history_file, "mailxhist")
-    readline.set_completer(cmdcompl)
-    #readline.set_completion_display_matches_hook(dispmatch)
-    lastcommand=""
+    cmd = Cmd()
     C = Context()
     C.dbpath = "./maildb1/" # TODO: get from config file
-    while True:
-        try:
-            line = raw_input("mail> ")
-        except EOFError:
-            print
-            if C.connection:
-                print "disconnecting"
-                C.connection.close()
-                C.connection.logout()
-            break
-        except KeyboardInterrupt:
-            print
-            if C.connection:
-                print "disconnecting"
-                C.connection.close()
-                C.connection.logout()
-            break
-        #print "You typed:",repr(line)
-        if line == "quit" or line == 'q' or line == 'exit' or line == 'x':
-            # TODO: q commits, x aborts.
-            break
-        elif "search" in line:
-            lastsearch = line[7:]
-            lastsearchpos = 0
-            search(C, lastsearch)
-            lastcommand="search"
-        elif line == "test":
-            test()
-        elif line == "index":
-            indexInbox(C)
-        elif line[:7] == "connect":
-            connect(C, line[8:])
-        elif line == "namespace":
-            namespace(C)
-        elif line[:5] == "testq":
-            testq(C, line[6:])
-        elif line[:9] == "structure":
-            print_structure(C, line[10:])
-        elif line == "h" or line == "headers":
-            headers(C)
-        elif line == "p" or line == "print":
-            print_mail(C, C.currentMessage)
-        elif line == "show":
-            show_mail(C, C.currentMessage)
-        elif line.isdigit():
-            print_mail(C, int(line))
-            C.currentMessage = int(line)
-            lastcommand = ""
-        elif line == "":
-            # Repeat/continue
-            if lastcommand=="search":
-                lastsearchpos += 10
-                search(C, lastsearch, offset=lastsearchpos)
-            else:
-                # Next message
-                # TODO: mailx has a special case, which is when it picks the
-                # message, e.g. when opening a box and it picks the first
-                # flagged or unread message. In which case, the implicit
-                # "next" command shows the message marked as current.
-                #
-                # Plan: Have both currentMessage and nextMessage. Typically
-                # they are different, but can be the same.
-                #
-                # TODO: extension to mailx: Next could mean next in a list;
-                # e.g. a saved list or results of f/search command or custom
-                # list or whatever.
-                # Ideally, we'd mention the active list in the prompt. Ideally
-                # we'd also list what the implicit command is in the prompt
-                # (e.g. next or search continuation)
-                if (C.currentMessage == C.lastMessage):
-                    print "at EOF"
-                else:
-                    C.currentMessage += 1
-                    print_mail(C, C.currentMessage)
-
+    C.lastcommand=""
+    cmd.C = C
+    cmd.prompt = "mail> "
+    try:
+        cmd.cmdloop()
+    except KeyboardInterrupt:
+        cmd.do_exit("")
+    except Exception, ev:
+        if debug:
+            raise
         else:
-            print "bad command"
+            print "Bailing on exception",ev
 
 if __name__ == "__main__":
     import sys
