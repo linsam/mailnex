@@ -37,9 +37,16 @@ debug = 0
 # IMAP
 # ----
 #
-# IMAP4r1: rfc2060
+# IMAP4r1: rfc2060, updated by 3501
 # IDLE command: rfc2177
 # Namespace: rfc2342
+# CONDSTORE: rfc 4551 (multiple connection synchronization and date/sequence
+#     based metadata updates. E.G. you can query which messages have changed
+#     flags since last query)
+# BINARY: rfc 3516 (fetch BINARY vs fetch BODY, saves on base64 encoding
+#     transfers, for example.)
+# COMPRESS: rfc 4978
+#
 #
 
 # standard stuff
