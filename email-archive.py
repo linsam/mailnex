@@ -310,14 +310,24 @@ class Cmd(cmd.Cmd):
             print("disconnecting")
             C.connection.close()
             C.connection.logout()
+            C = None
         print("Connecting to '%s'" % args)
-        M = imaplib.IMAP4(args)
+        try:
+            M = imaplib.IMAP4(args)
+        except Exception as ev:
+            print("Error:", ev)
+            return
         #print(dir(M))
         print(M.capabilities)
         if "STARTTLS" in M.capabilities:
             if hasattr(M, "starttls"):
                 res = M.starttls()
             else:
+                # TODO: We *might* be able to hijack the underlying socket, do
+                # a STARTTLS ourselves, then do an SSL socket wrap, and
+                # replace it in imaplib.
+                #
+                # Or maybe we'll write our own imaplib replacement. Whatever
                 print("Warning! Server supports TLS, but we don't!")
                 print("Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later")
         pass_ =  keyring.get_password("mailnex",getpass.getuser())
