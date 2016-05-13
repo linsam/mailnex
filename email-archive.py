@@ -208,6 +208,36 @@ def processAtoms(text):
     #print("leftover", curtext)
     return curlist
 
+def processHeaders(text):
+    # TODO: Handle \n too?
+    lines = text.split('\r\n')
+    name = None
+    value = ""
+    headers = dict()
+    for line in lines:
+        if line.startswith(" ") or line.startswith("\t"):
+            # continuation. Append to previous
+            value += "\r\n" + line
+            continue
+        if name:
+            if name not in headers:
+                headers[name] = list()
+            headers[name].append(value)
+        if not ': ' in line:
+            if not ':' in line:
+                if line == "":
+                    # end of headers
+                    return headers
+                print("I don't like line", repr(line))
+            else:
+                # poorly formed header, but I've seen it
+                name, value = line.split(':', 1)
+                name = name.lower()
+        else:
+            name, value = line.split(': ', 1)
+            name = name.lower()
+    return headers
+
 class Cmd(cmd.Cmd):
     def help_hidden_commands(self):
         print("The following are hidden commands:")
@@ -330,13 +360,7 @@ class Cmd(cmd.Cmd):
                 #print(data[1][1])
 
                 headers = data[0][1]
-                # TODO: Proper header parsing
-                headers = headers.split("\r\n")
-                origh = headers
-                headers = filter(lambda x: "content-type:" in x.lower(), headers)
-                #print(headers)
-                #if len(headers) == 0:
-                #    print(data[1][1])
+                headers = processHeaders(headers)
                 print("\r%i"%i,)
                 sys.stdout.flush()
                 doc = xapian.Document()
@@ -351,7 +375,8 @@ class Cmd(cmd.Cmd):
                 doc.add_boolean_term(idterm)
                 db.replace_document(idterm, doc)
                 i += 1
-            except:
+            except imaplib.error:
+                # TODO check for last message somehow
                 break
         print()
         print("Done!")
@@ -390,6 +415,37 @@ class Cmd(cmd.Cmd):
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         s.communicate(data[0][1] + data[1][1])
+
+    @needsConnection
+    def do_mheader(self, args):
+        C = self.C
+        M = C.connection
+        if 0 and args:
+            try:
+                index = int(args)
+            except:
+                print("bad arguments")
+                return
+        else:
+            index = C.currentMessage
+        res, data = M.fetch(args, '(BODY.PEEK[HEADER])')
+        #print(data)
+        #print(data[0][1])
+        #print()
+        #print()
+        #print(data)
+        headers = processHeaders(data[0][1])
+        if "subject" in headers:
+            print("Subject:", headers["subject"][-1])
+        if "date" in headers:
+            print("Date:", headers["date"][-1])
+        if "from" in headers:
+            print("From:", headers['from'][-1])
+
+        print()
+        for key,val in headers.iteritems():
+            for i in range(len(val)):
+                print("%s[%i]=%s" % (key, i, repr(val)))
 
     @needsConnection
     def do_structure(self, args):
