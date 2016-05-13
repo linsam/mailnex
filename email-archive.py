@@ -270,7 +270,7 @@ class Cmd(cmd.Cmd):
         # repeat/continue last command
         if self.C.lastcommand=="search":
             self.C.lastsearchpos += 10
-            self.do_search(lastsearch, offset=self.C.lastsearchpos)
+            self.do_search(self.C.lastsearch, offset=self.C.lastsearchpos)
         else:
             # Next message
             # TODO: mailx has a special case, which is when it picks the
@@ -352,6 +352,7 @@ class Cmd(cmd.Cmd):
                 typ,data = M.fetch(i, '(UID BODYSTRUCTURE)')
                 #print(typ)
                 #print(data)
+                # TODO: use BODYSTRUCTURE to find text/plain subsection and fetch that instead of guessing it will be '1'.
                 typ,data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
                 #print(typ)
                 #print(data)
@@ -365,7 +366,29 @@ class Cmd(cmd.Cmd):
                 sys.stdout.flush()
                 doc = xapian.Document()
                 termgenerator.set_document(doc)
-                #TODO index subject, from, to, cc, etc.
+                if 'subject' in headers:
+                    termgenerator.index_text(headers['subject'][-1], 1, 'S')
+                if 'from' in headers:
+                    for h in headers['from']:
+                        # Yes, a message *can* be from more than one person
+                        termgenerator.index_text(h, 1, 'F')
+                if 'to' in headers:
+                    for h in headers['to']:
+                        # Yes, a message *can* be from more than one person
+                        termgenerator.index_text(h, 1, 'T')
+                if 'cc' in headers:
+                    for h in headers['cc']:
+                        # Yes, a message *can* be from more than one person
+                        termgenerator.index_text(h, 1, 'C')
+                if 'thread-index' in headers:
+                    termgenerator.index_text(headers['thread-index'][-1],1,'I')
+                if 'references' in headers:
+                    termgenerator.index_text(headers['references'][-1],1,'R')
+                if 'in-reply-to' in headers:
+                    termgenerator.index_text(headers['in-reply-to'][-1],1,'P')
+                if 'message-id' in headers:
+                    termgenerator.index_text(headers['message-id'][-1],1,'M')
+
                 termgenerator.index_text(data[1][1])
                 # Support full document retrieval but without reference info
                 # (we'll have to fully rebuild the db to get new stuff. TODO:
@@ -552,7 +575,14 @@ class Cmd(cmd.Cmd):
         queryparser = xapian.QueryParser()
         queryparser.set_stemmer(xapian.Stem("en"))
         queryparser.set_stemming_strategy(queryparser.STEM_SOME)
-        queryparser.add_prefix("file", "S")
+        queryparser.add_prefix("subject", "S")
+        queryparser.add_prefix("from", "F")
+        queryparser.add_prefix("to", "T")
+        queryparser.add_prefix("cc", "C")
+        queryparser.add_prefix("thread", "I")
+        queryparser.add_prefix("ref", "R")
+        queryparser.add_prefix("prev", "P")
+        queryparser.add_prefix("id", "M")
         queryparser.set_database(db)
         query = queryparser.parse_query(args, queryparser.FLAG_BOOLEAN | queryparser.FLAG_WILDCARD)
         enquire = xapian.Enquire(db)
