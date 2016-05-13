@@ -1,4 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
+# Ubuntu 14.04 doesn't have xapian for python3. Quite possibly other modules
+# aren't available as well.
+#
+# I might have to demarcate Ubuntu 16.04 and CentOS 7 as minimum OSes. Don't
+# know *yet* if packages are supported there either.
+#
+# At any rate, might as well make this module as close to python 3 as possible
+# for now, so that once we can change over, it'll be easier.
+from __future__ import print_function
 
 debug = 0
 
@@ -67,7 +76,7 @@ def needsConnection(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if not self.C.connection:
-            print "no connection"
+            print("no connection")
         else:
             return func(self, *args, **kwargs)
     return wrapper
@@ -78,13 +87,13 @@ def unpackStruct(data, depth=1, value=""):
         for i in range(len(data)):
             if not isinstance(data[i], list):
                 break
-        print "%s   %s/%s" % (value, "multipart", data[i])
+        print("%s   %s/%s" % (value, "multipart", data[i]))
         j = 1
         for dat in data[:i]:
             unpackStruct(dat, depth + 1, value + '.' + str(j))
             j += 1
     else:
-        print "%s   %s/%s" % (value, data[0], data[1])
+        print("%s   %s/%s" % (value, data[0], data[1]))
 
 def processAtoms(text):
     """Process a set of IMAP ATOMs
@@ -124,14 +133,14 @@ def processAtoms(text):
     inquote = False
     inspace = True
     for c in text:
-        #print "Processing char", repr(c)
+        #print("Processing char", repr(c))
         if c == ' ' or c == '\t':
             if inquote:
-                #print " keep space, we are quoted"
+                #print(" keep space, we are quoted")
                 curtext.append(c)
                 continue
             if not inspace:
-                #print " End of token. Append completed word to list:", curtext
+                #print(" End of token. Append completed word to list:", curtext)
                 inspace = True
                 curlist.append("".join(curtext))
                 curtext=[]
@@ -141,32 +150,32 @@ def processAtoms(text):
         if c == '"': #TODO single quote too? -- no.
             if inquote:
                 # TODO: Does ending a quote terminate an atom?
-                #print " Leaving quote"
+                #print(" Leaving quote")
                 inquote = False
             else:
                 # TODO: Are we allowed to start a quote mid-atom?
-                #print " Entering quote"
+                #print(" Entering quote")
                 inquote = True
             continue
         if c == '(':
             if inquote:
-                #print " keep paren, we are quoted"
+                #print(" keep paren, we are quoted")
                 curtext.append(c)
                 continue
             if len(curtext):
                 raise Exception("Need space before open paren?")
-            #print " start new list"
+            #print(" start new list")
             curlist=[]
             lset.append(curlist)
             inspace = True
             continue
         if c == ')':
             if inquote:
-                #print " keep paren, we are quoted"
+                #print(" keep paren, we are quoted")
                 curtext.append(c)
                 continue
             if len(curtext):
-                #print " finish atom before finishing list", curtext
+                #print(" finish atom before finishing list", curtext)
                 curlist.append("".join(curtext))
                 curtext=[]
             t = curlist
@@ -174,32 +183,32 @@ def processAtoms(text):
             if len(lset) < 1:
                 raise Exception("Malformed input. Unbalanced parenthesis: too many close parenthesis")
             curlist = lset[-1]
-            #print " finish list", t
+            #print(" finish list", t)
             curlist.append(t)
             inspace = True
             continue
-        #print " normal character"
+        #print(" normal character")
         curtext.append(c)
     if inquote:
         raise Exception("Malformed input. Reached end without a closing quote")
     if len(curtext):
-        print "EOF, flush leftover text", curtext
+        print("EOF, flush leftover text", curtext)
         curlist.append("".join(curtext))
     if len(lset) > 1:
         raise Exception("Malformed input. Unbalanced parentheses: Not enough close parenthesis")
-    #print "lset", lset
-    #print "cur", curlist
-    #print "leftover", curtext
+    #print("lset", lset)
+    #print("cur", curlist)
+    #print("leftover", curtext)
     return curlist
 
 class Cmd(cmd.Cmd):
     def help_hidden_commands(self):
-        print "The following are hidden commands:"
-        print
-        print "  h   -> headers"
-        print "  p   -> print"
-        print "  q   -> quit"
-        print "  x   -> exit"
+        print("The following are hidden commands:")
+        print()
+        print("  h   -> headers")
+        print("  p   -> print")
+        print("  q   -> quit")
+        print("  x   -> exit")
     def default(self, args):
         c,a,l = self.parseline(args)
         if c == 'h':
@@ -219,7 +228,7 @@ class Cmd(cmd.Cmd):
             self.do_print("")
             self.C.lastcommand=""
         else:
-            print "Unknown command",c
+            print("Unknown command", c)
     def emptyline(self):
         # repeat/continue last command
         if self.C.lastcommand=="search":
@@ -242,16 +251,16 @@ class Cmd(cmd.Cmd):
             # we'd also list what the implicit command is in the prompt
             # (e.g. next or search continuation)
             if (self.C.currentMessage == self.C.lastMessage):
-                print "at EOF"
+                print("at EOF")
             else:
                 self.C.currentMessage += 1
                 self.do_print("")
 
     def do_testq(self, text):
         try:
-            print processAtoms(text)
-        except Exception,ev:
-            print ev
+            print(processAtoms(text))
+        except Exception as ev:
+            print(ev)
 
     def do_connect(self, args):
         """Connect to the given imap host using local username.
@@ -261,27 +270,27 @@ class Cmd(cmd.Cmd):
         This function should eventually dissappear."""
         C = self.C
         if C.connection:
-            print "disconnecting"
+            print("disconnecting")
             C.connection.close()
             C.connection.logout()
-        print "Connecting to '%s'" % args
+        print("Connecting to '%s'" % args)
         M = imaplib.IMAP4(args)
-        #print dir(M)
-        print M.capabilities
+        #print(dir(M))
+        print(M.capabilities)
         if "STARTTLS" in M.capabilities:
             if hasattr(M, "starttls"):
                 res = M.starttls()
             else:
-                print "Warning! Server supports TLS, but we don't!"
-                print "Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later"
+                print("Warning! Server supports TLS, but we don't!")
+                print("Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later")
         pass_ =  keyring.get_password("mailnex",getpass.getuser())
         if not pass_:
             pass_ = getpass.getpass()
         typ,data = M.login(getpass.getuser(), pass_)
-        print typ, data
+        print(typ, data)
         C.connection = M
         typ,data = M.select()
-        print typ, data
+        print(typ, data)
         # Normally, you'd scan for the first flagged or new message and set that
         # (probably by issuing a SEARCH to the server). For now, we'll hard code
         # it to 1.
@@ -304,24 +313,24 @@ class Cmd(cmd.Cmd):
         while True:
             try:
                 typ,data = M.fetch(i, '(UID BODYSTRUCTURE)')
-                #print typ
-                #print data
+                #print(typ)
+                #print(data)
                 typ,data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
-                #print typ
-                #print data
-                #print data[0][1]
-                #print "------------ Message %i -----------" % i
-                #print data[1][1]
+                #print(typ)
+                #print(data)
+                #print(data[0][1])
+                #print("------------ Message %i -----------" % i)
+                #print(data[1][1])
 
                 headers = data[0][1]
                 # TODO: Proper header parsing
                 headers = headers.split("\r\n")
                 origh = headers
                 headers = filter(lambda x: "content-type:" in x.lower(), headers)
-                #print headers
+                #print(headers)
                 #if len(headers) == 0:
-                #    print data[1][1]
-                print "\r%i"%i,
+                #    print(data[1][1])
+                print("\r%i"%i,)
                 sys.stdout.flush()
                 doc = xapian.Document()
                 termgenerator.set_document(doc)
@@ -337,8 +346,8 @@ class Cmd(cmd.Cmd):
                 i += 1
             except:
                 break
-        print 
-        print "Done!"
+        print()
+        print("Done!")
 
     @needsConnection
     def do_print(self, args):
@@ -348,7 +357,7 @@ class Cmd(cmd.Cmd):
             try:
                 index = int(args)
             except:
-                print "bad arguments"
+                print("bad arguments")
                 return
         else:
             index = C.currentMessage
@@ -366,7 +375,7 @@ class Cmd(cmd.Cmd):
             try:
                 index = int(args)
             except:
-                print "bad arguments"
+                print("bad arguments")
                 return
         else:
             index = C.currentMessage
@@ -383,14 +392,14 @@ class Cmd(cmd.Cmd):
             try:
                 index = int(args)
             except:
-                print "bad arguments"
+                print("bad arguments")
                 return
         else:
             index = C.currentMessage
         res, data = M.fetch(index, '(BODYSTRUCTURE)')
-        #print data
+        #print(data)
         for entry in data:
-            #print entry
+            #print(entry)
             try:
                 # We should get a list of the form (ID, DATA)
                 # where DATA is a list of the form ("BODYSTRUCTURE", struct)
@@ -398,12 +407,12 @@ class Cmd(cmd.Cmd):
                 d = processAtoms(entry)
                 val = str(d[0])
                 d = d[1]
-            except Exception, ev:
-                print ev
+            except Exception as ev:
+                print(ev)
                 return
             if d[0] != "BODYSTRUCTURE":
-                print "fail?"
-                print d
+                print("fail?")
+                print(d)
                 return
             unpackStruct(d[1], value=val)
 
@@ -427,23 +436,25 @@ class Cmd(cmd.Cmd):
             try:
                 d = processAtoms(d)
             except:
-                print "  %i  (error parsing envelope!)" % i
+                print("  %i  (error parsing envelope!)" % i)
                 continue
             try:
                 if i == C.currentMessage:
-                    print "> %(num)s %(date)31s %(subject)s" % {
+                    print("> %(num)s %(date)31s %(subject)s" % {
                             'num': d[0],
                             'date': d[1][1][0],
                             'subject': d[1][1][1],
                             }
+                            )
                 else:
-                    print "  %(num)s %(date)31s %(subject)s" % {
+                    print("  %(num)s %(date)31s %(subject)s" % {
                             'num': d[0],
                             'date': d[1][1][0],
                             'subject': d[1][1][1],
                             }
+                            )
             except:
-                print "  %i  (error displaying. Data follows)" % i, repr(d)
+                print("  %i  (error displaying. Data follows)" % i, repr(d))
             i += 1
 
     @needsConnection
@@ -451,21 +462,21 @@ class Cmd(cmd.Cmd):
         C = self.C
         M = C.connection
         res,data = M.namespace()
-        #print res
+        #print(res)
         try:
             data = processAtoms(data[0])
-        except Exception, ev:
-            print ev
+        except Exception as ev:
+            print(ev)
             return
-        print "Personal namespaces:"
+        print("Personal namespaces:")
         for i in data[0]:
-            print i
-        print "Other user's namespaces:"
+            print(i)
+        print("Other user's namespaces:")
         for i in data[1]:
-            print i
-        print "Shared namespaces:"
+            print(i)
+        print("Shared namespaces:")
         for i in data[2]:
-            print i
+            print(i)
 
     def do_search(self, args, offset=0, pagesize=10):
         C = self.C
@@ -494,16 +505,17 @@ class Cmd(cmd.Cmd):
                 fname = "(no subject)"
             else:
                 fname = fname[0]
-            print u"%(rank)i (%(perc)3s %(weight)s): #%(docid)3.3i %(title)s" % {
+            print(u"%(rank)i (%(perc)3s %(weight)s): #%(docid)3.3i %(title)s" % {
                     'rank': match.rank + 1,
                     'docid': match.docid,
                     'title': fname,
                     'perc': match.percent,
                     'weight': match.weight,
                     }
+                    )
             matches.append(match.docid)
 
-        #print data[0]
+        #print(data[0])
 
     def do_quit(self, args):
         # TODO: Synchronize and quit
@@ -518,7 +530,7 @@ def interact():
     try:
         readline.read_history_file("mailxhist")
     except IOError:
-        print ("no hist file")
+        print("no hist file")
     readline.set_history_length(1000)
     readline.parse_and_bind("tab: complete")
     import atexit
@@ -533,11 +545,11 @@ def interact():
         cmd.cmdloop()
     except KeyboardInterrupt:
         cmd.do_exit("")
-    except Exception, ev:
+    except Exception as ev:
         if debug:
             raise
         else:
-            print "Bailing on exception",ev
+            print("Bailing on exception",ev)
 
 if __name__ == "__main__":
     import sys
