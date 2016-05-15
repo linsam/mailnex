@@ -372,7 +372,7 @@ class Cmd(cmd.Cmd):
 
                 headers = data[0][1]
                 headers = processHeaders(headers)
-                print("\r%i"%i,)
+                print("\r%i"%i, end='')
                 sys.stdout.flush()
                 doc = xapian.Document()
                 termgenerator.set_document(doc)
@@ -408,9 +408,11 @@ class Cmd(cmd.Cmd):
                 doc.add_boolean_term(idterm)
                 db.replace_document(idterm, doc)
                 i += 1
-            except imaplib.error:
+            except M.error:
                 # TODO check for last message somehow
                 break
+            finally:
+                pass
         print()
         print("Done!")
 
@@ -431,6 +433,67 @@ class Cmd(cmd.Cmd):
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         s.communicate(data[0][1] + data[1][1])
 
+    @needsConnection
+    def do_latest_threads(self, args):
+        """Show the latest 10 threads. If given a number, show the thread containing *that* message.
+
+        This is mostly a testing function.
+
+        First pass: only do the thread bit.
+        """
+
+        if not args.isdigit():
+            print("Sorry, don't support listing last 10 yet. Try giving a message ID instead")
+            return
+        M = self.C.connection
+        index = int(args)
+        ret, data = M.fetch(index, '(BODY.PEEK[HEADER])')
+        headers = processHeaders(data[0][1])
+        term = None
+        if 'thread-index' in headers:
+            term = headers['thread-index'][-1]
+        elif 'references' in headers:
+            #TODO: find out how references is supposed to work
+            # For now, guessing that they are in order, so the first entry is
+            # the oldest
+            term = headers['references'][-1].split(" ")[0]
+        elif 'in-reply-to' in headers:
+            term = headers['in-reply-to'][-1]
+        elif 'message-id' in headers:
+            term = headers['message-id'][-1]
+        if term is None:
+            print("singleton")
+        else:
+            def disp(data, matches):
+                for i in range(len(data)):
+                    headers = processHeaders(data[i])
+                    #print('#%i id %s from %s to %s subject %s' % (matches[i].docid, headers['message-id'], headers['from'][-1], headers['to'][-1], headers['subject'][-1]))
+                    if index == matches[i].docid:
+                        marker = '>'
+                    else:
+                        marker = ' '
+                    print('%s#%i from %-20s  subject %s' % (marker, matches[i].docid, headers['from'][-1][:20], headers['subject'][-1]))
+            #find the first message
+            term = term.strip('<>')
+            #print("   Searching 'id:%s'" % term)
+            disp(*self.search("id:%s" % term))
+            #print("   Searching 'thread:%s'" % term)
+            #disp(*self.search("thread:%s" % term))
+            #print("   Searching 'ref:%s'" % term)
+            #data, matches = self.search("ref:%s" % term)
+            data, matches = self.search("ref:%s thread:%s" % (term, term))
+            disp(data, matches)
+
+            # TODO: Having found these matches, we ought to check the list of
+            # results for additional references and in-reply-tos in case we
+            # missed anything. Finally, we should sort by date or similar.
+            #
+            # The next step for providing somewhat usefull viewing of the
+            # thread ought to be stripping off stuff the user's already seen.
+            # In particular, we should try to detect pre- and post- quoted
+            # text. A difficulty will be in-line responses. Almost impossible
+            # will probably be people who inline response with color only
+            # where their reply doesn't mark quoted lines (like Outlook)
     @needsConnection
     def do_show(self, args):
         """Show the raw, unprocessed message"""
@@ -574,11 +637,8 @@ class Cmd(cmd.Cmd):
         for i in data[2]:
             print(i)
 
-    def do_search(self, args, offset=0, pagesize=10):
+    def search(self, terms, offset=0, pagesize=10):
         C = self.C
-        C.lastsearch = args
-        C.lastsearchpos = offset
-        C.lastcommand="search"
         dbpath = C.dbpath
         db = xapian.Database(dbpath)
 
@@ -593,8 +653,9 @@ class Cmd(cmd.Cmd):
         queryparser.add_prefix("ref", "R")
         queryparser.add_prefix("prev", "P")
         queryparser.add_prefix("id", "M")
+        queryparser.add_prefix("date", "D")
         queryparser.set_database(db)
-        query = queryparser.parse_query(args, queryparser.FLAG_BOOLEAN | queryparser.FLAG_WILDCARD)
+        query = queryparser.parse_query(terms, queryparser.FLAG_BOOLEAN | queryparser.FLAG_WILDCARD)
         enquire = xapian.Enquire(db)
         enquire.set_query(query)
         matches = []
@@ -602,6 +663,19 @@ class Cmd(cmd.Cmd):
         for match in enquire.get_mset(offset, pagesize):
             fname = match.document.get_data()
             data.append(fname)
+            matches.append(match)
+
+        #print(data[0])
+        return data, matches
+    def do_search(self, args, offset=0, pagesize=10):
+        C = self.C
+        C.lastsearch = args
+        C.lastsearchpos = offset
+        C.lastcommand="search"
+        data, matches = self.search(args, offset, pagesize)
+        for i in range(len(data)):
+            fname = data[i]
+            match = matches[i]
             fname = fname.split('\r\n')
             fname = filter(lambda x: x.lower().startswith("subject: "), fname)
             if len(fname) == 0:
@@ -616,9 +690,6 @@ class Cmd(cmd.Cmd):
                     'weight': match.weight,
                     }
                     )
-            matches.append(match.docid)
-
-        #print(data[0])
 
     def do_quit(self, args):
         # TODO: Synchronize and quit
