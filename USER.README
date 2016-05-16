@@ -1,0 +1,81 @@
+This document covers some common user use-cases and how to deal with them.
+
+Sometimes, it is a rant.
+
+Using client with gmail and multifactor authentication
+------------------------------------------------------
+
+Summary: Use the legacy "app password" option to generate a long login
+password for use with this application.
+
+The long story:
+
+Many people enjoy enabling second factor (or multifactor) authentication with
+google. Popular is their one-time-password system "Google Authenticator"
+(probably trademark name. All trademarks are owned by their respective
+companies), which is (at the time of writing) a time based HOTP (See RFC
+4226). The standards for OTPs have been around for a long time. Yet, doing
+multifactor authentication is not part of IMAP, and by-and-large that is
+because no one has written a SASL mechanism for either explicit second factor
+or for a generic text-based challenge-response (which would open up a world of
+backend PAM based auth for other servers like Dovecot).
+
+The way Google wants you to handle this is by using OAUTH2 to get a token to
+connect to their client APIs. There are pros and cons to this. On the pro
+side, you get a nice screen showing you what a given program wants access to
+within your google account(s), and you can accept or deny. Additinally, apps
+are supposed to ask for minimum sets ongoing, such that you could grant some
+access now and deny more access later. All well and good.
+
+Now for the cons:
+
+    1. It requires a web browser, quite possibly a decent one. I haven't tried
+    doing it in links yet, but it seems you need a full GUI OS and browser to
+    authenticate. If you don't have a fancy UI to tie into (such as terminal
+    programs), they let you act like a limited device (say, a game console)
+    and have the user go to a computer that does have the functionality
+    needed, but doing it that way still requires a fancy system, and also only
+    a limited part of their "API" is available that way, and it doesn't
+    include email access via IMAP or POP.
+
+    2. For each service providing OAUTH2 method over IMAP, we'd have to
+    request dedicated client id/secret pairs. One for Google, one for service
+    A, one for service B, etc. While there is a limited number of these, the
+    number is too large to consider supporting all of them.
+
+    3. The client secret is supposed to be kept secret, protected via SSL,
+    etc. This doesn't work well with open source programs, since the secret
+    would have to be in the source code. Alternatively, we *could* require all
+    users to get their own secrets and put them into config files for us to
+    use. That helps alleviate problem 2 above, but it makes for a very bad
+    user experience. Setting up a google API account is not a quick task.
+
+    4. Google's API terms of service (which must be agreed to in order to use
+    the OAUTH2 and the API) require that software developers assert additional
+    restrictions on their users, such as obeying the law and agreeing with
+    google's terms. This isn't easy for a GPL licensed program. In part,
+    because GPL is mostly about restrictions on distribution. Adding
+    additional restrictions means that the program must have both distribution
+    and usage licensing, and many automated license management systems can't
+    deal with that very well.
+
+    5. Part of Google's API terms of service include a mention that you cannot
+    create an API that is "substantially the same as the API", except in this
+    case the API is IMAPv4, a pretty standard API, and I don't feel Google
+    should restrict my ability to be an IMAP server just because I want to be
+    a client of their IMAP server using OAUTH2 for login instead of app
+    password. Alternatively, it may be questionable if being an email viewer
+    connecting via their API to their email system is just repackaging their
+    email system. In short this is not something I want to go down or limit
+    myself to.
+
+That's a lot of cons, and some of them seem untenable. The easiest solution is
+to require users to connect to google's IMAP server of their own volition
+using their own generated app-specific password and leave me out of it,
+similar to connecting to any other IMAP server. The downside, of course, is
+that this means the user cannot use 2-factor authentication, or even
+reasonably require re-typing the password for every login (since the generated
+password is unwieldy to memorize and irretrievable if not separately stored).
+
+Unfortunately, I do not have a better solution at this time.
+
