@@ -53,6 +53,18 @@ prompt_style = style_from_pygments(PromptPygStyle, {
     Token.Text: '#888888',
     })
 
+class Completer(prompt_toolkit.completion.Completer):
+    def __init__(self, cmd):
+        prompt_toolkit.completion.Completer.__init__(self)
+        self.cmd = cmd
+
+    def get_completions(self, document, complete_event):
+        this_word = document.get_word_before_cursor()
+        start_of_line = document.current_line_before_cursor.strip()
+        if this_word == start_of_line:
+            for i in self.cmd.completenames(this_word):
+                yield prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
+
 class CmdPrompt(cmd.Cmd):
     """Subclass of Cmd that uses prompt_toolkit instead of readline/raw_input.
 
@@ -73,6 +85,10 @@ class CmdPrompt(cmd.Cmd):
     (that is, you want to readline once, and process the command).
     """
 
+    def __init__(self):
+        cmd.Cmd.__init__(self)
+        self.completer = Completer(self)
+
     def cmdSingle(self, intro=None):
         """Perform a single prompt-and-execute sequence.
 
@@ -85,12 +101,18 @@ class CmdPrompt(cmd.Cmd):
             line = self.cmdqueue.pop(0)
         else:
             try:
-                line = prompt_toolkit.prompt(self.prompt, lexer=PygmentsLexer(PromptLexer), style=prompt_style)
+                line = prompt_toolkit.prompt(
+                        self.prompt,
+                        lexer=PygmentsLexer(PromptLexer),
+                        style=prompt_style,
+                        completer=self.completer
+                        )
             except EOFError:
                 line = 'EOF'
         line = self.precmd(line)
         stop = self.onecmd(line)
         stop = self.postcmd(stop, line)
+
     
     def cmdloop(self, intro=None):
         """Repeatedly issue a prompt, accept input, parse an initial prefix
