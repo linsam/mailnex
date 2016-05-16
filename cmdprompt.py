@@ -1,6 +1,58 @@
 import cmd
 import prompt_toolkit
 
+# TODO: Make pygments optional?
+from pygments.lexer import RegexLexer
+from pygments.token import *
+from prompt_toolkit.layout.lexers import PygmentsLexer
+from pygments.token import Token
+from pygments.styles.tango import TangoStyle
+from prompt_toolkit.styles import style_from_pygments
+from pygments.lexers import HtmlLexer
+import pygments.style
+
+class PromptLexer(RegexLexer):
+    """Basic lexer for our command line."""
+    name = 'Prompt'
+    aliases = ['prompt']
+    filenames = []
+    tokens = {
+            'root': [
+                # Commands. TODO: Auto generate this list
+                (r'^print\b', Generic.Inserted),
+                (r'^quit\b', Generic.Inserted),
+                (r'^help\b', Generic.Inserted),
+                (r'^headers\b', Generic.Inserted),
+                # Other stuff
+                (r'^[^ ]* ', Generic.Heading),
+                # I cannot get the next to match. If I end with '$' instead of
+                # '\n', or no ending after '.*', python hangs on what looks
+                # like an infinitely expanding malloc loop.
+                (r'.*\n', Text),
+                ]
+            }
+
+class PromptPygStyle(pygments.style.Style):
+    """A Simple style for our interactive prompt's user text."""
+    # according to docs, default_style is the style inherited by all token
+    # types. I haven't made this do anything, so we'll leave it blank.
+    default_style = ''
+    styles = {
+            Generic.Inserted: 'italic #88f',
+            Generic.Heading: 'bold #8f8',
+            Text: 'bold #ccf',
+            # Error is used for, at least, text that doesn't match any token
+            # (when using a RegexLexer derivitive). As such, it is used for
+            # text that is being actively typed that doesn't match anything
+            # *yet*. Should probably leave it as unformatted.
+            #Error: 'italic #004',
+            }
+
+#prompt_style = style_from_pygments(TangoStyle, {
+prompt_style = style_from_pygments(PromptPygStyle, {
+    Token.Text: '#888888',
+    })
+
 class CmdPrompt(cmd.Cmd):
     """Subclass of Cmd that uses prompt_toolkit instead of readline/raw_input.
 
@@ -33,7 +85,7 @@ class CmdPrompt(cmd.Cmd):
             line = self.cmdqueue.pop(0)
         else:
             try:
-                line = prompt_toolkit.prompt(self.prompt)
+                line = prompt_toolkit.prompt(self.prompt, lexer=PygmentsLexer(PromptLexer), style=prompt_style)
             except EOFError:
                 line = 'EOF'
         line = self.precmd(line)
@@ -47,10 +99,9 @@ class CmdPrompt(cmd.Cmd):
 
         """
 
-        # Copied from the python2.7 version of the super class (cmd), then
-        # modified to use prompt_toolkit and to use cmdSingle
+        # Based on the python2.7 version of the super class (cmd).
         self.preloop()
-        # handle completion key passing?
+        # TODO: handle completion key passing?
         try:
             if intro is not None:
                 self.intro = intro
