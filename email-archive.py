@@ -8,6 +8,7 @@
 # At any rate, might as well make this module as close to python 3 as possible
 # for now, so that once we can change over, it'll be easier.
 from __future__ import print_function
+from __future__ import unicode_literals
 
 debug = 0
 
@@ -69,7 +70,7 @@ import keyring
 # Configuration and other directory management
 import xdg.BaseDirectory
 # shell helper
-import cmd
+import cmdprompt
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
@@ -238,7 +239,7 @@ def processHeaders(text):
             name = name.lower()
     return headers
 
-class Cmd(cmd.Cmd):
+class Cmd(cmdprompt.CmdPrompt):
     def help_hidden_commands(self):
         print("The following are hidden commands:")
         print()
