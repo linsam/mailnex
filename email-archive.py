@@ -300,6 +300,27 @@ class Cmd(cmdprompt.CmdPrompt):
         except Exception as ev:
             print(ev)
 
+    def do_maildir(self, args):
+        """Connect to the given maildir.
+
+        You should use the folder command once that's working instead.
+
+        This function should eventually dissappear."""
+        C = self.C
+        if C.connection:
+            print("disconnecting")
+            C.connection.close()
+            C.connection.logout()
+            C = None
+        try:
+            M = mailbox.Maildir(args, None, False)
+        except Exception as ev:
+            print("Error:", type(ev), ev)
+            return
+        C.connection = M
+        C.currentMessage = 1
+        C.lastMessage = len(M)
+        print("Opened maildir with %i messages." % C.lastMessage)
     def do_connect(self, args):
         """Connect to the given imap host using local username.
 
