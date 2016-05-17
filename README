@@ -83,6 +83,91 @@ Other projects (or, why another mail client):
     remote protocols as a primary function, or utilize a medium that can
     support it (e.g. not using IMAP or maildir)
 
+    --Update-- Newer mail servers support detecting changes in flags and such,
+    so there exists the ability to do real synch, so long as UIDs are handled
+    carefully. 'offlineimap' seems to have put a decent amount of thought into
+    this, though I haven't actually tried it yet.
+
+    I have now actually tried sup-mail against my local maildir (from a dovecot
+    clone of my IMAP server). The thread view is amazing. The list with
+    hidden-but-expandable quoted sections is just about exactly what I wanted
+    to accomplish with this project, and the way it shows thread branches is
+    fantastic! That covers an aspect I hadn't figured out yet.
+
+    It even offers a CLI interface, though that didn't seem as good. The TUI
+    is where the functionality is. My biggest dismay was at the slow speed of
+    the initial indexing. Once that was finished, it was quite snappy.
+
+    Other great UI bits from sup: Single-line header but easily expanded.
+    Messages per thread in list view, along with attachment icon. First line
+    of text in latest message of thread in list view (doesn't quite get it
+    right for inline or bottom posting, but is otherwise great, especially
+    when the mail contains a quick thanks or a quick question)
+
+    Parts I don't like: Have to scroll to message thread to open it (akin to
+    no CLI like mailx). Having to have separate sync process. Showing HTML
+    mail as an attachment instead of as alternative content (akin to not
+    showing message structure at all; a feature I sorely miss from kmail. It
+    does make the interface simpler, though).
+
+    I don't see how I can make viewing threaded emails decent using an
+    external viewer (mailx calls PAGER which I usually set to less, or a
+    script that colorizes before passing to less, or vim). However, you cannot
+    then interract. Closest thing would be pre-folding parts of the message in
+    Vim before giving control to the user (maybe marking up with fold
+    markers), but it wouldn't be the same experience as sup. I think a managed
+    viewer with the option to dole it out would be best. If the user *really*
+    wants to use their own PAGER, go for it.
+
+    The multiple buffers in sup is also quite nice. A lot like using Vim (but
+    different bindings to switch). I expect it to be quite useful to have
+    multiple threads open in different buffers at the same time and switch
+    between them. Similarly, it would be nice to be able to jump between
+    threads and a new mail. Not sure how to reasonably accomplish that last one
+    when shelling out the editing process (I *really* want Vim for editing, as
+    I'm sure other would want emacs or nano or whatever, and I don't want to
+    implement a poor clone for inline. Maybe wrap Vim like tmux or screen does?).
+
+    Some things sup handles that I hadn't considered yet (though hopefully I
+    would have eventually):
+
+     * Linkage between mail folders. In particular, Sent mail needs to be
+       included in order to see all parts of a conversation that you
+       participate in.
+
+   Additional notes:
+
+     * The slow initial sync from sup appears to have to do with an
+       inefficiency in the inbox viewer. I noticed this because quitting sup
+       mid-sync and restarting had the import go very fast again, then slow
+       down. The magic number always seems to be about 100 messages in the
+       viewer. After a restart, it doesn't load that many messages, but as it
+       imports they all end up in the view.
+
+       The proper way to do the initial import seems to be to run sup-sync
+       after you add new mailboxes but before running sup-mail and checking
+       for messages. This runs quite speedily; about the same speed as our
+       indexing goes (which makes sense; we're both using Xapian).
+
+     * I haven't found a way for sup to watch for changes instead of polling.
+       Additionally, offlineimap *does* have a watch (using IDLE) but they
+       warn it is an incomplete feature and "may well have problems", so the
+       safest thing is to have offlineimap do polling as well. This means that
+       it can be up to 2 poll durations before sup tells me I have new mail.
+       offlineimap defaults to a 5 minute poll interval, which is already
+       longer than I'd like in an active business environment.
+
+       Turning down the poll period is better response, but more load on me
+       and my mail server. Ideally offloadimap would have well-tested IDLE
+       support, and sup would do dnotify or similar so the OS tells it when
+       there is an update to look at.
+
+     * Messages read in Sup don't seem to get that status propogated back to
+       the IMAP server. I'm guessing I have something misconfigured. I did
+       check the maildir with heirloom-mailx; it doesn't see any change in
+       flags either, so I'm guessing it is Sup not updating the maildir rather
+       than offlineimap not noticing.
+
   * cone - the first terminal mail program I used; originally I set it up
     while still using kmail for when I logged in remotely (GUI over internet
     sucks). Not particularly easy to configure, bad color schemes, not a lot
