@@ -319,8 +319,8 @@ class Cmd(cmdprompt.CmdPrompt):
             return
         C.connection = M
         C.currentMessage = 1
-        C.lastMessage = len(M)
-        print("Opened maildir with %i messages." % C.lastMessage)
+        C.lastMessage = len(M) - 1
+        print("Opened maildir with %i messages." % len(M))
     def do_connect(self, args):
         """Connect to the given imap host using local username.
 
@@ -607,11 +607,27 @@ class Cmd(cmdprompt.CmdPrompt):
     def do_headers(self, args):
         C = self.C
         M = C.connection
+        if (args):
+            # TODO: Support any message nomenclature. In particular, '-'
+            if args == '$':
+                C.currentMessage = C.lastMessage
+            elif not args.isdigit():
+                print("Bad parms")
+                return
+            else:
+                C.currentMessage = int(args)
         rows = 25 # TODO get from terminal
-        start = C.currentMessage / rows * rows
+        start = (C.currentMessage - 1) // rows * rows
         # alternatively, start = C.currentMessage - (C.currentMessage % rows)
         start += 1 # IMAP is 1's based
         last = start + rows - 1
+        if (args):
+            # mailx has this behaviour where specifying a location causes the
+            # current message to become the first message in the list of
+            # headings that contains the requested message. It is a bit
+            # confusing, but it is expected by long-time (and medium time)
+            # users.
+            C.currentMessage = start
         if last > C.lastMessage:
             last = C.lastMessage
         typ, data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
