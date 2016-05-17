@@ -316,7 +316,7 @@ class Cmd(cmdprompt.CmdPrompt):
         try:
             M = imaplib.IMAP4(args)
         except Exception as ev:
-            print("Error:", ev)
+            print("Error:", type(ev), ev)
             return
         #print(dir(M))
         print(M.capabilities)
@@ -578,6 +578,10 @@ class Cmd(cmdprompt.CmdPrompt):
 
 # 254 area is interesting; actually uses literals :-/
 
+    #def complete_headers(self, *args):
+        #print(" complete_headers", args)
+        # Args are 'word', 'line', word start, cursor (I *think*)
+        #return ['meh', 'stuff']
     @needsConnection
     def do_headers(self, args):
         C = self.C
@@ -694,22 +698,13 @@ class Cmd(cmdprompt.CmdPrompt):
 
     def do_quit(self, args):
         # TODO: Synchronize and quit
-        sys.exit(0)
+        return True
 
     def do_exit(self, args):
         # TODO: Disconnect but not synchronize and quit
-        sys.exit(0)
+        return True
 
 def interact():
-    import readline
-    try:
-        readline.read_history_file("mailxhist")
-    except IOError:
-        print("no hist file")
-    readline.set_history_length(1000)
-    readline.parse_and_bind("tab: complete")
-    import atexit
-    atexit.register(readline.write_history_file, "mailxhist")
     cmd = Cmd()
     C = Context()
     C.dbpath = "./maildb1/" # TODO: get from config file

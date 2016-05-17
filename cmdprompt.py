@@ -63,6 +63,11 @@ class Completer(prompt_toolkit.completion.Completer):
         start_of_line = document.current_line_before_cursor.strip()
         if this_word == start_of_line:
             for i in self.cmd.completenames(this_word):
+                # Other useful completion parameters:
+                #   display=<string>       - use different text in popup list
+                #   display_meta=<string>  - show additional info in popup
+                #   (like source of this completion. Might be used to show
+                #   which address book an address completion is from.
                 yield prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
 
 class CmdPrompt(cmd.Cmd):
@@ -88,6 +93,7 @@ class CmdPrompt(cmd.Cmd):
     def __init__(self):
         cmd.Cmd.__init__(self)
         self.completer = Completer(self)
+        self.history = prompt_toolkit.history.FileHistory("mailxhist")
 
     def cmdSingle(self, intro=None):
         """Perform a single prompt-and-execute sequence.
@@ -105,13 +111,16 @@ class CmdPrompt(cmd.Cmd):
                         self.prompt,
                         lexer=PygmentsLexer(PromptLexer),
                         style=prompt_style,
-                        completer=self.completer
+                        completer=self.completer,
+                        history = self.history,
+                        auto_suggest=prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
                         )
             except EOFError:
                 line = 'EOF'
         line = self.precmd(line)
         stop = self.onecmd(line)
         stop = self.postcmd(stop, line)
+        return stop
 
     
     def cmdloop(self, intro=None):
@@ -131,7 +140,7 @@ class CmdPrompt(cmd.Cmd):
                 self.stdout.write(str(self.intro)+"\n")
             stop = None
             while not stop:
-                self.cmdSingle()
+                stop = self.cmdSingle()
             self.postloop()
         finally:
             # Any cleanup here? We aren't using readline at all...
