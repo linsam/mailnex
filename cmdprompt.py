@@ -90,10 +90,13 @@ class CmdPrompt(cmd.Cmd):
     (that is, you want to readline once, and process the command).
     """
 
-    def __init__(self):
+    def __init__(self, histfile=None):
         cmd.Cmd.__init__(self)
         self.completer = Completer(self)
-        self.history = prompt_toolkit.history.FileHistory("mailxhist")
+        if histfile:
+            self.history = prompt_toolkit.history.FileHistory(histfile)
+        else:
+            self.history = prompt_toolkit.history.InMemoryHistory()
 
     def cmdSingle(self, intro=None):
         """Perform a single prompt-and-execute sequence.
