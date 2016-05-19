@@ -116,6 +116,50 @@ def unpackStruct(data, depth=1, value=""):
     else:
         print("%s   %s/%s" % (value, data[0], data[1]))
 
+def normalizeFetch(data):
+    """Re-listize fetch results.
+
+    python standard imaplib (at least in python 2.7) has a hard-to-fathom way
+    to represent results, especially when the results include literal data.
+
+    This function attempts to re-structure the results into a sane enough
+    array that processAtoms() can handle it.
+    """
+    # Idea here is that continuation data starts with a space. I hope.
+    # example from fetching envelope data from two messages, 898 and 899. 898
+    # has some literal data. I've obscured and redacted some stuff for
+    # clarity.
+    #
+    # r = [
+    #   (
+    #     '898 (ENVELOPE ("date" {81}',
+    #     'Subject that is 81 bytes long'
+    #   ),
+    #   ' ((address)) ((address)) ((etc..)) NIL NIL "messageid" "messageid")),
+    #   '899 (ENVELOPE ("date" "Subject" ((addr)) ((addr)) ((etc...)) NIL NIL NIL "messageid"))'
+    # ]
+    #
+    # As can be seen, message 898's data is spread across r[0][0], r[0][1],
+    # and r[1]. Message 899's data is in r[2].
+    #
+    # Without knowing a-priori that 898 had a literal in it, it is impossible
+    # just to know where the second requested result is (you'd expect 898 in
+    # r[0] and 899 in r[1] and not expect there to even be an r[2]).
+    res = []
+    for i in range(len(data)):
+        if isinstance(data[i], str):
+            if data[i][0] == ' ':
+                res[-1] += data[i]
+            else:
+                res.append(data[i])
+        else:
+            # NOTE: This isn't good; we have probable data loss. It is unknown
+            # if the literal should have had a \r or \n or \r\n in it,
+            # assuming imaplib messed it up. We really should do our own
+            # implementation.
+            res.append("\n".join(data[i]))
+    return res
+
 def processAtoms(text):
     """Process a set of IMAP ATOMs
 
@@ -153,7 +197,24 @@ def processAtoms(text):
     curtext=[]
     inquote = False
     inspace = True
+    inbrace = False
+    inliteral = False
+    literalRemain = 0
+    literalSizeString = ""
+    skipCrLf = False
     for c in text:
+        #print(" Processing %s" % repr(c))
+        if skipCrLf:
+            if c != '\n':
+                raise Exception("No crlf where expected (next char was %s)" % repr(c))
+            skipCrLf = False
+            continue
+        if inliteral:
+            curtext.append(c)
+            literalRemain -= 1
+            if literalRemain == 0:
+                inliteral = False
+            continue
         #print("Processing char", repr(c))
         if c == ' ' or c == '\t':
             if inquote:
@@ -166,6 +227,22 @@ def processAtoms(text):
                 curlist.append("".join(curtext))
                 curtext=[]
                 continue
+            continue
+        if inbrace and c == '}':
+            inbrace = False
+            inliteral = True
+            skipCrLf = True
+            if literalSizeString.isdigit():
+                literalRemain = int(literalSizeString)
+                continue
+            raise Exception("Invalid literal size %s" % repr(literalSizeString))
+        if inspace and c == '{':
+            inspace = False
+            inbrace = True
+            listeralSizeString = ""
+            continue
+        if inbrace:
+            literalSizeString += c
             continue
         inspace = False
         if c == '"': #TODO single quote too? -- no.
@@ -816,13 +893,14 @@ class Cmd(cmdprompt.CmdPrompt):
         if last > C.lastMessage:
             last = C.lastMessage
         typ, data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
+        data = normalizeFetch(data)
         # TODO: get rid of i and use d[0] instead?
         i = start
         for d in data:
             try:
                 d = processAtoms(d)
-            except:
-                print("  %i  (error parsing envelope!)" % i)
+            except Exception as ev:
+                print("  %i  (error parsing envelope!)" % i, ev)
                 continue
             try:
                 if i == C.currentMessage:
@@ -856,6 +934,9 @@ class Cmd(cmdprompt.CmdPrompt):
         res = self.parseMessageList(args)
         typ, data = M.fetch("%s" % ",".join(map(str,res)), "(ENVELOPE)")
         i = 0
+        #print(data)
+        data = normalizeFetch(data)
+        #print("After norm", data)
         for d in data:
             print("i",i, res[i])
             try:
