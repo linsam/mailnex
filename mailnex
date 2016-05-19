@@ -89,6 +89,19 @@ def needsConnection(func):
             return func(self, *args, **kwargs)
     return wrapper
 
+def shortcut(name):
+    """Marks a function as having a shortcut.
+
+    Actually, we'll just passthrough right now. This will just document intent for now.
+
+    Eventually, we can add implementation without going through all the functions again to add it."""
+    def wrap1(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            return func(self, *args, **kwargs)
+        return wrapper
+    return wrap1
+
 def unpackStruct(data, depth=1, value=""):
     if isinstance(data[0], list):
         # We are multipart
@@ -247,10 +260,172 @@ class Cmd(cmdprompt.CmdPrompt):
         print("  p   -> print")
         print("  q   -> quit")
         print("  x   -> exit")
+    def parseMessageList(self, args):
+        """Parse a message list specification string into a list of matching message IDs.
+
+        According to the mailx manpage (under "Specifying messages") many
+        commands can take a list of message numbers and operate on those
+        multiple messages.
+
+        Values can be a space separated list of ranges, or special names. The
+        ranges are inclusive. However, if using special names, you cannot give
+        multiple.
+
+        E.g.
+            5                  -> 5
+            5 10               -> 5,10
+            5-10               -> 5,6,7,8,9,10
+            1-3 5-8 10-12      -> 1,2,3,5,6,7,8,10,11,12
+            :u                 -> all unread messages
+            1-3 :u             -> invalid specification, though heirloom-mailx equates to just :u
+            :u :f              -> invalid specification, heirloom-mailx shows an error
+
+        The resulting list is always in numerical ascending order
+            5 3 1 10           -> 1,3,5,10
+
+        The list is in thread/sort order of the message list. Changing the
+        sort order likely invalidates the lists.
+
+        As an extension, we'll allow mixing these. I don't see any reason to
+        not allow unread messages and also message 5-10, for example. Or a
+        list including unread, flagged, and flagged unread messages (":u :f').
+        Essentially, the list outside parenthesis is a union. In parenthesis
+        is intersection by default (boolean AND) unless using the explicit or
+        operator.
+
+        The full list of specials, according to the man page, are:
+
+            :n      All new messages
+            :o      All old messages (not read or new)
+            :u      All unread messages
+            :d      All deleted messages (used in undelete command)
+            :r      All read messages
+            :f      All flagged messages
+            :a      All answered messages (replied)
+            :t      All messages marked as draft
+            :k      All killed messages
+            :j      All junk messages
+            .       The current message
+            ;       The previously current message (using ; over and over
+                    bounces between the last 2 messages)
+            ,       The parent of the current message (looking for the message
+                    with the Message-Id matching the current In-Reply-To or
+                    last References entry
+            -       (hyphen) The next previous undeleted message for regular
+                    commands or the next previus deleted message for undelete.
+            +       The next undeleted message, or the next deleted message
+                    for undelete.
+            ^       The first undeleted message, or first deleted for the
+                    undelete command.
+            $       The last message
+            &x      The message 'x' and all messages from the thread that
+                    begins at it (in thread mode only). X defaults to '.' if
+                    not given.
+            *       (asterisk) All messages.
+            `       (back tick) All messages listed in the previous command
+            /str    All messages with 'str' in the subject field, case
+                    insensitive (ASCII). If empty, use last search "of that
+                    type", whatever that means
+            addr    Messages from address 'addr', normally case sensitive for
+                    complete email address. Some variables change the
+                    processing.
+            (cri)   Messages matching an IMAP-style SEARCH criterion.
+                    Performed locally if necesary, even when not on IMAP
+                    connections.  if 'cri' is empty, reuse last search.
+
+        (cri) is a complicated beasty, see the full documentation for details (from mailx until we have our own).
+
+        Some commands don't take a list, but set the list. For example, the
+        implicit command only prints one message (usually the next message).
+        When using the back-tick, it will start with the first message in the
+        last list, and reset the list. A subsequent run of back tick selects
+        the second message, but maintains the list. The next back tick run
+        shows the third, and so on.
+
+        We note that there might be additional criteria someone might want to
+        assign a shortcut to (for example, some IMAP servers support custom
+        flags or labels/tags for messages to help organize them), and only 10
+        of the 26 letters of the ASCII alphabet are used, and none of the
+        uppercase letters are used. For that matter, nothing stops us from
+        using whole words after the ':'. heirloom-mailx only pays attention to
+        the first letter (e.g. :uf is interpreted as :u, :fu is interpreted as
+        :f). So, we'll support single letters for user shortcuts and full
+        words for tag names. This can lead to ambiguity if you have a tag
+        named by a single letter. My inclination is to allow the names to be
+        quoted.
+
+        In a similar vein, we'd like to be able to have saved lists, akin to
+        Vim registers or marks. Since mailx already uses '`' to reference the
+        last list, we'll use `x to reference named list x. For simplicity, we
+        should keep the lists volatile (switching the active mailbox clears
+        all lists). Some issues to resolve with having saved lists persist is
+        handling changes to the mailbox. Even keeping it volatile, the mailbox
+        IDs can change on us (e.g. another client deleting a message).
+        Ideally, we'd detect this and correct the numbers in the list to keep
+        track (while watching a box), and remove entries from the list that
+        are no longer in the box. For persistent lists, we'd probably have to
+        key on UIDs and wipe lists with non-matching UIDVALIDITY. No idea how
+        to handle this for local or pop boxes. Probably easiest to not support
+        that (everyone should run an IMAP server, even just to export their
+        own mail! j/k, but only somewhat).
+
+        Now, this actually breaks compatibility with heriloom-mailx, which
+        interprets tokens after the `.
+
+        For example, if we do 'f^$' (and message 6337 happens to be the last
+        message), then the list becomes 1,6337.
+        If we then do 'f`4', the list becomes 1,4,6337.
+
+        However, if we then do 'f`test@example.com', it tells us there aren't
+        any messages form test@example.com.
+        But, then if we do 'f test@example.com', it will list the messages
+        from test and set the new list. Odd.
+
+        I'm hoping noone relies on this behavior in their workflow, but
+        perhaps we should have a setting to use something resembling the old
+        behavior. I doubt I could spec the actual old behavior outside of the
+        actual program code that interpreted it.
+        """
+
+        s=set()
+        # Second pass, read a few specials 
+        if args == ":u":
+            typ, data = self.C.connection.search("UTF-8", "unseen")
+            print(data)
+            return map(int, data[0].split())
+        if args == ":f":
+            typ, data = self.C.connection.search("UTF-8", "flagged")
+            print(data)
+            return map(int, data[0].split())
+        # First pass, lets just handle numbers.
+        for r in args.split():
+            # Note, we won't be able to keep the simple split once we include
+            # quoting and parenthesis
+            if '-' in r:
+                r2 = r.split('-')
+                if len(r2) != 2:
+                    raise Exception("Invalid range '%s'" % r)
+                s=s.union(range(int(r2[0]), int(r2[1]) + 1))
+            else:
+                s.add(int(r))
+
+        return list(s)
+
+    
     def default(self, args):
         c,a,l = self.parseline(args)
+        #TODO Simulate the tokenizer of mailx a bit better. For example,
+        # 'print5' will print message 5 instead of erroring that 'print5'
+        # isn't a command.
         if c == 'h':
+            #TODO: process shortcuts/aliases/whatever
             return self.do_headers(a)
+        elif c[0] == 'h' and not c[1].isalpha():
+            return self.do_headers(c[1:] + ' ' + a)
+        elif c == 'f':
+            return self.do_from(a)
+        elif c[0] == 'f' and not c[1].isalpha():
+            return self.do_from(c[1:] + ' ' + a)
         elif c == 'p':
             return self.do_print(a)
         elif c == 'q':
@@ -603,8 +778,18 @@ class Cmd(cmdprompt.CmdPrompt):
         #print(" complete_headers", args)
         # Args are 'word', 'line', word start, cursor (I *think*)
         #return ['meh', 'stuff']
+    @shortcut("h")
     @needsConnection
     def do_headers(self, args):
+        """List headers around the current message. (h for short)"""
+        # heirloom-mailx says that it gives 18-message groups, but actually
+        # shows about how many will fit on the active terminal.
+        # It also says that a '+' argument shows the next 18 message group and
+        # '-' shows the previous group. In practice, I've only seen '-' work,
+        # and then only if the first message in the group is the active one
+        # (otherwise '-' re-lists with the first message selected). I suspect
+        # '+' will show the next group *if* the last message in the group is
+        # the active one, but I haven't tested.
         C = self.C
         M = C.connection
         if (args):
@@ -641,6 +826,48 @@ class Cmd(cmdprompt.CmdPrompt):
                 continue
             try:
                 if i == C.currentMessage:
+                    print("> %(num)s %(date)31s %(subject)s" % {
+                            'num': d[0],
+                            'date': d[1][1][0],
+                            'subject': d[1][1][1],
+                            }
+                            )
+                else:
+                    print("  %(num)s %(date)31s %(subject)s" % {
+                            'num': d[0],
+                            'date': d[1][1][0],
+                            'subject': d[1][1][1],
+                            }
+                            )
+            except:
+                print("  %i  (error displaying. Data follows)" % i, repr(d))
+            i += 1
+
+    @shortcut("f")
+    @needsConnection
+    def do_from(self, args):
+        """List messages (like headers command) for given message list only."""
+        # I originally thought 'f' was short for 'find' or something like
+        # that. As near as I can guess, earlier implementations of mailx
+        # (mail?) took only the straight email address method of selecting
+        # message list. Later others were added, but the name was fixed.
+        C = self.C
+        M = C.connection
+        res = self.parseMessageList(args)
+        typ, data = M.fetch("%s" % ",".join(map(str,res)), "(ENVELOPE)")
+        i = 0
+        for d in data:
+            print("i",i, res[i])
+            try:
+                d = processAtoms(d)
+            except Exception as ev:
+                print("  %i  (error parsing envelope!)" % res[i], ev)
+                continue
+            try:
+                if res[i] != int(d[0]):
+                    print("Error: %i != %i" % (res[i], d[0]))
+                    return
+                if res[i] == C.currentMessage:
                     print("> %(num)s %(date)31s %(subject)s" % {
                             'num': d[0],
                             'date': d[1][1][0],
