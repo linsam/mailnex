@@ -7,23 +7,39 @@ import os
 import sys
 
 f=tempfile.mkstemp()
-os.system("vim %s" % f[1])
+res = os.system("vim %s" % f[1])
+if (res != 0):
+    os.close(f[0])
+    os.unlink(f[1])
+    print "Edit aborted"
+    sys.exit(1)
 dat = file(f[1]).read()
 if len(dat) == 0:
+    os.close(f[0])
+    os.unlink(f[1])
     print "No message"
     sys.exit(1)
 if dat == "\n":
+    os.close(f[0])
+    os.unlink(f[1])
     print "No message (2)"
     sys.exit(1)
 tpart = email.mime.text.MIMEText(dat)
+tpart.set_charset("utf-8")
+os.close(f[0])
 m=open(f[1], "w")
 m.write("\r\n".join(tpart.as_string().split('\n')))
 m.write("\r\n") # Final EOL
 m.close()
 
 f2=tempfile.mkstemp()
-os.system("gpg2 --clearsign <%s >%s" % (f[1], f2[1]))
+os.close(f2[0])
+res = os.system("gpg2 --clearsign <%s >%s" % (f[1], f2[1]))
 os.unlink(f[1])
+if res != 0:
+    print "GPG didn't sign the message: %i" % res
+    os.unlink(f2[1])
+    sys.exit(1)
 sdat = file(f2[1]).read()
 os.unlink(f2[1])
 
