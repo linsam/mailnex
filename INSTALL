@@ -1,0 +1,10 @@
+run:
+    virtualenv env
+    source env/bin/activate
+    pip install -f requirements.txt
+
+Follow instructions at https://gist.github.com/josezambrana/920909. We use
+version 1.2.23 instead of 1.2.18. We didn't bother installing the haystack
+packages (django-haystack, xapian-haystack)
+
+run directly: ./mailnex
