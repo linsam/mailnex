@@ -11,6 +11,7 @@ import sys
 import six
 
 debug = False
+ourabort = False
 
 class myloop(prompt_toolkit.eventloop.base.EventLoop):
     """An attempt at making prompt_toolkit use libuv instead of its built-in eventloop.
@@ -47,7 +48,7 @@ class myloop(prompt_toolkit.eventloop.base.EventLoop):
             if debug:
                 print "Dying"
         else:
-            if data == '\x03':
+            if ourabort and data == '\x03':
                 # Ought to have been a sigint, but apparently prompt_toolkit
                 # makes the terminal *very* raw. Anyway, I guess we'll
                 # intercept this. We want to handle interruptions on our own,
@@ -56,7 +57,11 @@ class myloop(prompt_toolkit.eventloop.base.EventLoop):
                 # valid number to occur in terminal control sequences; that
                 # is, it might not be from a user interrupt. Really, we should
                 # let the interrupt generation be regular :-/
+                #
+                # Another alternative might be overriding prompt_toolkit's
+                # abort action or key binding.
                 self.realloop.stop()
+                return
             self.inputstream.feed(six.text_type(data))
     # Other stuff prompt_toolkit wants us to have :-(
     def add_reader(self, fd, callback):
@@ -92,17 +97,39 @@ loop = myloop(uvloop)
 def sigint(event, signal):
     print "sigint"
     event.loop.stop()
+    #event.close()
 
 def timevent(event):
     print "timeout"
     # TODO: Redraw prompt?
+
+def loopstop(event):
+    event.loop.stop()
+    event.close()
 
 s = pyuv.Signal(uvloop)
 s.start(sigint, signal.SIGINT)
 t = pyuv.Timer(uvloop)
 t.start(timevent, 0, 5)
 
-res = prompt_toolkit.prompt("prompt> ", eventloop=loop)
-print "res=",repr(res)
+try:
+    res = prompt_toolkit.prompt("prompt> ", eventloop=loop)
+    print "res=",repr(res)
+except KeyboardInterrupt:
+    print 'interrupted'
+t2 = pyuv.Timer(uvloop)
+t2.start(loopstop, 5, 0)
+print "Waiting 5 seconds. (or less if you interrupt)"
+uvloop.run()
+# So at this point, either the loop was stopped via the loopstop callback from
+# the timer, or via sigint from the signal handler. Oddly, if it was the
+# signal handler, then the user only gets until the next timevent to use the
+# prompt, else it gets aborted somehow (no exception raised, but prompt
+# returns with res = None.). Don't understand the mechanism there. Until I do,
+# this isn't going to fly for the setup I'm planning.
 res = prompt_toolkit.prompt("prompt2> ", eventloop=loop)
+print "res=",repr(res)
+# Now, whether prompt2 was successful or not, prompt3 seems to work without a
+# hitch, even while timevent is still running.
+res = prompt_toolkit.prompt("prompt3> ", eventloop=loop)
 print "res=",repr(res)
