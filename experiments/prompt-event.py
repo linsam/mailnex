@@ -93,8 +93,16 @@ def sigint(event, signal):
     print "sigint"
     event.loop.stop()
 
+def timevent(event):
+    print "timeout"
+    # TODO: Redraw prompt?
+
 s = pyuv.Signal(uvloop)
 s.start(sigint, signal.SIGINT)
+t = pyuv.Timer(uvloop)
+t.start(timevent, 0, 5)
 
 res = prompt_toolkit.prompt("prompt> ", eventloop=loop)
-print "res=",res
+print "res=",repr(res)
+res = prompt_toolkit.prompt("prompt2> ", eventloop=loop)
+print "res=",repr(res)
