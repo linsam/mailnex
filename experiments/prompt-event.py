@@ -122,11 +122,10 @@ t2.start(loopstop, 5, 0)
 print "Waiting 5 seconds. (or less if you interrupt)"
 uvloop.run()
 # So at this point, either the loop was stopped via the loopstop callback from
-# the timer, or via sigint from the signal handler. Oddly, if it was the
-# signal handler, then the user only gets until the next timevent to use the
-# prompt, else it gets aborted somehow (no exception raised, but prompt
-# returns with res = None.). Don't understand the mechanism there. Until I do,
-# this isn't going to fly for the setup I'm planning.
+# the timer, or via sigint from the signal handler.
+# Make sure to stop the loopstop timed event, or it will fire when the prompt
+# is running, which in turn will abort the prompt early.
+t2.close()
 res = prompt_toolkit.prompt("prompt2> ", eventloop=loop)
 print "res=",repr(res)
 # Now, whether prompt2 was successful or not, prompt3 seems to work without a
