@@ -182,7 +182,9 @@ uvloop.run()
 # Make sure to stop the loopstop timed event, or it will fire when the prompt
 # is running, which in turn will abort the prompt early.
 t2.close()
-res = prompt_toolkit.prompt("prompt2> ", eventloop=loop)
+#res = prompt_toolkit.prompt("prompt2> ", eventloop=loop)
+cli.application = prompt_toolkit.shortcuts.create_prompt_application("prompt2> ")
+res = cli.run(reset_current_buffer=True)
 print "res=",repr(res)
 # Now, whether prompt2 was successful or not, prompt3 seems to work without a
 # hitch, even while timevent is still running.
