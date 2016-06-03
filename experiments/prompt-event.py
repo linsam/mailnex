@@ -5,6 +5,7 @@ import prompt_toolkit.shortcuts
 import prompt_toolkit.eventloop.inputhook
 import prompt_toolkit.eventloop.base
 import prompt_toolkit.terminal.vt100_input
+import prompt_toolkit.interface
 import pyuv
 import signal
 import sys
@@ -21,6 +22,7 @@ class myloop(prompt_toolkit.eventloop.base.EventLoop):
         # prompt_toolkit....PosixEventLoop never bothers to init its super, so maybe we
         # shouldn't either?
         self.realloop = realloop
+        self.pending_async = []
     def run(self, stdin, callbacks):
         # The PosixEventLoop basically sets up a callback for sigwinch to
         # monitor terminal resizes, and a callback for when stdin is ready.
@@ -81,16 +83,40 @@ class myloop(prompt_toolkit.eventloop.base.EventLoop):
         #TODO: Mess with max postpone? PosixEventLoop uses a pipe to schedule
         # a callback for execution.
         # We'll just call the function and be done with it.
-        callback()
+        #print "exe", callback
+        #callback()
+        def wrapper(handle):
+            handle.close()
+            #print "wrapper start"
+            callback()
+            #print "wrapper end"
+            i = self.pending_async.index(handle)
+            del self.pending_async[i]
+        a = pyuv.Async(self.realloop, wrapper)
+        # If we don't store a somewhere ourselves, libuv never calls the
+        # callback. I suspect it is getting garbage collected if we don't keep
+        # a reference ourselves.
+        self.pending_async.append(a)
+        a.send()
+        #print "endexe"
     def run_in_executor(self, callback):
         # PosixEventLoop creates a thread function to call the callback and
         # gives that to the executor... Apparently prompt_toolkit might rely
         # on this so that it doesn't process autocompletions during paste in a
         # heavy manner. TODO: Revisit this
-        self.call_from_executor(callback)
+        print "run", callback
+        def wrapper(handle):
+            handle.close()
+            callback()
+            i = self.pending_async.index(handle)
+            del self.pending_async[i]
+        a = pyuv.Async(self.realloop, callback)
+        self.pending_async.append(a)
+        a.send()
+        print "endrun"
+        #self.call_from_executor(callback)
 
 
-#loop = prompt_toolkit.shortcuts.create_eventloop() # TODO: pass hook
 uvloop = pyuv.Loop()
 loop = myloop(uvloop)
 
@@ -100,20 +126,50 @@ def sigint(event, signal):
     #event.close()
 
 def timevent(event):
-    print "timeout"
-    # TODO: Redraw prompt?
+    def inner():
+        print "timeout"
+        #print cli.renderer.output
+        #import time
+        #time.sleep(1)
+    #cli.renderer.reset()
+    #cli.renderer.request_absolute_cursor_position()
+    #inner()
+    #print cli.__doc__
+    if cli._is_running:
+        cli.run_in_terminal(inner)
+    else:
+        print "timeout - cli inactive"
+    #print "after term run"
+    #print "+++",cli._is_running, cli._sub_cli
+    #cli._redraw()
+    #print "after redraw force. timeout done"
+    #cli.run_in_terminal(inner, True)
+    #cli.invalidate()
+    #cli.reset()
+    #cli.renderer.erase()
+    #print cli.renderer._cursor_pos.x
 
 def loopstop(event):
     event.loop.stop()
-    event.close()
+    # If we close here, and we close after the run (t2.close() below), we get
+    # an error from libuv. Since we know we'll close below, don't bother
+    # closing here.
+    #event.close()
 
 s = pyuv.Signal(uvloop)
 s.start(sigint, signal.SIGINT)
 t = pyuv.Timer(uvloop)
-t.start(timevent, 0, 5)
+t.start(timevent, 1, 5)
+
+cli = prompt_toolkit.interface.CommandLineInterface(
+        application = prompt_toolkit.shortcuts.create_prompt_application("prompt1> "), # Other kwargs after message
+        eventloop = loop,
+        output = prompt_toolkit.shortcuts.create_output(true_color = False),
+        )
 
 try:
-    res = prompt_toolkit.prompt("prompt> ", eventloop=loop)
+    #res = prompt_toolkit.prompt("prompt> ", eventloop=loop)
+    res = cli.run()
     print "res=",repr(res)
 except KeyboardInterrupt:
     print 'interrupted'
