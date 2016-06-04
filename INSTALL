@@ -1,10 +1,25 @@
-run:
-    virtualenv env
-    source env/bin/activate
-    pip install -f requirements.txt
+Method 1:
+    run:
+        virtualenv --system-site-packages env
+        source env/bin/activate
+        pip install -r requirements.txt
 
-Follow instructions at https://gist.github.com/josezambrana/920909. We use
-version 1.2.23 instead of 1.2.18. We didn't bother installing the haystack
-packages (django-haystack, xapian-haystack)
+    Install python-xapian using your system package manager (e.g. apt-get install python-xapian)
+    If you want it to remember passwords, install appropriate keyring managers (TODO: name the packages)
 
-run directly: ./mailnex
+    run directly: ./mailnex
+
+Method 2: (for when the above method results in problems with function calls)
+    run:
+        virtualenv env
+        source env/bin/activate
+        pip install -r requirements.txt
+
+    Follow instructions at https://gist.github.com/josezambrana/920909. We use
+    version 1.2.23 instead of 1.2.18. We didn't bother installing the haystack
+    packages (django-haystack, xapian-haystack)
+
+    If you want it to remember passwords, good luck. Probably your best bet is
+    to do 'pip install keyring.alt' and configure plain-text password storage.
+
+    run directly: ./mailnex
