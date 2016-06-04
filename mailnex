@@ -604,7 +604,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 # Or maybe we'll write our own imaplib replacement. Whatever
                 print("Warning! Server supports TLS, but we don't!")
                 print("Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later")
-        pass_ =  keyring.get_password("mailnex",getpass.getuser())
+        try:
+            pass_ =  keyring.get_password("imap://%s" % args, getpass.getuser())
+        except RuntimeError:
+            pass_ = None
+            print("Info: no password managers found; cannot save your password for automatic login")
         if not pass_:
             pass_ = getpass.getpass()
         typ,data = M.login(getpass.getuser(), pass_)
