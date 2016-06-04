@@ -11,6 +11,91 @@ from prompt_toolkit.styles import style_from_pygments
 from pygments.lexers import HtmlLexer
 import pygments.style
 
+import signal
+import pyuv
+import sys
+import six
+
+class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
+    """A prompt_toolkit compatible event loop that wraps pyuv (libuv) as the real event loop.
+
+    Options:
+        realloop - optional. If given, we'll use it, otherwise we'll create a new pyuv.Loop.
+
+    """
+    def __init__(self, realloop=None):
+        # prompt_toolkit....PosixEventLoop never bothers to init its super, so maybe we
+        # shouldn't either?
+        if realloop is None:
+            realloop = pyuv.Loop()
+        self.realloop = realloop
+        self.pending_async = []
+    def run(self, stdin, callbacks):
+        # The PosixEventLoop basically sets up a callback for sigwinch to
+        # monitor terminal resizes, and a callback for when stdin is ready.
+        # libuv can do the stdin with the TTY handler, so we'll give that a
+        # whirl
+        # TODO: probably only want to init these if we are fresh or have been
+        # 'close()'ed.
+        self.sigw = pyuv.Signal(self.realloop)
+        self.sigw.start(self.sigwinch, signal.SIGWINCH)
+        self.tty = pyuv.TTY(self.realloop, sys.stdin.fileno(), True)
+        self.tty.start_read(self.ttyread)
+        self._callbacks = callbacks
+        self.inputstream = prompt_toolkit.terminal.vt100_input.InputStream(callbacks.feed_key)
+        return self.realloop.run()
+    def sigwinch(event, signum):
+        # We don't worry about all that executor threading stuffs that
+        # prompt_toolkit does, because libuv (is supposed to) give us signals
+        # in the main thread and not in a signal context (which is one of the
+        # whole points of doing a self-pipe).
+        self._callbacks.terminal_size_changed()
+    def ttyread(self, event, data, error):
+        if data is None:
+            self.tty.close()
+            self.realloop.stop()
+        else:
+            self.inputstream.feed(six.text_type(data))
+    # Other stuff prompt_toolkit wants us to have :-(
+    def add_reader(self, fd, callback):
+        print "add_reader called", fd, callback
+    def remove_reader(self, fd):
+        print "remove_reader called", fd
+    def close(self):
+        self.sigw.close()
+        self.tty.close()
+    def stop(self):
+        self.realloop.stop()
+    def call_from_executor(self, callback, _max_postpone_until=None):
+        #TODO: Mess with max postpone? PosixEventLoop uses a pipe to schedule
+        # a callback for execution.
+        # We'll just call the function via pyuv Async and be done with it.
+        def wrapper(handle):
+            handle.close()
+            callback()
+            i = self.pending_async.index(handle)
+            del self.pending_async[i]
+        a = pyuv.Async(self.realloop, wrapper)
+        # If we don't store a somewhere ourselves, libuv never calls the
+        # callback. I suspect it is getting garbage collected if we don't keep
+        # a reference ourselves.
+        self.pending_async.append(a)
+        a.send()
+    def run_in_executor(self, callback):
+        # PosixEventLoop creates a thread function to call the callback and
+        # gives that to the executor... Apparently prompt_toolkit might rely
+        # on this so that it doesn't process autocompletions during paste in a
+        # heavy manner. TODO: Revisit this (they have a note about i/o vs cpu
+        # preferencing)
+        def wrapper(handle):
+            handle.close()
+            callback()
+            i = self.pending_async.index(handle)
+            del self.pending_async[i]
+        a = pyuv.Async(self.realloop, wrapper)
+        self.pending_async.append(a)
+        a.send()
+
 class PromptLexer(RegexLexer):
     """Basic lexer for our command line."""
     name = 'Prompt'
@@ -90,13 +175,28 @@ class CmdPrompt(cmd.Cmd):
     (that is, you want to readline once, and process the command).
     """
 
-    def __init__(self, histfile=None):
+    def __init__(self, prompt=None, histfile=None, eventloop=None):
         cmd.Cmd.__init__(self)
         self.completer = Completer(self)
         if histfile:
             self.history = prompt_toolkit.history.FileHistory(histfile)
         else:
             self.history = prompt_toolkit.history.InMemoryHistory()
+        if prompt is None:
+            prompt = "> "
+        self.ptkevloop = ptk_pyuv_wrapper(eventloop)
+        self.cli = prompt_toolkit.interface.CommandLineInterface(
+                application = prompt_toolkit.shortcuts.create_prompt_application(
+                    prompt,
+                    style = prompt_style,
+                    lexer = PygmentsLexer(PromptLexer),
+                    completer = self.completer,
+                    history = self.history,
+                    auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
+                    ),
+                eventloop = self.ptkevloop,
+                output = prompt_toolkit.shortcuts.create_output(true_color = False),
+        )
 
     def cmdSingle(self, intro=None):
         """Perform a single prompt-and-execute sequence.
@@ -110,14 +210,8 @@ class CmdPrompt(cmd.Cmd):
             line = self.cmdqueue.pop(0)
         else:
             try:
-                line = prompt_toolkit.prompt(
-                        self.prompt,
-                        lexer=PygmentsLexer(PromptLexer),
-                        style=prompt_style,
-                        completer=self.completer,
-                        history = self.history,
-                        auto_suggest=prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
-                        )
+                line = self.cli.run(True)
+                line = line.text
             except EOFError:
                 line = 'EOF'
         line = self.precmd(line)
