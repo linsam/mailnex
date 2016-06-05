@@ -202,18 +202,36 @@ def processAtoms(text):
     literalRemain = 0
     literalSizeString = ""
     skipCrLf = False
+    pos = -1
     for c in text:
+        pos += 1
         #print(" Processing %s" % repr(c))
         if skipCrLf:
-            if c != '\n':
+            # True or 1 means check the CR of CRLF, then expect the LF of CRLF
+            # 2 means expect the LF of CRLF
+            if skipCrLf != 2:
+                check = '\r'
+            else:
+                check = '\n'
+            if c != check:
+                #print("before", repr(text[:pos]))
+                #print("at", repr(text[pos]))
+                #print("after", repr(text[pos+1:]))
                 raise Exception("No crlf where expected (next char was %s)" % repr(c))
-            skipCrLf = False
+            if skipCrLf == 2:
+                skipCrLf = False
+            else:
+                skipCrLf = 2
             continue
         if inliteral:
             curtext.append(c)
             literalRemain -= 1
+            #print("literal append %s, remaining %i" % (repr(c), literalRemain))
             if literalRemain == 0:
                 inliteral = False
+                # Literals are terminated with CRLF
+                skipCrLf = True
+                #print("  Done literal payload, expect crlf framing")
             continue
         #print("Processing char", repr(c))
         if c == ' ' or c == '\t':
@@ -229,17 +247,22 @@ def processAtoms(text):
                 continue
             continue
         if inbrace and c == '}':
+            #print("Literal size find:",literalSizeString)
             inbrace = False
             inliteral = True
             skipCrLf = True
             if literalSizeString.isdigit():
                 literalRemain = int(literalSizeString)
+                #print("Start literal. %i remain"%literalRemain)
+                # Discount initial CRLF framing from count (first CRLF is
+                # included in count, ending CRLF is not)
+                literalRemain -= 2
                 continue
             raise Exception("Invalid literal size %s" % repr(literalSizeString))
         if inspace and c == '{':
             inspace = False
             inbrace = True
-            listeralSizeString = ""
+            literalSizeString = ""
             continue
         if inbrace:
             literalSizeString += c
@@ -586,41 +609,49 @@ class Cmd(cmdprompt.CmdPrompt):
             C.connection.logout()
             C = None
         print("Connecting to '%s'" % args)
+        argss = args.split()
+        if len(argss) == 2:
+            host = argss[0]
+            port = int(argss[1])
+        elif len(argss) == 1:
+            host = args
+            port = None
+        else:
+            raise Exception("Unknown connect format")
+        import imap4
+        c = imap4.imap4ClientConnection()
+        print("WARNING: Certificates aren't checked. Remote host may be spoofed!")
         try:
-            M = imaplib.IMAP4(args)
-        except Exception as ev:
-            print("Error:", type(ev), ev)
-            return
-        #print(dir(M))
-        print(M.capabilities)
-        if "STARTTLS" in M.capabilities:
-            if hasattr(M, "starttls"):
-                res = M.starttls()
+            c.connect(host, port=port)
+            if c.isTls():
+                print("Info: Connection already secure")
             else:
-                # TODO: We *might* be able to hijack the underlying socket, do
-                # a STARTTLS ourselves, then do an SSL socket wrap, and
-                # replace it in imaplib.
-                #
-                # Or maybe we'll write our own imaplib replacement. Whatever
-                print("Warning! Server supports TLS, but we don't!")
-                print("Warning! You should upgrade your python-imaplib package to 3.2 or 3.4 or later")
-        try:
-            pass_ =  keyring.get_password("imap://%s" % args, getpass.getuser())
-        except RuntimeError:
-            pass_ = None
-            print("Info: no password managers found; cannot save your password for automatic login")
-        if not pass_:
-            pass_ = getpass.getpass()
-        typ,data = M.login(getpass.getuser(), pass_)
-        print(typ, data)
-        C.connection = M
-        typ,data = M.select()
-        print(typ, data)
-        # Normally, you'd scan for the first flagged or new message and set that
-        # (probably by issuing a SEARCH to the server). For now, we'll hard code
-        # it to 1.
-        C.currentMessage = 1
-        C.lastMessage = int(data[0])
+                # TODO: if not c.caps, run capability command
+                if not c.caps or not 'STARTTLS' in c.caps:
+                    print("Remote doesn't claim TLS support; trying anyway")
+                print("Info: Startting TLS negotiation")
+                c.starttls()
+                if c.isTls():
+                    print("Info: Connection now secure")
+                else:
+                    raise Exception("Failed to secure connection!")
+            try:
+                pass_ =  keyring.get_password("imap://%s" % args, getpass.getuser())
+            except RuntimeError:
+                pass_ = None
+                print("Info: no password managers found; cannot save your password for automatic login")
+            if not pass_:
+                pass_ = getpass.getpass()
+            c.login(getpass.getuser(), pass_)
+            c.select()
+            self.C.connection = c
+            self.C.currentMessage = 1
+            self.C.lastMessage = c.exists
+
+        except KeyboardInterrupt:
+            print("Aborting connection")
+            del s
+            return
 
     @needsConnection
     def do_index(self, args):
@@ -706,10 +737,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
         else:
             index = C.currentMessage
-        ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
+        data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
+        parts = processAtoms(data[0][1])
+        # Assert parts[0][0] == "BODY.PEEK[HEADER]"
+        headers = parts[0][1]
+        # Assert parts[0][2] == "BODY.PEEK[1]"
+        body = parts[0][3]
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
-        s.communicate(data[0][1] + data[1][1])
+        s.communicate(headers + "\n" + body)
 
     @needsConnection
     def do_latest_threads(self, args):
@@ -896,13 +932,13 @@ class Cmd(cmdprompt.CmdPrompt):
             C.currentMessage = start
         if last > C.lastMessage:
             last = C.lastMessage
-        typ, data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
-        data = normalizeFetch(data)
+        data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
+        #data = normalizeFetch(data)
         # TODO: get rid of i and use d[0] instead?
         i = start
         for d in data:
             try:
-                d = processAtoms(d)
+                d = (d[0], processAtoms(d[1]))
             except Exception as ev:
                 print("  %i  (error parsing envelope!)" % i, ev)
                 continue
@@ -910,15 +946,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 if i == C.currentMessage:
                     print("> %(num)s %(date)31s %(subject)s" % {
                             'num': d[0],
-                            'date': d[1][1][0],
-                            'subject': d[1][1][1],
+                            'date': d[1][0][1][0],
+                            'subject': d[1][0][1][1],
                             }
                             )
                 else:
                     print("  %(num)s %(date)31s %(subject)s" % {
                             'num': d[0],
-                            'date': d[1][1][0],
-                            'subject': d[1][1][1],
+                            'date': d[1][0][1][0],
+                            'subject': d[1][0][1][1],
                             }
                             )
             except:
