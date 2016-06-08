@@ -132,7 +132,7 @@ class imap4ClientConnection(object):
         self.state = STATE_NOCON
         self.socket = None
         self.caps = None
-        self.maxlinelen = 10000
+        self.maxlinelen = 1024 * 512
         self.cb_fetch = None
         self.debug = False
     def processCodes(self, status, code, string):
@@ -202,7 +202,7 @@ class imap4ClientConnection(object):
             if self.maxlinelen and len(line) > self.maxlinelen:
                 # TODO: Try to cleanup by flushing? Let something higher take
                 # care of it?
-                raise Exception("Server response too long (exceeds maxlinelen)")
+                raise Exception("Server response too long (at %i, which exceeds maxlinelen %i)" % (len(line), self.maxlinelen))
             if line.endswith('\r\n'):
                 # Strip the line ending off
                 line = line[:-2]
