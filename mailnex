@@ -610,12 +610,37 @@ class Cmd(cmdprompt.CmdPrompt):
             C = None
         print("Connecting to '%s'" % args)
         argss = args.split()
+        user = None
         if len(argss) == 2:
             host = argss[0]
             port = int(argss[1])
         elif len(argss) == 1:
-            host = args
-            port = None
+            m = None
+            if args.startswith("imap://"):
+                m = re.match(r'([^@]*@)?([^/]*)(/.*)', args[7:])
+                if not m:
+                    print("failed to parse")
+                    return
+                port = 143
+            elif args.startswith("imaps://"):
+                m = re.match(r'([^@]*@)?([^/]*)(/.*)', args[8:])
+                if not m:
+                    print("failed to parse")
+                    return
+                port = 993
+            else:
+                pass
+            if not m:
+                host = args
+                port = None
+            else:
+                user, host, box = m.groups()
+                if user:
+                    # Remove '@' sign
+                    user = user[:-1]
+                if box:
+                    # Remove single leading '/'
+                    box = box[1:]
         else:
             raise Exception("Unknown connect format")
         import imap4
@@ -635,15 +660,23 @@ class Cmd(cmdprompt.CmdPrompt):
                     print("Info: Connection now secure")
                 else:
                     raise Exception("Failed to secure connection!")
+            if not user:
+                user = getpass.getuser()
             try:
-                pass_ =  keyring.get_password("imap://%s" % args, getpass.getuser())
+                pass_ =  keyring.get_password("imap://%s" % host, user)
             except RuntimeError:
                 pass_ = None
                 print("Info: no password managers found; cannot save your password for automatic login")
             if not pass_:
                 pass_ = getpass.getpass()
-            c.login(getpass.getuser(), pass_)
-            c.select()
+            print("Info: Logging in")
+            c.login(user, pass_)
+            print("Info: Loggin complete")
+            if box:
+                c.select(box)
+            else:
+                c.select()
+            print("Info: Mailbox opened")
             self.C.connection = c
             self.C.currentMessage = 1
             self.C.lastMessage = c.exists
@@ -1092,9 +1125,36 @@ class Cmd(cmdprompt.CmdPrompt):
 def interact():
     cmd = Cmd(prompt="mailnex> ", histfile="mailnex_history")
     C = Context()
-    C.dbpath = "./maildb1/" # TODO: get from config file
+    C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
     C.lastcommand=""
     cmd.C = C
+    C.settings = {}
+    postConfFolder = None
+    if confFile:
+        # Walk through the config file
+        with open(confFile) as conf:
+            print("reading conf from", confFile)
+            for lineno, line in enumerate(conf, 1):
+                if line.strip() == "":
+                    # Blank line
+                    continue
+                elif line.strip().startswith('#'):
+                    #print("comment")
+                    continue
+                elif line.strip().startswith("set "):
+                    #print("setting", line.strip()[4:])
+                    m = re.match(r' *([^ =]+) *= *(.+)', line[4:])
+                    if not m:
+                        print("Failed to parse set command in line %i" % lineno)
+                        continue
+                    key, value = m.groups()
+                    C.settings[key] = value
+                elif line.strip().startswith("folder "):
+                    postConfFolder = line.strip()[7:]
+                else:
+                    print("unknown command in line %i" % lineno)
+    if postConfFolder:
+        cmd.do_connect(postConfFolder)
     try:
         cmd.cmdloop()
     except KeyboardInterrupt:
