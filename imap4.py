@@ -134,6 +134,7 @@ class imap4ClientConnection(object):
         self.caps = None
         self.maxlinelen = 1024 * 512
         self.cb_fetch = None
+        self.cb_search = None
         self.debug = False
     def processCodes(self, status, code, string):
         # Assert code[0] == '[' and code[-1] == ']'
@@ -358,8 +359,8 @@ class imap4ClientConnection(object):
                                     # TODO: callback
                                     pass
                                 elif typ.upper() == "SEARCH":
-                                    # TODO: callback
-                                    pass
+                                    if self.cb_search:
+                                        self.cb_search(typ, data)
                                 elif typ.upper() == "STATUS":
                                     # TODO: callback
                                     pass
@@ -496,4 +497,15 @@ class imap4ClientConnection(object):
         if res != "OK":
             raise Exception("Failed to get capability: %s %s" %(res, string))
         return self.caps
+    def search(self, charset, query):
+        searchres = []
+        def cb(typ, data):
+            searchres.extend(data.split())
+        oldsearch = self.cb_search
+        self.cb_search = cb
+        res, code, string = self.doSimpleCommand("SEARCH CHARSET %s %s" % (charset, query))
+        self.cb_search = oldsearch
+        if res != "OK":
+            raise Exception("Failed to do search: %s %s" % (res, string))
+        return searchres
 

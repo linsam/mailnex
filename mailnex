@@ -510,13 +510,13 @@ class Cmd(cmdprompt.CmdPrompt):
         s=set()
         # Second pass, read a few specials 
         if args == ":u":
-            typ, data = self.C.connection.search("UTF-8", "unseen")
+            data = self.C.connection.search("UTF-8", "unseen")
             print(data)
-            return map(int, data[0].split())
+            return map(int, data)
         if args == ":f":
-            typ, data = self.C.connection.search("UTF-8", "flagged")
+            data = self.C.connection.search("UTF-8", "flagged")
             print(data)
-            return map(int, data[0].split())
+            return map(int, data)
         # First pass, lets just handle numbers.
         for r in args.split():
             # Note, we won't be able to keep the simple split once we include
@@ -986,18 +986,18 @@ class Cmd(cmdprompt.CmdPrompt):
             C.currentMessage = start
         if last > C.lastMessage:
             last = C.lastMessage
-        data = M.fetch("%i:%i" % (start, last), "(ENVELOPE)")
+        self.showHeaders("%i:%i" % (start, last))
+    def showHeaders(self, messageList):
+        data = self.C.connection.fetch("%s" % messageList, "(ENVELOPE)")
         #data = normalizeFetch(data)
-        # TODO: get rid of i and use d[0] instead?
-        i = start
         for d in data:
             try:
                 d = (d[0], processAtoms(d[1]))
             except Exception as ev:
-                print("  %i  (error parsing envelope!)" % i, ev)
+                print("  %s  (error parsing envelope!)" % d[0], ev)
                 continue
             try:
-                if i == C.currentMessage:
+                if int(d[0],10) == self.C.currentMessage:
                     print("> %(num)s %(date)31s %(subject)s" % {
                             'num': d[0],
                             'date': d[1][0][1][0],
@@ -1012,8 +1012,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             }
                             )
             except:
-                print("  %i  (error displaying. Data follows)" % i, repr(d))
-            i += 1
+                print("  %s  (error displaying. Data follows)" % d[0], repr(d))
 
     @shortcut("f")
     @needsConnection
@@ -1026,40 +1025,10 @@ class Cmd(cmdprompt.CmdPrompt):
         C = self.C
         M = C.connection
         res = self.parseMessageList(args)
-        typ, data = M.fetch("%s" % ",".join(map(str,res)), "(ENVELOPE)")
-        i = 0
-        #print(data)
-        data = normalizeFetch(data)
-        #print("After norm", data)
-        for d in data:
-            print("i",i, res[i])
-            try:
-                d = processAtoms(d)
-            except Exception as ev:
-                print("  %i  (error parsing envelope!)" % res[i], ev)
-                continue
-            try:
-                if res[i] != int(d[0]):
-                    print("Error: %i != %i" % (res[i], d[0]))
-                    return
-                if res[i] == C.currentMessage:
-                    print("> %(num)s %(date)31s %(subject)s" % {
-                            'num': d[0],
-                            'date': d[1][1][0],
-                            'subject': d[1][1][1],
-                            }
-                            )
-                else:
-                    print("  %(num)s %(date)31s %(subject)s" % {
-                            'num': d[0],
-                            'date': d[1][1][0],
-                            'subject': d[1][1][1],
-                            }
-                            )
-            except:
-                print("  %i  (error displaying. Data follows)" % i, repr(d))
-            i += 1
-
+        if len(res) == 0:
+            print("No matches")
+            return
+        self.showHeaders("%s" % ",".join(map(str,res)))
     @needsConnection
     def do_namespace(self, args):
         C = self.C
