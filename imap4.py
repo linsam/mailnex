@@ -246,24 +246,15 @@ class imap4ClientConnection(object):
                 #
                 #
                 #
-                # TODO: If the line ends with '}', look back for '{' followed by digits. If we have it, we probably have a string literal, and should thus fetch the number of bytes in-the-raw
-                end = line.split()[-1]
-                if end.startswith('{') and end.endswith('}') and end[1:-1].isdigit():
-                    count = int(end[1:-1],10)
+                segment = line.rfind('{')
+                if segment != -1 and line.endswith('}') and line[segment + 1 : -1].isdigit():
+                    count = int(line[segment + 1 : -1],10)
                     # Restore CRLF, this isn't actually the end of this data
                     # 'line'
                     line += "\r\n"
-                    # NOTE: The count is the number of bytes to read for the
-                    # literal data. The literal is then terminated by a CRLF.
-                    # The count includes the initial CRLF (that we stripped
-                    # off) but doesn't include the CRLF after the count ends.
-                    # Since we stripped off the leading CRLF without counting
-                    # it and added it back, reading the count of bytes now
-                    # gets us to ending CRLF. We'll leave that intact for
-                    # higher level parsers to be able to use. Anyway, this is
-                    # why we aren't doing any math on the count or special
-                    # handling for the terminating CRLF to prevent it from
-                    # ending the 'line'. It all just works out.
+                    # NOTE: The count is the number of bytes to read after the
+                    # initial CRLF. We put the CRLF back into the stream so
+                    # that higher parsers keep the correct format.
 
                     # Read the rest of the literal
                     while count:

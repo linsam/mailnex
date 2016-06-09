@@ -172,8 +172,9 @@ def processAtoms(text):
         Data can be an atom, number, string, parenthesized list, or NIL.
         An atom consists of one or more non-special characters.
         A number consists of digits
-        A string is either literal (has a length in braces followed by data of
-        that length, followed by CRLF) or quoted (surrounded by double quotes)
+        A string is either literal (has a length in braces followed, followed
+        by CRLF by data of that length) or quoted (surrounded by double
+        quotes)
         A parenthesized list is a nesting structure for all of the data
         formats.
         NIL is like C's NULL or Python's None. Indicates absense of a
@@ -234,10 +235,10 @@ def processAtoms(text):
                 print("literal append %s, remaining %i" % (repr(c), literalRemain))
             if literalRemain == 0:
                 inliteral = False
-                # Literals are terminated with CRLF
-                skipCrLf = True
+                # TODO: Should we assume this completes the token and go back
+                # to inspace?
                 if debug_parse:
-                    print("  Done literal payload, expect crlf framing")
+                    print("  Literal complete. Resume normal parsing")
             continue
         if debug_parse:
             print("Processing char", repr(c))
@@ -265,9 +266,6 @@ def processAtoms(text):
                 literalRemain = int(literalSizeString)
                 if debug_parse:
                     print("Start literal. %i remain" % literalRemain)
-                # Discount initial CRLF framing from count (first CRLF is
-                # included in count, ending CRLF is not)
-                literalRemain -= 2
                 continue
             raise Exception("Invalid literal size %s" % repr(literalSizeString))
         if inspace and c == '{':
@@ -799,7 +797,7 @@ class Cmd(cmdprompt.CmdPrompt):
         body = parts[0][3]
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
-        s.communicate(headers + "\n" + body)
+        s.communicate(headers + body)
 
     @needsConnection
     def do_latest_threads(self, args):
