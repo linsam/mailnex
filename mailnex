@@ -815,7 +815,8 @@ class Cmd(cmdprompt.CmdPrompt):
             return
         M = self.C.connection
         index = int(args)
-        ret, data = M.fetch(index, '(BODY.PEEK[HEADER])')
+        data = M.fetch(index, '(BODY.PEEK[HEADER])')
+        data = processAtoms(data[0][1])
         headers = processHeaders(data[0][1])
         term = None
         if 'thread-index' in headers:
