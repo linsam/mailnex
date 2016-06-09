@@ -73,6 +73,8 @@ import keyring
 import xdg.BaseDirectory
 # shell helper
 import cmdprompt
+# Date handler
+import dateutil.parser
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
@@ -995,22 +997,26 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("  %s  (error parsing envelope!)" % d[0], ev)
                 continue
             try:
-                if int(d[0],10) == self.C.currentMessage:
-                    print("> %(num)s %(date)31s %(subject)s" % {
-                            'num': d[0],
-                            'date': d[1][0][1][0],
-                            'subject': d[1][0][1][1],
-                            }
-                            )
-                else:
-                    print("  %(num)s %(date)31s %(subject)s" % {
-                            'num': d[0],
-                            'date': d[1][0][1][0],
-                            'subject': d[1][0][1][1],
-                            }
-                            )
-            except:
-                print("  %s  (error displaying. Data follows)" % d[0], repr(d))
+                num = int(d[0])
+                datestr = d[1][0][1][0]
+                date = dateutil.parser.parse(datestr)
+                if date.tzinfo is None:
+                    date = date.replace(tzinfo = dateutil.tz.gettz(self.C.settings['defaultTZ']))
+                # TODO: Make setting for local or original timezone. Or
+                # perhaps better, make it part of the headline setting so if
+                # the user wants, they can see both.
+                date = date.astimezone(dateutil.tz.tzlocal())
+                subject = d[1][0][1][1]
+                this = True if (num == self.C.currentMessage) else False
+                print("%(this)s %(num)4s %(date)19s %(subject)s" % {
+                    'this': '>' if this else ' ',
+                    'num': num,
+                    'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
+                    'subject': subject,
+                    }
+                    )
+            except Exception as ev:
+                print("  %s  (error displaying because '%s'. Data follows)" % (d[0], ev), repr(d))
 
     @shortcut("f")
     @needsConnection
@@ -1116,7 +1122,13 @@ def interact():
     C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
     C.lastcommand=""
     cmd.C = C
-    C.settings = {}
+    # Default settings. TODO: Put defaults in a separate dictionary or
+    # something, so that if the user 'unset's something, we can fall back on
+    # the default instead of breaking
+    C.settings = {
+            'PAGER': 'internal', # How to display stuff
+            'defaultTZ': 'UTC', # What timezone to put email that lacks a zone specifier (which is out of spec, but lots of scripts are poorly written)
+            }
     postConfFolder = None
     if confFile:
         # Walk through the config file
