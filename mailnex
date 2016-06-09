@@ -11,6 +11,8 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 debug = 0
+imapdebug = 0
+debug_parse = 0
 
 #  Search indexing
 #  ---------------
@@ -205,7 +207,8 @@ def processAtoms(text):
     pos = -1
     for c in text:
         pos += 1
-        #print(" Processing %s" % repr(c))
+        if debug_parse:
+            print(" Processing %s" % repr(c))
         if skipCrLf:
             # True or 1 means check the CR of CRLF, then expect the LF of CRLF
             # 2 means expect the LF of CRLF
@@ -214,9 +217,10 @@ def processAtoms(text):
             else:
                 check = '\n'
             if c != check:
-                #print("before", repr(text[:pos]))
-                #print("at", repr(text[pos]))
-                #print("after", repr(text[pos+1:]))
+                if debug_parse:
+                    print("before", repr(text[:pos]))
+                    print("at", repr(text[pos]))
+                    print("after", repr(text[pos+1:]))
                 raise Exception("No crlf where expected (next char was %s)" % repr(c))
             if skipCrLf == 2:
                 skipCrLf = False
@@ -226,34 +230,41 @@ def processAtoms(text):
         if inliteral:
             curtext.append(c)
             literalRemain -= 1
-            #print("literal append %s, remaining %i" % (repr(c), literalRemain))
+            if debug_parse:
+                print("literal append %s, remaining %i" % (repr(c), literalRemain))
             if literalRemain == 0:
                 inliteral = False
                 # Literals are terminated with CRLF
                 skipCrLf = True
-                #print("  Done literal payload, expect crlf framing")
+                if debug_parse:
+                    print("  Done literal payload, expect crlf framing")
             continue
-        #print("Processing char", repr(c))
+        if debug_parse:
+            print("Processing char", repr(c))
         if c == ' ' or c == '\t':
             if inquote:
-                #print(" keep space, we are quoted")
+                if debug_parse:
+                    print(" keep space, we are quoted")
                 curtext.append(c)
                 continue
             if not inspace:
-                #print(" End of token. Append completed word to list:", curtext)
+                if debug_parse:
+                    print(" End of token. Append completed word to list:", curtext)
                 inspace = True
                 curlist.append("".join(curtext))
                 curtext=[]
                 continue
             continue
         if inbrace and c == '}':
-            #print("Literal size find:",literalSizeString)
+            if debug_parse:
+                print("Literal size find:",literalSizeString)
             inbrace = False
             inliteral = True
             skipCrLf = True
             if literalSizeString.isdigit():
                 literalRemain = int(literalSizeString)
-                #print("Start literal. %i remain"%literalRemain)
+                if debug_parse:
+                    print("Start literal. %i remain" % literalRemain)
                 # Discount initial CRLF framing from count (first CRLF is
                 # included in count, ending CRLF is not)
                 literalRemain -= 2
@@ -271,32 +282,38 @@ def processAtoms(text):
         if c == '"': #TODO single quote too? -- no.
             if inquote:
                 # TODO: Does ending a quote terminate an atom?
-                #print(" Leaving quote")
+                if debug_parse:
+                    print(" Leaving quote")
                 inquote = False
             else:
                 # TODO: Are we allowed to start a quote mid-atom?
-                #print(" Entering quote")
+                if debug_parse:
+                    print(" Entering quote")
                 inquote = True
             continue
         if c == '(':
             if inquote:
-                #print(" keep paren, we are quoted")
+                if debug_parse:
+                    print(" keep paren, we are quoted")
                 curtext.append(c)
                 continue
             if len(curtext):
                 raise Exception("Need space before open paren?")
-            #print(" start new list")
+            if debug_parse:
+                print(" start new list")
             curlist=[]
             lset.append(curlist)
             inspace = True
             continue
         if c == ')':
             if inquote:
-                #print(" keep paren, we are quoted")
+                if debug_parse:
+                    print(" keep paren, we are quoted")
                 curtext.append(c)
                 continue
             if len(curtext):
-                #print(" finish atom before finishing list", curtext)
+                if debug_parse:
+                    print(" finish atom before finishing list", curtext)
                 curlist.append("".join(curtext))
                 curtext=[]
             t = curlist
@@ -304,11 +321,13 @@ def processAtoms(text):
             if len(lset) < 1:
                 raise Exception("Malformed input. Unbalanced parenthesis: too many close parenthesis")
             curlist = lset[-1]
-            #print(" finish list", t)
+            if debug_parse:
+                print(" finish list", t)
             curlist.append(t)
             inspace = True
             continue
-        #print(" normal character")
+        if debug_parse:
+            print(" normal character")
         curtext.append(c)
     if inquote:
         raise Exception("Malformed input. Reached end without a closing quote")
@@ -317,9 +336,10 @@ def processAtoms(text):
         curlist.append("".join(curtext))
     if len(lset) > 1:
         raise Exception("Malformed input. Unbalanced parentheses: Not enough close parenthesis")
-    #print("lset", lset)
-    #print("cur", curlist)
-    #print("leftover", curtext)
+    if debug_parse:
+        print("lset", lset)
+        print("cur", curlist)
+        print("leftover", curtext)
     return curlist
 
 def processHeaders(text):
@@ -645,6 +665,7 @@ class Cmd(cmdprompt.CmdPrompt):
             raise Exception("Unknown connect format")
         import imap4
         c = imap4.imap4ClientConnection()
+        c.debug = imapdebug
         print("WARNING: Certificates aren't checked. Remote host may be spoofed!")
         try:
             c.connect(host, port=port)
