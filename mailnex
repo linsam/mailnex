@@ -106,19 +106,58 @@ def shortcut(name):
         return shortcutWrapper
     return wrap1
 
-def unpackStruct(data, depth=1, value=""):
+def unpackStruct(data, depth=1, value="", predesc=""):
+    """Recursively unpack the structure of a message (as given by IMAP's BODYSTRUCTURE message-data)
+
+    @param data hierarchy of BODYSTRUCTURE elements
+    @depth starting depth (may be used for indenting output, or for debugging)
+    @value current identifier of parent. For the first call, this should be the message ID. It will be dot separated for sub parts.
+    @predesc prefix description. Mostly used internally for when we hit a message/rfc822.
+    """
+    # This is slightly tricky because of the way they ordered it. I haven't
+    # read every revision of IPMI, so I'm guessing this is the result of
+    # attempting backwards compatibility as the spec grew.
+    #
+    # At any given layer, the first element is either a string indicating the
+    # MIME type, or it is a parenthesized list describing a sub part.
+    # If it is a parenthesized list for a subpart, then there are 1 or more of
+    # these (a multipart apparently cannot be empty?), followed by a string of
+    # the multipart subtype, then the multipart extension data elements: body
+    # parameter list, disposition, language, and location (a URI)
+    #
+    # If it is a string, then the fields are type, subtype, mime attr list,
+    # body id, disposition, encoding and size, followed by type-specific
+    # extensions followed by regular extensions.
+    #
+    # text/* has encoded line count (not decoded; beware of this, it makes it
+    # less than useful for showing a line count of what the user will see,
+    # though it might be a good way to estimate it.
+    #
+    # message/rfc822 has envelope structure, body structure, line count
+    #
+    # Regular extensions are md5, disposition, language, and location (URI).
+    #
+    # Note that the envelope structure and body structure for message/rfc822
+    # is the same format as would be retrieved with a fetch ENVELOPE or fetch
+    # BODYSTRUCTURE. In particular, that means that for message/rfc822, we
+    # don't recurse on the non-string initial list, but on the body structure
+    # element at index 8
     if isinstance(data[0], list):
         # We are multipart
         for i in range(len(data)):
             if not isinstance(data[i], list):
                 break
-        print("%s   %s/%s" % (value, "multipart", data[i]))
+        print("%s   %s%s/%s" % (value, predesc, "multipart", data[i]))
         j = 1
         for dat in data[:i]:
             unpackStruct(dat, depth + 1, value + '.' + str(j))
             j += 1
     else:
-        print("%s   %s/%s" % (value, data[0], data[1]))
+        # If we are message/rfc822, then we have further subdivision!
+        if data[0].lower() == "message" and data[1].lower() == "rfc822":
+            unpackStruct(data[8], depth + 1, value, "message/rfc822, which is ")
+        else:
+            print("%s   %s%s/%s" % (value, predesc, data[0], data[1]))
 
 def normalizeFetch(data):
     """Re-listize fetch results.
