@@ -86,12 +86,12 @@ class Context(object):
 # Some decorators
 def needsConnection(func):
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def needsConnectionWrapper(self, *args, **kwargs):
         if not self.C.connection:
             print("no connection")
         else:
             return func(self, *args, **kwargs)
-    return wrapper
+    return needsConnectionWrapper
 
 def shortcut(name):
     """Marks a function as having a shortcut.
@@ -101,9 +101,9 @@ def shortcut(name):
     Eventually, we can add implementation without going through all the functions again to add it."""
     def wrap1(func):
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
+        def shortcutWrapper(self, *args, **kwargs):
             return func(self, *args, **kwargs)
-        return wrapper
+        return shortcutWrapper
     return wrap1
 
 def unpackStruct(data, depth=1, value=""):
