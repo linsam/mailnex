@@ -2,7 +2,7 @@
 import email.mime.multipart
 import email.mime.application
 import email.mime.text
-import email.encoders
+import quopri
 import tempfile
 import os
 import sys
@@ -81,7 +81,7 @@ if dat == "\n":
     os.unlink(f[1])
     print "No message (2)"
     sys.exit(1)
-tpart = email.mime.text.MIMEText(dat)
+tpart = email.mime.text.MIMEText(quopri.encodestring(dat))
 tpart.set_charset("utf-8")
 # Some fun facts:
 #  * Sup and Thunderbird use the first Content-Transfer-Encoding they find.
@@ -96,8 +96,12 @@ tpart.set_charset("utf-8")
 #    is fine and to spec. It is just quite wastefull (though typically not as
 #    bad as base64).
 #
+#    Anyway, we won't bother using encode_quopri; we'll use quopri ourselves
+#    and set the transfer encoding ourselves, so that we can avoid the
+#    increased size of quoting all inner whitespace.
+#
 del tpart['Content-transfer-encoding']
-email.encoders.encode_quopri(tpart)
+tpart['Content-Transfer-Encoding'] = 'quoted-printable'
 os.close(f[0])
 m=open(f[1], "w")
 m.write("\r\n".join(tpart.as_string().split('\n')))
