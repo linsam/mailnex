@@ -314,7 +314,7 @@ def processAtoms(text):
             if len(curtext):
                 if debug_parse:
                     print(" finish atom before finishing list", curtext)
-                curlist.append("".join(curtext))
+                curlist.append(b"".join(curtext))
                 curtext=[]
             t = curlist
             lset.pop()
@@ -795,11 +795,30 @@ class Cmd(cmdprompt.CmdPrompt):
         parts = processAtoms(data[0][1])
         # Assert parts[0][0] == "BODY.PEEK[HEADER]"
         headers = parts[0][1]
+        # TODO: Get content-type of body and convert to TTY, or at least utf-8
+        # Options: Can look at the bodystructure to get the encoding (this
+        # seems good, since we already will have fetched it to find the
+        # text/plain bit anyhow), or we can explicitly fetch the MIME data of
+        # a sub-part.
+        # The spec is interesting here. In a MIME message, there are headers
+        # for the message, and then headers for each part of a multipart. In
+        # IMAP, the "HEADER" part specifier for fetch refers to the top-level
+        # (overall) message, or to the headers of a message/rfc822 subpart.
+        # The "MIME" part specifier refers to the headers for the various
+        # parts, but cannot be applied to the overall message.
+        # This is actually because the subpart has its own mime headers BEFORE
+        # the encapsulated message's headers. (e.g the sub part has a content
+        # type of message/rfc822, but *that* message has a header of
+        # content-type text/plain or multipart/alternative or whatever.
+        #
         # Assert parts[0][2] == "BODY.PEEK[1]"
         body = parts[0][3]
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
-        s.communicate(headers + body)
+        #s.communicate(headers + body.decode('latin-1').encode('utf-8'))
+        content = headers.decode('windows-1252').encode('utf-8')
+        content += body.decode('windows-1252').encode('utf-8')
+        s.communicate(content)
 
     @needsConnection
     def do_latest_threads(self, args):
@@ -876,10 +895,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
         else:
             index = C.currentMessage
-        ret,data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+        data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+        parts = processAtoms(data[0][1])
+        headers = parts[0][1]
+        body = parts[0][3]
+        #content = headers.encode('utf-8') + body.encode('utf-8')
+        content = str(headers) + str(body)
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
-        s.communicate(data[0][1] + data[1][1])
+        s.communicate(content)
 
     @needsConnection
     def do_mheader(self, args):
@@ -924,7 +948,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
         else:
             index = C.currentMessage
-        res, data = M.fetch(index, '(BODYSTRUCTURE)')
+        data = M.fetch(index, '(BODYSTRUCTURE)')
         #print(data)
         for entry in data:
             #print(entry)
@@ -932,9 +956,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 # We should get a list of the form (ID, DATA)
                 # where DATA is a list of the form ("BODYSTRUCTURE", struct)
                 # and where struct is the actual structure
-                d = processAtoms(entry)
-                val = str(d[0])
-                d = d[1]
+                d = processAtoms(entry[1])
+                val = str(entry[0])
+                d = d[0]
             except Exception as ev:
                 print(ev)
                 return
