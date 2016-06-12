@@ -142,12 +142,17 @@ def unpackStruct(data, depth=1, value="", predesc=""):
     # BODYSTRUCTURE. In particular, that means that for message/rfc822, we
     # don't recurse on the non-string initial list, but on the body structure
     # element at index 8
+    extra = ""
     if isinstance(data[0], list):
         # We are multipart
         for i in range(len(data)):
             if not isinstance(data[i], list):
                 break
-        print("%s   %s%s/%s" % (value, predesc, "multipart", data[i]))
+        if data[i + 2] and data[i + 2][0] and data[i + 2][0] == "attachment":
+            extra = " (attachment)"
+        elif data[i + 2] and data[i + 2][0] and data[i + 2][0] == "inline":
+            extra = " (inline)"
+        print("%s   %s%s/%s%s" % (value, predesc, "multipart", data[i], extra))
         j = 1
         for dat in data[:i]:
             unpackStruct(dat, depth + 1, value + '.' + str(j))
@@ -155,9 +160,23 @@ def unpackStruct(data, depth=1, value="", predesc=""):
     else:
         # If we are message/rfc822, then we have further subdivision!
         if data[0].lower() == "message" and data[1].lower() == "rfc822":
-            unpackStruct(data[8], depth + 1, value, "message/rfc822, which is ")
+            if data[11] and data[11][0] and data[11][0] == "attachment":
+                extra = " (attachment)"
+            elif data[11] and data[11][0] and data[11][0] == "inline":
+                extra = " (inline)"
+            unpackStruct(data[8], depth + 1, value, "message/rfc822%s, which is " % (extra))
         else:
-            print("%s   %s%s/%s" % (value, predesc, data[0], data[1]))
+            if data[0].lower() == "text":
+                if data[9] and data[9][0] and data[9][0] == "attachment":
+                    extra = " (attachment)"
+                elif data[9] and data[9][0] and data[9][0] == "inline":
+                    extra = " (inline)"
+            else:
+                if data[8] and data[8][0] and data[8][0] == "attachment":
+                    extra = " (attachment)"
+                elif data[8] and data[8][0] and data[8][0] == "inline":
+                    extra = " (inline)"
+            print("%s   %s%s/%s%s" % (value, predesc, data[0], data[1], extra))
 
 def normalizeFetch(data):
     """Re-listize fetch results.
