@@ -4,9 +4,10 @@ Some of the design decisions made:
       would have done anyway, with a few inconveniences I can overlook in the
       interest of saving time.
     
-    * readline: Python's readline interface is pretty rudimentary. A lot of
-      the medium to advanced functionality isn't available. Still, quicker
-      than rolling my own.
+    * prompt_toolkit: Python's readline interface is pretty rudimentary. A lot of
+      the medium to advanced functionality isn't available. prompt_toolkit is
+      readline-like enough and allows me (with some effort) to use my own
+      eventloop.
 
     * Threads vs. eventloop. I much prefer eventloops. It keeps things fairly
       simple. Resource locking is usually not needed and passing info from
@@ -17,9 +18,16 @@ Some of the design decisions made:
       be C functions. I cannot override that, and they didn't provide the
       injection functions one would need to implement it.
 
-      So, we have to resort to threads anyway, so we might as well be like
-      Windows apps and have one thread for each of everything (1 for UI, 1
-      each for every network connection, etc). Stupid waste of resources, but
-      to do it cleaner I'd have to write this in C and implement all of the
-      python modules I'm using in C, or rewrite the python modules to be event
-      based, and write my own readline wrapper.
+    * libuv: pretty full-featured event loop.
+    
+    * imaplib: Python's built-in library for imap interaction is a bit painful
+      to use. It does partial processing of data making it hard to properly
+      parse correctly after-the-fact (you'd either want full processing or no
+      processing). Obscures some parts of the protocol so you can't take
+      advantage of it (such as some of the round-trip saving messages on box
+      selection). Some people have written wrappers around it to smooth some
+      of the edges. I chose to write my own so that I can take advantage of
+      the protocol better.
+
+    * xapian: First search engine I tried for this project. So far it works
+      well enough that I haven't invested time looking at others.
