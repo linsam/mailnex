@@ -757,7 +757,21 @@ class Cmd(cmdprompt.CmdPrompt):
                 c.select()
             print("Info: Mailbox opened")
             self.C.connection = c
-            self.C.currentMessage = 1
+            # By default, mailx marks the first unseen or flagged message as
+            # the current message.
+            if not hasattr(self.C.connection, 'unseen'):
+                # IMAP server didn't give us the first unseen message on
+                # connect; we'll have to ask for it.
+                unseen = map(int, self.C.connection.search("utf-8", "UNSEEN"))
+            else:
+                unseen = [self.C.connection.unseen]
+            flagged = map(int, self.C.connection.search("utf-8", "flagged"))
+            msgs = sorted(unseen + flagged)
+            print(msgs)
+            if len(msgs) == 0:
+                self.C.currentMessage = 1
+            else:
+                self.C.currentMessage = msgs[0]
             self.C.lastMessage = c.exists
 
         except KeyboardInterrupt:
