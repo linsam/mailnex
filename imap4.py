@@ -481,7 +481,7 @@ class imap4ClientConnection(object):
         res, code, string = self.doSimpleCommand("fetch %s %s" % (message, what))
         self.cb_fetch = oldcb
         if res != 'OK':
-            raise Exception("Failed to fetch headers")
+            raise Exception("Failed to fetch headers: %s %s" % (res, string))
         return fetchlist
     def getCapabilities(self):
         res, code, string = self.doSimpleCommand("CAPABILITY")

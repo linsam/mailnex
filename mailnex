@@ -803,17 +803,21 @@ class Cmd(cmdprompt.CmdPrompt):
         termgenerator.set_stemmer(xapian.Stem("en"))
 
         while True:
+            if i > C.lastMessage:
+                break
             try:
-                typ,data = M.fetch(i, '(UID BODYSTRUCTURE)')
+                data = M.fetch(i, '(UID BODYSTRUCTURE)')
                 #print(typ)
                 #print(data)
                 # TODO: use BODYSTRUCTURE to find text/plain subsection and fetch that instead of guessing it will be '1'.
-                typ,data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
+                data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
                 #print(typ)
                 #print(data)
                 #print(data[0][1])
                 #print("------------ Message %i -----------" % i)
                 #print(data[1][1])
+
+                data = processAtoms(data[0][1])
 
                 headers = data[0][1]
                 headers = processHeaders(headers)
@@ -844,7 +848,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 if 'message-id' in headers:
                     termgenerator.index_text(headers['message-id'][-1],1,'M')
 
-                termgenerator.index_text(data[1][1])
+                termgenerator.index_text(data[0][3])
                 # Support full document retrieval but without reference info
                 # (we'll have to fully rebuild the db to get new stuff. TODO:
                 # store UID and such)
@@ -853,9 +857,6 @@ class Cmd(cmdprompt.CmdPrompt):
                 doc.add_boolean_term(idterm)
                 db.replace_document(idterm, doc)
                 i += 1
-            except M.error:
-                # TODO check for last message somehow
-                break
             finally:
                 pass
         print()
