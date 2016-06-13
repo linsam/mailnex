@@ -326,6 +326,16 @@ def processAtoms(text):
                 literalRemain = int(literalSizeString)
                 if debug_parse:
                     print("Start literal. %i remain" % literalRemain)
+                if literalRemain == 0:
+                    # Still, skip the CrLf, but don't bother entering the
+                    # literal state. Alternative would be to check remail
+                    # before appending literal chars above. Neither feels very
+                    # clean.
+                    inliteral = False
+                    # Also, since this is explicitly an empty string (not NIL
+                    # for example), go ahead and push it out
+                    curlist.append(b"")
+                    curtext=[]
                 continue
             raise Exception("Invalid literal size %s" % repr(literalSizeString))
         if inspace and c == '{':
