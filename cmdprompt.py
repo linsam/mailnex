@@ -198,6 +198,19 @@ class CmdPrompt(cmd.Cmd):
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
         )
 
+    def singleprompt(self, prompt, ispassword=False):
+        tmpcli = prompt_toolkit.interface.CommandLineInterface(
+                application = prompt_toolkit.shortcuts.create_prompt_application(
+                    prompt,
+                    is_password=ispassword
+                    ),
+                eventloop = self.ptkevloop,
+                #TODO: Reuse output from self.cli
+                output = prompt_toolkit.shortcuts.create_output(true_color = False),
+                )
+        res = tmpcli.run(True)
+        return res.text
+
     def cmdSingle(self, intro=None):
         """Perform a single prompt-and-execute sequence.
 

@@ -874,6 +874,68 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
         else:
             index = C.currentMessage
+        # Note: when we go to get the body structure, we should do a simple
+        # search for text/plain. We *should* walk each level of the body
+        # structure and interpret an action for it in constructing the
+        # display.
+        #
+        # For each layer, we must *first* look for a disposition header to see
+        # if it should be inline, attachment, or other. If other, assume
+        # attachment. If not present, assume inline if it is something we
+        # recognize, attachment otherwise.
+        #
+        # Then, based on what it is, we can continue parsing.
+        #
+        # NOTE: The main message might have a disposition header, set to
+        # attachment. We would display no content, just prompt the user to
+        # maybe save the file or explicitly open it. Opening might be tricky
+        # for the actual top level, since we don't currently have a way to
+        # differentiate the whole message from the primary contents. Maybe do
+        # '.0' or something? Similar issue for the multipart containing a
+        # message/rfc822 vs the header in the rfc882 itself.
+        #
+        # So, whenever we have a message/rfc822 (which is implicitly the top
+        # layer), check the message headers. Otherwise check the MIME headers.
+        # Make sure this is done in the order of hierarchy (example below)
+        #
+        # Things we know:
+        #  * Multipart/mixed: process each sub-part in turn
+        #  * Multipart/alternative: Scan for the best type we understand
+        #  * Multipart/signed: check signature in second part against message
+        #  in first part (unless told not to), then display sig status and
+        #  then try to show the first part using above rules (recurse into it)
+        #  * text/plain: easy, show the text after undoing transfer encoding
+        #  and converting charset to the output device
+        #
+        # We might in the future know some others (we could probably implement
+        # the RFC rich text email format to an extent, though I'm unaware of
+        # any MUA that actually generates it. Or maybe we'll do some HTML
+        # parsing, who knows?).
+        #
+        # Example 1:
+        #   multipart/mixed
+        #     multipart/alternative
+        #       text/plain
+        #       text/html
+        #     text/plain
+        #     image/png
+        #
+        # hit multipart/mixed, walk each child
+        #   hit multipart/alternative, search child types for best
+        #   presentation (will be text/plain as only one recognized)
+        #       render text/plain
+        #   hit (outer) text/plain. Render it
+        #   hit image/png, show as attachment instead of rendering.
+        #
+        # If the (outer) text/plain or the alternative were marked as
+        # attachment, they'd be not rendered as well. The contents of the
+        # alternative would be odd to be marked, but we'd follow that too.
+        #
+        # If the png is explicitly inlined, we could either try to render it,
+        # or mark is as unrenderable, able to be saved, but supposed to be
+        # inlined (e.g. it'd act like an attachment, but we shouldn't call it
+        # an attachment, since that wasn't the intent)
+
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
         parts = processAtoms(data[0][1])
         # Assert parts[0][0] == "BODY.PEEK[HEADER]"
@@ -987,6 +1049,57 @@ class Cmd(cmdprompt.CmdPrompt):
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         s.communicate(content)
+
+    def do_mail(self, args):
+        """Compose and send a message"""
+        # TODO: Completion of email addresses
+        to = self.singleprompt("To: ")
+        subject = self.singleprompt("Subject: ")
+
+        messageText=""
+        while True:
+            try:
+                # TODO: allow tabs in the input
+                line = self.singleprompt("")
+            except EOFError:
+                line = '.'
+            if line.startswith("~~"):
+                # User wants to start the line with a tidle
+                messageText += line[1:] + '\r\n'
+            elif line.startswith("~h"):
+                print("""  Help:
+                    ~~ Text -> ~ Text   (enter a line starting with a single '~' into the message)
+                    .          Send message
+                    ~.         Enter a line with a single period into message.
+                    ~q         Quit composing. Don't send. Append message to ~/dead.letter, unless 'drafts' is set.
+                    ~x         Quit composing. Don't send. Discard current progress.
+                    """)
+            elif line == ".":
+                # Send message
+                break
+            elif line.startswith("~q"):
+                if 'drafts' in self.C.settings:
+                    print("Sorry, drafts setting is TBD")
+                # TODO: Handle errors here. We want to try hard to not lose
+                # the user's message if at all possible.
+                ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+                # This is probably not the right format for dead.letter
+                ofile.write("From user@localhost\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n" % (to, subject, messageText))
+                return
+            elif line.startswith("~x"):
+                return
+            # TODO: The other ~* functions from mailx.
+            # TODO: Extension commands. E.g. we might want "~save <path>" to
+            # save a copy of the message to the given path, but keep editing.
+            # We definitely want a way to edit an attachment (properties and
+            # contents), and to add/edit arbitrary message parts. Should be
+            # able to mark parts for signing, encryption, compression, etc.
+            else:
+                messageText += line + '\r\n'
+
+        # TODO: Actually send the message
+        print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
+
 
     @needsConnection
     def do_mheader(self, args):
