@@ -55,7 +55,8 @@ class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
             self.tty.close()
             self.realloop.stop()
         else:
-            self.inputstream.feed(six.text_type(data))
+            # TODO: Obtain this from user preference, fall back on stdin
+            self.inputstream.feed(six.text_type(data, sys.stdin.encoding))
     # Other stuff prompt_toolkit wants us to have :-(
     def add_reader(self, fd, callback):
         print "add_reader called", fd, callback
