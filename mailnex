@@ -10,7 +10,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-debug = 0
+debug = 1
 imapdebug = 0
 debug_parse = 0
 
@@ -75,6 +75,7 @@ import xdg.BaseDirectory
 import cmdprompt
 # Date handler
 import dateutil.parser
+import tempfile
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
@@ -1053,10 +1054,16 @@ class Cmd(cmdprompt.CmdPrompt):
     def do_mail(self, args):
         """Compose and send a message"""
         # TODO: Completion of email addresses
-        to = self.singleprompt("To: ")
+        if args:
+            to = args
+        else:
+            to = self.singleprompt("To: ")
+        # Default is space separated:
+        to = to.split()
         subject = self.singleprompt("Subject: ")
+        return self.editMessage(to, subject, "")
 
-        messageText=""
+    def editMessage(self, to, subject, messageText):
         while True:
             try:
                 # TODO: allow tabs in the input
@@ -1070,11 +1077,46 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("""  Help:
                     ~~ Text -> ~ Text   (enter a line starting with a single '~' into the message)
                     .          Send message
-                    ~.         Enter a line with a single period into message.
+                    ~.         Send message
                     ~q         Quit composing. Don't send. Append message to ~/dead.letter, unless 'drafts' is set.
                     ~x         Quit composing. Don't send. Discard current progress.
                     """)
-            elif line == ".":
+                # ~!command    = execute shell command
+                # ~.           = same as end-of-file indicator (according to mailx)
+                #                I feel like it ought to be to insert a literal dot. I can't find a way
+                #                to do that in mailx. Maybe a setting to switch between the two operations?
+                # ~<file       = same as ~r
+                # ~<!command   = run command in shell, insert output into message
+                # ~@           = edit attachment list
+                # ~@ filename  = add filename to attachment list. Space separated list (according to mailx)
+                # ~A           = insert string of the Sign variable (like '~i Sign)
+                # ~a           = insert string of the sign variable (like '~i sign)
+                # ~bname       = add names to bcc list (space separated)
+                # ~cname       = add names to cc list (space separated)
+                # ~d           = read ~/dead.letter into message
+                # ~e           = edit current message in editor (default is ed?)
+                # ~fmessage    = read messages (message ids) into message (or current message if none given). use format of print, but only include first part
+                # ~Fmessage    = like ~f, but include all headers and mime parts
+                # ~h           = edit headers (to, cc, bcc, subject)
+                # ~H           = edit headers (from, reply-to, sender, organization). Once this command is used, ignore associated user settings
+                # ~ivar        = insert value of variable into message.
+                # ~mmessages   = read message like ~f, but include indentation.
+                # ~Mmessages   = like ~m, but include all headers and MIME parts
+                # ~p           = print message collected so far, prefaced by headers and postfixed by the attachment list. May be piped to pager.
+                # ~q           = abort message, write to dead.letter IF 'save' is set.
+                # ~rfile       = read file into message
+                # ~sstring     = set subject to string
+                # ~tname       = add names to To list (space separated) (direct recipient list)
+                # ~v           = invoke alternate editor (VISUAL)
+                # ~wfile       = write message to named file, appending if file exists TODO: Have a setting which fails if file exists (mailx doesn't write headers regardless of editheaders setting)
+                # ~x           = like ~q, but don't save no matter what.
+                # ~|command    = pipe message through shell command as a filter. Retain original if no output.
+                # ~:command    = run our command (mailnex)
+                # ~_command    = same as ~:
+                # ~~string     = insert string prefixed by one '~'
+                #
+                #
+            elif line == "." or line.startswith("~."):
                 # Send message
                 break
             elif line.startswith("~q"):
@@ -1087,7 +1129,23 @@ class Cmd(cmdprompt.CmdPrompt):
                 ofile.write("From user@localhost\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n" % (to, subject, messageText))
                 return
             elif line.startswith("~x"):
+                print("Message abandoned")
                 return
+            elif line.startswith("~v"):
+                f=tempfile.mkstemp()
+                #TODO: If editHeaders is set, also save the headers
+                os.write(f[0], messageText)
+                res = os.system("vim %s" % f[1])
+                if res != 0:
+                    print("Edit aborted; message unchanged")
+                else:
+                    os.lseek(f[0], 0, os.SEEK_SET)
+                    fil = os.fdopen(f[0])
+                    messageText = fil.read()
+                    del fil
+                    os.close(f[0])
+                    os.unlink(f[1])
+                    #TODO: If editHeaders is set, retrieve those headers
             # TODO: The other ~* functions from mailx.
             # TODO: Extension commands. E.g. we might want "~save <path>" to
             # save a copy of the message to the given path, but keep editing.

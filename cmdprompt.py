@@ -210,6 +210,7 @@ class CmdPrompt(cmd.Cmd):
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
                 )
         res = tmpcli.run(True)
+        #TODO: Handle the case where res is None instead of a Document. Seems to happen if we, say, launch Vim as a command (e.g. using ~v when composing a message), then exit vim, get an exception, and reset the terminal. Tested with urxvt only. So far, only restarting the program makes this work again.
         return res.text
 
     def cmdSingle(self, intro=None):
