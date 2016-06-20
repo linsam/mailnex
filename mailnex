@@ -1163,19 +1163,36 @@ class Cmd(cmdprompt.CmdPrompt):
             elif line.startswith("~x"):
                 print("Message abandoned")
                 return
+            elif line.startswith("~p"):
+                print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
             elif line.startswith("~v"):
                 f=tempfile.mkstemp()
                 #TODO: If editHeaders is set, also save the headers
                 os.write(f[0], messageText)
-                res = os.system("vim %s" % f[1])
+
+                # Would normally do cli.run_in_terminal, but that tries to
+                # obtain the cursor position when done by asking the terminal
+                # for it, but doesn't read it back in; it expects that the cli
+                # will start running again and it'll pick up the response in
+                # the normal loop. Unfortunately, we aren't returning to the
+                # cli's loop here, we're invoking a different temporary one.
+                #
+                # Instead, we'll do just part of what run_in_terminal does,
+                # that is, set the terminal up for "normal" use while we
+                # invoke our terminal-using function
+                with self.cli.input.cooked_mode():
+                    # For whatever reason, vim complains the input isn't from
+                    # the terminal unless we redirect it ourselves. I'm
+                    # guessing prompt_toolkit changed python's stdin somehow
+                    res = os.system("vim %s </dev/tty" % f[1])
                 if res != 0:
                     print("Edit aborted; message unchanged")
                 else:
                     os.lseek(f[0], 0, os.SEEK_SET)
                     fil = os.fdopen(f[0])
                     messageText = fil.read()
+                    fil.close()
                     del fil
-                    os.close(f[0])
                     os.unlink(f[1])
                     #TODO: If editHeaders is set, retrieve those headers
             # TODO: The other ~* functions from mailx.
@@ -1187,8 +1204,18 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 messageText += line + '\r\n'
 
-        # TODO: Actually send the message
-        print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
+        import subprocess
+        s = subprocess.Popen([
+            # TODO: Allow the user to override this somehow
+            "sendmail", # Use sendmail to, well, send the mail
+            "-bm", # postfix says this is "read mail from stdin and arrange for delivery". Hopefully this is standard across implementations
+            "-i", # Don't use '.' as end of input. Hopefully this means we don't have to do dot stuffing.
+            # TODO: Support delivery status notification settings? "-N" "failure, delay, success, never"
+            "-t", # Get recipients from message headers. TODO: We should specify the addresses on sendmail's commandline such that we can manage the Bcc list.
+            ],
+            stdin=subprocess.PIPE)
+        content=("To: %s\r\nSubject: %s\r\n\r\n%s" % (",".join(to), subject, messageText))
+        s.communicate(content)
 
 
     @needsConnection
