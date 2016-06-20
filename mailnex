@@ -84,6 +84,18 @@ class Context(object):
         object.__init__(self)
         self.connection = None
 
+class nodate(object):
+    """Stand-in for date objects that aren't dates"""
+    def strftime(self, _):
+        """Display conversion for non-dates.
+
+        Shows question marks no matter what you ask for.
+        """
+        return "??"
+    def astimezone(self, _):
+        return self
+    tzinfo="??"
+
 # Some decorators
 def needsConnection(func):
     @wraps(func)
@@ -1283,21 +1295,13 @@ class Cmd(cmdprompt.CmdPrompt):
                 num = int(d[0])
                 datestr = d[1][0][1][0]
                 if datestr == 'NIL':
-                    class nodate(object):
-                        """Stand-in for date objects that aren't dates"""
-                        def strftime(self, _):
-                            """Display conversion for non-dates.
-
-                            Shows question marks no matter what you ask for.
-                            """
-                            return "??"
                     date = nodate()
                 else:
                     try:
                         date = dateutil.parser.parse(datestr)
                     except ValueError:
                         print("Couldn't parse date string", datestr)
-                        raise
+                        date = nodate()
                     if date.tzinfo is None:
                         date = date.replace(tzinfo = dateutil.tz.gettz(self.C.settings['defaultTZ']))
                     # TODO: Make setting for local or original timezone. Or
