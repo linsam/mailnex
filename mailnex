@@ -1068,6 +1068,10 @@ class Cmd(cmdprompt.CmdPrompt):
             try:
                 # TODO: allow tabs in the input
                 line = self.singleprompt("")
+                # TODO: Allow ctrl+c to abort the message, but not mailnex
+                # (e.g. at this stage, two ctrl+c would be needed to exit
+                # mailnex. The first to abort the message, the second to exit
+                # mailnex)
             except EOFError:
                 line = '.'
             if line.startswith("~~"):
