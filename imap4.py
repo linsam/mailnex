@@ -136,6 +136,12 @@ class imap4ClientConnection(object):
         self.cb_fetch = None
         self.cb_search = None
         self.debug = False
+    def close(self):
+        # TODO: Issue a logout. Wait for server to finish?
+        if self.socket:
+            self.socket.close()
+        # Reset all attributes
+        self.__init__()
     def processCodes(self, status, code, string):
         # Assert code[0] == '[' and code[-1] == ']'
         codes = code[1:-1].split()

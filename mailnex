@@ -695,7 +695,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if C.connection:
             print("disconnecting")
             C.connection.close()
-            C.connection.logout()
+            #C.connection.logout()
             C = None
         print("Connecting to '%s'" % args)
         argss = args.split()
