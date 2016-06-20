@@ -782,20 +782,29 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.connection = c
             # By default, mailx marks the first unseen or flagged message as
             # the current message.
-            if not hasattr(self.C.connection, 'unseen'):
+            if not hasattr(self.C.connection, 'unseen') or not self.C.connection.unseen:
                 # IMAP server didn't give us the first unseen message on
-                # connect; we'll have to ask for it.
+                # connect; we'll have to ask for it. It could either be that
+                # the server didn't feel like sending one, or there are no
+                # messages that are unseen.
                 unseen = map(int, self.C.connection.search("utf-8", "UNSEEN"))
             else:
                 unseen = [self.C.connection.unseen]
             flagged = map(int, self.C.connection.search("utf-8", "flagged"))
             msgs = sorted(unseen + flagged)
-            print(msgs)
+            if debug:
+                print(msgs)
             if len(msgs) == 0:
                 self.C.currentMessage = 1
             else:
                 self.C.currentMessage = msgs[0]
             self.C.lastMessage = c.exists
+            if self.C.currentMessage > self.C.lastMessage:
+                # This should only really happen when lastMessage is 0, but
+                # range checking is probably good anyway.
+                self.C.currentMessage = self.C.lastMessage
+            if debug:
+                print("Current message: %s. Last message: %s" % (self.C.currentMessage, self.C.lastMessage))
 
         except KeyboardInterrupt:
             print("Aborting connection")
@@ -949,6 +958,10 @@ class Cmd(cmdprompt.CmdPrompt):
         # inlined (e.g. it'd act like an attachment, but we shouldn't call it
         # an attachment, since that wasn't the intent)
 
+        if index == 0 or index > self.C.lastMessage:
+            print("No applicable messages")
+            return
+
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
         parts = processAtoms(data[0][1])
         # Assert parts[0][0] == "BODY.PEEK[HEADER]"
@@ -1053,6 +1066,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
         else:
             index = C.currentMessage
+        if index == 0 or index > self.C.lastMessage:
+            print("No applicable messages")
+            return
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
         parts = processAtoms(data[0][1])
         headers = parts[0][1]
@@ -1281,6 +1297,9 @@ class Cmd(cmdprompt.CmdPrompt):
             C.currentMessage = start
         if last > C.lastMessage:
             last = C.lastMessage
+        if last == 0:
+            print("No applicable messages")
+            return
         self.showHeaders("%i:%i" % (start, last))
     def showHeaders(self, messageList):
         data = self.C.connection.fetch("%s" % messageList, "(ENVELOPE)")
