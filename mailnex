@@ -79,6 +79,8 @@ import cmdprompt
 # Date handler
 import dateutil.parser
 import tempfile
+import pyuv
+import time
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
@@ -802,6 +804,7 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 self.C.currentMessage = msgs[0]
             self.C.lastMessage = c.exists
+            c.setCB("exists", self.newExist)
             if self.C.currentMessage > self.C.lastMessage:
                 # This should only really happen when lastMessage is 0, but
                 # range checking is probably good anyway.
@@ -813,6 +816,23 @@ class Cmd(cmdprompt.CmdPrompt):
             print("Aborting connection")
             del s
             return
+    def newExist(self, value):
+        delta = value - self.C.lastMessage
+        self.C.lastMessage = value
+        # TODO: We might get this on message expunge as well (e.g. delta would
+        # be negative). Might also be the case where this doesn't change value
+        # becuase something was added and something else was expunged.
+        # Probably need to track untagged fetch results to see that.
+        self.cli.run_in_terminal(lambda: print("Info: %s: %i New messages" % (time.asctime(), delta)))
+    def bgcheck(self, event):
+        # NOOP command does nothing, but it has the side effect of allowing
+        # the server to send us untagged updates (e.g. new message
+        # indications) as well as preventing inactivity timeout.
+        # This should be done once every 29 minutes or so (servers are allowed
+        # to make their timeout as small as 30 minutes). When not idling, this
+        # can be set much quicker to find new mail in a reasonable amount of
+        # time.
+        self.C.connection.doSimpleCommand("noop")
 
     @needsConnection
     def do_index(self, args):
@@ -1540,6 +1560,8 @@ def interact():
                     print("unknown command in line %i" % lineno)
     if postConfFolder:
         cmd.do_connect(postConfFolder)
+    t = pyuv.Timer(cmd.ptkevloop.realloop)
+    t.start(cmd.bgcheck, 1, 5)
     try:
         cmd.cmdloop()
     except KeyboardInterrupt:

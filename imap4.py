@@ -136,12 +136,18 @@ class imap4ClientConnection(object):
         self.cb_fetch = None
         self.cb_search = None
         self.debug = False
+        # Callbacks dictionary
+        self.cbs = {}
     def close(self):
         # TODO: Issue a logout. Wait for server to finish?
         if self.socket:
             self.socket.close()
         # Reset all attributes
         self.__init__()
+    def setCB(self, name, function):
+        # This function exists so that we can have a static interface while
+        # experimenting with changing the backend.
+        self.cbs[name] = function
     def processCodes(self, status, code, string):
         # Assert code[0] == '[' and code[-1] == ']'
         codes = code[1:-1].split()
@@ -329,6 +335,8 @@ class imap4ClientConnection(object):
                                 if self.debug:
                                     print("Exists: %s" % num)
                                 self.exists = int(num, 10)
+                                if "exists" in self.cbs:
+                                    self.cbs["exists"](int(num, 10))
                             elif typ.upper() == "RECENT":
                                 if self.debug:
                                     print("Recent: %s" % num)
