@@ -626,11 +626,11 @@ class Cmd(cmdprompt.CmdPrompt):
         if c == 'h':
             #TODO: process shortcuts/aliases/whatever
             return self.do_headers(a)
-        elif c[0] == 'h' and not c[1].isalpha():
+        elif c[0] == 'h' and len(c) > 1 and not c[1].isalpha():
             return self.do_headers(c[1:] + ' ' + a)
         elif c == 'f':
             return self.do_from(a)
-        elif c[0] == 'f' and not c[1].isalpha():
+        elif c[0] == 'f' and len(c) > 1 and not c[1].isalpha():
             return self.do_from(c[1:] + ' ' + a)
         elif c == 'p':
             return self.do_print(a)
