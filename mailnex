@@ -1157,11 +1157,12 @@ class Cmd(cmdprompt.CmdPrompt):
             elif line.startswith("~q"):
                 if 'drafts' in self.C.settings:
                     print("Sorry, drafts setting is TBD")
-                # TODO: Handle errors here. We want to try hard to not lose
-                # the user's message if at all possible.
-                ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
-                # This is probably not the right format for dead.letter
-                ofile.write("From user@localhost\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n" % (to, subject, messageText))
+                if 'save' in self.C.settings:
+                    # TODO: Handle errors here. We want to try hard to not lose
+                    # the user's message if at all possible.
+                    ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+                    # This is probably not the right format for dead.letter
+                    ofile.write("From user@localhost\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n" % (to, subject, messageText))
                 return
             elif line.startswith("~x"):
                 print("Message abandoned")
