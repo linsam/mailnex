@@ -1114,6 +1114,47 @@ class Cmd(cmdprompt.CmdPrompt):
         subject = self.singleprompt("Subject: ")
         return self.editMessage(to, subject, "")
 
+    @needsConnection
+    def do_reply(self, args):
+        C = self.C
+        M = C.connection
+        if args:
+            try:
+                index = int(args)
+            except:
+                print("bad arguments")
+                return
+        else:
+            index = C.currentMessage
+        if index == 0 or index > self.C.lastMessage:
+            print("No applicable messages")
+            return
+        data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+        parts = processAtoms(data[0][1])
+        headers = parts[0][1]
+        body = parts[0][3]
+        hdrs = processHeaders(headers)
+        if 'to' in hdrs:
+            # There can be multiple 'to' lines, theoretically. Lets merge them
+            # and then split the components
+            to = ",".join(hdrs['to']).split(',')
+        else:
+            to = ""
+        if 'subject' in hdrs:
+            # Take the first subject we find.
+            subject = "Re: " + hdrs['subject'][0]
+        else:
+            subject = "Re:"
+        if 'from' in hdrs:
+            from_ = hdrs['from'][0]
+            # Prepend the sender to the to list
+            to[0:0] = [from_]
+        else:
+            from_ = "unkown"
+        print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
+        return self.editMessage(to, subject, "Quoth %s:\r\n%s" % (from_, body))
+
+
     def editMessage(self, to, subject, messageText):
         while True:
             try:
