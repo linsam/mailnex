@@ -44,7 +44,7 @@ class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
         self._callbacks = callbacks
         self.inputstream = prompt_toolkit.terminal.vt100_input.InputStream(callbacks.feed_key)
         return self.realloop.run()
-    def sigwinch(event, signum):
+    def sigwinch(self, event, signum):
         # We don't worry about all that executor threading stuffs that
         # prompt_toolkit does, because libuv (is supposed to) give us signals
         # in the main thread and not in a signal context (which is one of the
