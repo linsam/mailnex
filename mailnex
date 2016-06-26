@@ -795,14 +795,16 @@ class Cmd(cmdprompt.CmdPrompt):
                 unseen = map(int, self.C.connection.search("utf-8", "UNSEEN"))
             else:
                 unseen = [self.C.connection.unseen]
-            flagged = map(int, self.C.connection.search("utf-8", "flagged"))
-            msgs = sorted(unseen + flagged)
-            if debug:
-                print(msgs)
-            if len(msgs) == 0:
-                self.C.currentMessage = 1
+            if len(unseen) != 0:
+                self.C.currentMessage = sorted(unseen)[0]
             else:
-                self.C.currentMessage = msgs[0]
+                flagged = map(int, self.C.connection.search("utf-8", "flagged"))
+                if len(flagged) != 0:
+                    self.C.currentMessage = sorted(flagged)[0]
+                else:
+                    # Final fallback: start at beginning.
+                    # TODO: There's probably a setting to start at the end
+                    self.C.currentMessage = 1
             self.C.lastMessage = c.exists
             c.setCB("exists", self.newExist)
             if self.C.currentMessage > self.C.lastMessage:
