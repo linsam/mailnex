@@ -101,6 +101,24 @@ class nodate(object):
         return self
     tzinfo="??"
 
+def getResultPart(part, data):
+    """Retrieve part's value from data.
+
+    This is for flat arrays that are really key-value lists.
+    e.g.
+        [key1, val1, key2, val2, key3, val3...]
+
+    Currently, this is a linear search, case insensitive."""
+    part = part.lower()
+    for i in range(0,len(data),2):
+        if data[i].lower() == part:
+            return data[i + 1]
+    # Raising an exception because, after an IMAP requiest, not having the key
+    # you asked for is an exceptional case, and there isn't a good return
+    # value that also couldn't be in the array itself without doing something
+    # weird like returning a class or something.
+    raise Exception("Part %s not found" % part)
+
 # Some decorators
 def needsConnection(func):
     @wraps(func)
@@ -1428,8 +1446,9 @@ class Cmd(cmdprompt.CmdPrompt):
             print("No applicable messages")
             return
         self.showHeaders("%i:%i" % (start, last))
+
     def showHeaders(self, messageList):
-        data = self.C.connection.fetch("%s" % messageList, "(ENVELOPE)")
+        data = self.C.connection.fetch("%s" % messageList, "(ENVELOPE INTERNALDATE FLAGS)")
         #data = normalizeFetch(data)
         for d in data:
             try:
@@ -1437,10 +1456,32 @@ class Cmd(cmdprompt.CmdPrompt):
             except Exception as ev:
                 print("  %s  (error parsing envelope!)" % d[0], ev)
                 continue
+            envelope = getResultPart("ENVELOPE", d[1][0])
+            internaldate = getResultPart("INTERNALDATE", d[1][0])
+            flags = getResultPart("FLAGS", d[1][0])
             try:
+                # Envelope fields:
+                #   0 - date
+                #   1 - subject
+                #   2 - from (list or NIL)
+                #   3 - sender (list or NIL)
+                #   4 - reply-to (list or NIL)
+                #   5 - to (list or NIL)
+                #   6 - cc (lis or NIL)
+                #   7 - bcc (list or NIL)
+                #   8 - in-reply-to
+                #   9 - message-id
+                #
+                #   The elements of 2 through 7 consist of name,
+                #   at-domain-list (aka source route; typically NIL), mailbox
+                #   name, and host name.
+                #   Unless it is a group name; see page 77 of RFC 3501 for
+                #   details.
                 num = int(d[0])
-                datestr = d[1][0][1][0]
+                datestr = envelope[0]
                 if datestr == 'NIL':
+                    datestr = internaldate
+                if datestr == None or datestr == "NIL":
                     date = nodate()
                 else:
                     try:
@@ -1454,7 +1495,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # perhaps better, make it part of the headline setting so if
                     # the user wants, they can see both.
                     date = date.astimezone(dateutil.tz.tzlocal())
-                subject = d[1][0][1][1]
+                subject = envelope[1]
                 this = True if (num == self.C.currentMessage) else False
                 print("%(this)s %(num)4s %(date)19s %(subject)s" % {
                     'this': '>' if this else ' ',
