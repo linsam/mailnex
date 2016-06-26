@@ -1033,6 +1033,26 @@ class Cmd(cmdprompt.CmdPrompt):
         content = headers.decode('windows-1252').encode('utf-8')
         content += body.decode('windows-1252').encode('utf-8')
         s.communicate(content)
+        res = s.wait()
+        if res == 0:
+            # TODO: Allow asynchronous mode. That is, in mailx, we locally
+            # keep track of the fact that the message was seen until the user
+            # quits (not exits) or selects another folder.
+            #
+            # I'm pretty sure mailx did it that way because modifying mbox
+            # files multiple times is expensive, so it was better for the
+            # system to rewrite it once only when exiting. It also isn't
+            # expected to have live synchronized access to the box.
+            #
+            # With IMAP and/or maildir, this isn't the case. Setting flags is
+            # cheap (either the IMAP server handles it, or it is a file rename
+            # in maildir) and doing it live ensures we don't lose data on a
+            # crash *and* allows multiple clients to see updated information
+            # as it happens from any client.
+            #
+            # However, some people probably like the mailx behavior better
+            # because they are used to it, so we ought to support it.
+            M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
 
     @needsConnection
     def do_latest_threads(self, args):
@@ -1598,6 +1618,11 @@ class Cmd(cmdprompt.CmdPrompt):
                     )
 
     def do_quit(self, args):
+        # TODO: Support synchronizing if user setting asks for it. Something like:
+        #print("Synchronizing events")
+        #for i in self.C.pending:
+            #print(" ",i)
+            #self.commitaction(i)
         # TODO: Synchronize and quit
         return True
 
