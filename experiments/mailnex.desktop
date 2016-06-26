@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=mailnex
+GenericName=Mail Client
+Keywords=Email;E-mail;
+Comment=Terminal based email client
+Icon=mailnex
+Exec=/home/john/projs/pymailx/mailnex %u
+Terminal=true
+Categories=Network;Email;
+StartupNotify=false
