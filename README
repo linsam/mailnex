@@ -1,3 +1,31 @@
+Welcome to MailNex.
+
+This is a console/terminal email client (Mail User Agent) in the style of mailx.
+
+Current Status: Very Alpha
+
+There is a minimal set of functionality for reading *most* mail with a plain
+text part. Common/basic operations like deleting, replying and forwarding are
+not yet supported, so I cannot consider this program to be generally useful
+yet.
+
+On a similar vein, security is not yet implemented in anything remotely
+resembling correctness. At a baseline, we should be verifying server
+certificates against the system's CA list. On the upside, we do (attempt to)
+establish an encrypted channel by default.
+
+Very few mailx commands and settings are implemented so far. For example, you
+have to use 'connect' instead of 'folder' to connect to an imap server.
+Non-imap folders don't work.
+
+All of this is slowly getting better as I work out various issues.
+
+There are a few things where we are already better than mailx. In particular,
+we have command history and (some) command completion, and use a system
+password manager if available. We also show when new mail arrives without
+waiting for the user to run a command.
+
+
 Goals:
     be like mailx, supporting the useful bits of bsd-mailx and heirloom-mailx.
     Add features that most people expect should have been implemented long ago
