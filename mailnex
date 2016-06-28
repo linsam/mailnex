@@ -1512,11 +1512,12 @@ class Cmd(cmdprompt.CmdPrompt):
                     date = date.astimezone(dateutil.tz.tzlocal())
                 subject = envelope[1]
                 this = True if (num == self.C.currentMessage) else False
-                print("%(this)s %(num)4s %(date)19s %(subject)s" % {
+                print("%(this)s %(num)4s %(date)19s %(subject)-30.30s |%(flags)s" % {
                     'this': '>' if this else ' ',
                     'num': num,
                     'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
                     'subject': subject,
+                    'flags': " ".join(flags),
                     }
                     )
             except Exception as ev:
