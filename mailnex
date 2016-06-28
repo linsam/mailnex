@@ -1000,6 +1000,9 @@ class Cmd(cmdprompt.CmdPrompt):
         # or mark is as unrenderable, able to be saved, but supposed to be
         # inlined (e.g. it'd act like an attachment, but we shouldn't call it
         # an attachment, since that wasn't the intent)
+        #
+        # For rendering, the img2txt program (from caca-utils) might be a good
+        # option.
 
         if index == 0 or index > self.C.lastMessage:
             print("No applicable messages")
@@ -1169,6 +1172,9 @@ class Cmd(cmdprompt.CmdPrompt):
         if index == 0 or index > self.C.lastMessage:
             print("No applicable messages")
             return
+        # TODO: Should generate the body the same way we do for printing (walk
+        # through multiparts), and should decode each part (in particular,
+        # undo base64 or quoted printable)
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
         parts = processAtoms(data[0][1])
         headers = parts[0][1]
