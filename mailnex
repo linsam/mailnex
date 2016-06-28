@@ -1368,13 +1368,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
         else:
             index = C.currentMessage
-        res, data = M.fetch(args, '(BODY.PEEK[HEADER])')
-        #print(data)
-        #print(data[0][1])
-        #print()
-        #print()
-        #print(data)
-        headers = processHeaders(data[0][1])
+        data = M.fetch(args, '(BODY.PEEK[HEADER])')
+        headers = processHeaders(processAtoms(data[0][1])[0][1])
         if "subject" in headers:
             print("Subject:", headers["subject"][-1])
         if "date" in headers:
