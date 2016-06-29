@@ -13,6 +13,7 @@ from __future__ import unicode_literals
 debug = 1
 imapdebug = 0
 debug_parse = 0
+debug_struct = 0
 
 #  Search indexing
 #  ---------------
@@ -142,13 +143,80 @@ def shortcut(name):
         return shortcutWrapper
     return wrap1
 
-def unpackStruct(data, depth=1, value="", predesc=""):
+class structureRoot(object):
+    def __init__(self, tag, type_, subtype):
+        object.__init__(self)
+        self.tag = tag
+        self.type_ = type_
+        self.subtype = subtype
+    def __repr__(self):
+        return "<structure %s/%s>" % (self.type_, self.subtype)
+
+class structureMultipart(structureRoot):
+    def __init__(self, tag, subtype, parameters, disposition, language, location):
+        """Create a multipart entry.
+
+        @param tag name of this part (e.g. 1.5.3 for the third part of the fifth part of the first part)
+        @param subtype variant of multipart (e.g. mixed, signed, alternative)
+        (others as per IMAP spec)
+        """
+        structureRoot.__init__(self, tag, "multipart", subtype)
+        # parameters
+        self.disposition = disposition
+        # language
+        # location
+        self.subs = []
+        pass
+    def addSub(self, sub):
+        assert isinstance(sub, structureRoot), "%s isn't a structureRoot or similar" % type(sub)
+        self.subs.append(sub)
+
+class structureLeaf(structureRoot):
+    def __init__(self, tag, type_, subtype, attrs, bid, description, encoding, size, *args):
+        # Note, if type_=='text', args starts with encoded line count.
+        # If type_=="message" and subtype=="rfc822", args starts with
+        # envelope, body structure, and line count (see structureMessage
+        # instead for this case)
+        #
+        # All *args end with md5, disposition, language, and location.
+        structureRoot.__init__(self, tag, type_, subtype)
+        # attrs
+        # bodyID
+        # description
+        # encoding
+        # size
+        if type_ == "text":
+            self.lines, args = args[0], args[1:]
+        self.md5, self.disposition, self.language, self.location = args
+
+class structureMessage(structureRoot):
+    def __init__(self, tag, type_, subtype, attrs, bid, description, encoding, size, envelope, subStruct, lines, md5, disposition, language, location):
+        structureRoot.__init__(self, tag, type_, subtype)
+        # attrs
+        # bid
+        # description
+        # encoding
+        # size
+        # envelope
+        # substruct (auto-add? ignore?)
+        # lines
+        # md5
+        self.disposition = disposition
+        # language
+        # location
+        self.subs = []
+    def addSub(self, sub):
+        assert isinstance(sub, structureRoot), "%s isn't a structureRoot or similar" % type(sub)
+        self.subs.append(sub)
+
+def unpackStruct(data, depth=1, tag="", predesc=""):
     """Recursively unpack the structure of a message (as given by IMAP's BODYSTRUCTURE message-data)
 
     @param data hierarchy of BODYSTRUCTURE elements
     @depth starting depth (may be used for indenting output, or for debugging)
-    @value current identifier of parent. For the first call, this should be the message ID. It will be dot separated for sub parts.
+    @tag current identifier of parent. For the first call, this should be the message ID. It will be dot separated for sub parts.
     @predesc prefix description. Mostly used internally for when we hit a message/rfc822.
+    @return array of parts, which may contain array of parts.
     """
     # This is slightly tricky because of the way they ordered it. I haven't
     # read every revision of IPMI, so I'm guessing this is the result of
@@ -179,29 +247,35 @@ def unpackStruct(data, depth=1, value="", predesc=""):
     # don't recurse on the non-string initial list, but on the body structure
     # element at index 8
     extra = ""
+    this = None
     if isinstance(data[0], list):
         # We are multipart
         for i in range(len(data)):
             if not isinstance(data[i], list):
                 break
+        info = data[i:]
+        this = structureMultipart(tag, *info)
         if data[i + 2] and data[i + 2][0] and data[i + 2][0] == "attachment":
             extra = " (attachment)"
         elif data[i + 2] and data[i + 2][0] and data[i + 2][0] == "inline":
             extra = " (inline)"
-        print("%s   %s%s/%s%s" % (value, predesc, "multipart", data[i], extra))
+        if debug_struct:
+            print("%s   %s%s/%s%s" % (tag, predesc, "multipart", data[i], extra))
         j = 1
         for dat in data[:i]:
-            unpackStruct(dat, depth + 1, value + '.' + str(j))
+            this.addSub(unpackStruct(dat, depth + 1, tag + '.' + str(j)))
             j += 1
     else:
         # If we are message/rfc822, then we have further subdivision!
         if data[0].lower() == "message" and data[1].lower() == "rfc822":
+            this = structureMessage(tag, *data)
             if data[11] and data[11][0] and data[11][0] == "attachment":
                 extra = " (attachment)"
             elif data[11] and data[11][0] and data[11][0] == "inline":
                 extra = " (inline)"
-            unpackStruct(data[8], depth + 1, value, "message/rfc822%s, which is " % (extra))
+            this.addSub(unpackStruct(data[8], depth + 1, tag, "message/rfc822%s, which is " % (extra)))
         else:
+            this = structureLeaf(tag, *data)
             if data[0].lower() == "text":
                 if data[9] and data[9][0] and data[9][0] == "attachment":
                     extra = " (attachment)"
@@ -212,7 +286,9 @@ def unpackStruct(data, depth=1, value="", predesc=""):
                     extra = " (attachment)"
                 elif data[8] and data[8][0] and data[8][0] == "inline":
                     extra = " (inline)"
-            print("%s   %s%s/%s%s" % (value, predesc, data[0], data[1], extra))
+            if debug_struct:
+                print("%s   %s%s/%s%s" % (tag, predesc, data[0], data[1], extra))
+    return this
 
 def normalizeFetch(data):
     """Re-listize fetch results.
@@ -1418,7 +1494,28 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("fail?")
                 print(d)
                 return
-            unpackStruct(d[1], value=val)
+            res = unpackStruct(d[1], tag=val)
+            if debug_struct:
+                print("---")
+            def disp(struct):
+                extra = ""
+                if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+                    extra += " (%s)" % struct.disposition[0]
+                    # TODO: Add filename if present
+                # TODO XXX: Preprocess control chars out of all strings before
+                # display to terminal!
+                print("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
+                if isinstance(struct, structureMessage):
+                    extra = ""
+                    # Switch to the inner for further processing
+                    struct = struct.subs[0]
+                    if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+                        extra += " (%s)" % struct.disposition[0]
+                    print("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
+                elif hasattr(struct, "subs"):
+                    for i in struct.subs:
+                        disp(i)
+            disp(res)
 
 # 254 area is interesting; actually uses literals :-/
 
