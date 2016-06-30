@@ -1173,7 +1173,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 body += "encoding: " + encoding + "\r\n"
                 body += "struct: " + repr(o[1].__dict__) + "\r\n"
             # First, check for transfer encoding
-            if encoding in [None, "", "NIL"]:
+            if encoding in [None, "", "NIL", '7bit']:
                 # Don't need to do anything
                 pass
             elif encoding == "quoted-printable":
