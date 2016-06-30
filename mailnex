@@ -1084,10 +1084,9 @@ class Cmd(cmdprompt.CmdPrompt):
             print("No applicable messages")
             return
 
-        data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
+        data = M.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
         parts = processAtoms(data[0][1])
-        # Assert parts[0][0] == "BODY.PEEK[HEADER]"
-        headers = parts[0][1]
+        headers = getResultPart('BODY[HEADER]', parts[0])
         # TODO: Get content-type of body and convert to TTY, or at least utf-8
         # Options: Can look at the bodystructure to get the encoding (this
         # seems good, since we already will have fetched it to find the
@@ -1104,13 +1103,72 @@ class Cmd(cmdprompt.CmdPrompt):
         # type of message/rfc822, but *that* message has a header of
         # content-type text/plain or multipart/alternative or whatever.
         #
-        # Assert parts[0][2] == "BODY.PEEK[1]"
-        body = parts[0][3]
+        structstr = getResultPart('BODYSTRUCTURE', parts[0])
+        struct = unpackStruct(structstr, tag=str(index))
+        structureStrings = []
+        fetchParts = []
+        def pickparts(struct):
+            """Pick the parts we are going to use to produce a regular view of the message.
+
+            We'll build a visualization of the structure while we are at it (much of
+            this code is duplicated from do_structure)"""
+            # TODO: unify the code with do_structure? Make its own function?
+            # We probably want that anyway since other parts would utilize
+            # this, such as message reply/forwarding
+            extra = ""
+            if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+                extra += " (%s)" % struct.disposition[0]
+                # TODO: Add filename if present
+            # TODO XXX: Preprocess control chars out of all strings before
+            # display to terminal!
+            structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
+            # First pass, we'll just grab all text/plain parts. Later we'll
+            # want to check disposition, and later we'll want to deal with
+            # multipart/alternative better (and multipart/related)
+            if struct.type_ == "text" and struct.subtype == "plain":
+                # TODO: write the following a bit more efficiently. Like,
+                # split only once, use second part of return only, perhaps?
+                innerTag = ".".join(struct.tag.split('.')[1:])
+                fetchParts.append((innerTag, struct))
+            if isinstance(struct, structureMessage):
+                extra = ""
+                # Switch to the inner for further processing
+                struct = struct.subs[0]
+                if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+                    extra += " (%s)" % struct.disposition[0]
+                structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
+            elif hasattr(struct, "subs"):
+                for i in struct.subs:
+                    pickparts(i)
+        pickparts(struct)
+        structureString = u"\n".join(structureStrings)
+        fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
+        parts = ["BODY[%s]" % s[0] for s in fetchParts]
+        data = M.fetch(index, '(%s)' % " ".join(fparts))
+        body = structureString + '\r\n\r\n'
+        dpart = processAtoms(data[0][1])
+        for p,o in zip(parts,fetchParts):
+            dstr = getResultPart(p, dpart[0])
+            encoding = o[1].encoding
+            # First, check for transfer encoding
+            if encoding in [None, "", "NIL"]:
+                # Don't need to do anything
+                pass
+            elif encoding == "quoted-printable":
+                dstr = dstr.decode("quopri")
+            elif encoding == "base64":
+                dstr = dstr.decode("base64")
+            else:
+                body += "Part %s: unknown encoding %s\r\n" % (o[0], encoding)
+            # Finally, check for character set encoding
+            # TODO! For now, assume either windows or utf-8...
+            body += dstr.decode('windows-1252')
+            #body += dstr.decode('utf-8')
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         #s.communicate(headers + body.decode('latin-1').encode('utf-8'))
         content = headers.decode('windows-1252').encode('utf-8')
-        content += body.decode('windows-1252').encode('utf-8')
+        content += body.encode('utf-8')
         s.communicate(content)
         res = s.wait()
         if res == 0:
