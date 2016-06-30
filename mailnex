@@ -568,6 +568,7 @@ class Cmd(cmdprompt.CmdPrompt):
     def help_hidden_commands(self):
         print("The following are hidden commands:")
         print()
+        print("      -> print next message (usually 'print +' except the first time)")
         print("  h   -> headers")
         print("  p   -> print")
         print("  q   -> quit")
@@ -697,17 +698,82 @@ class Cmd(cmdprompt.CmdPrompt):
         perhaps we should have a setting to use something resembling the old
         behavior. I doubt I could spec the actual old behavior outside of the
         actual program code that interpreted it.
+
+        Another issue is that the mailx format precludes math, even though ed
+        (supposedly the inspiration for the command line) /does/ allow math,
+        and I've found myself wanting it several times in my daily mailx
+        usage. For example, if I'm on message 6748, and I remembered seeing
+        something in the previous message, I just type '-' and mailx shows me
+        the previous message (6747), which is great. When I'm done, I want to
+        look at the next message. However, I've already seen 6748, so I want
+        to go to 6749. However, to get there I either have to iterate using
+        '+' or '' (just pressing enter shows the next message) viewing an
+        already viewed message (wasting network and terminal bandwidth, and my
+        time), or type the whole message number (6749) which is both a lot of
+        numbers and requires me to know the message number I was just at (but
+        I've been moving relatively, so I don't know without doing a 'headers'
+        command or paying attention to the message header when it printed a
+        message to my pager).
+
+        Ideally, I ought to be able to do something like '.+2', or really '.'
+        plus or minus any number. However, mailx doesn't recognize the plus
+        like that, and the minus is already used for ranges.
+
+        Recognizing the plus shouldn't be hard, but differentiating between a
+        ranging hyphen and subtraction is tougher. Our parser either needs to
+        differentiate between starting with a dot vs a number (and thus
+        disallow straight numerical math, which also might be useful to
+        someone for selecting a message), or we need the option to use a
+        different range character. IMAP uses a colon (':') for ranging, but
+        that can get confusing with the shortcuts (e.g. ':u') without writing
+        a smarter parser. Vim uses comma for ranging. This might work, because
+        comma currently is used only on its own to refer to the current
+        parent, never with another character (e.g. you can't spec the parent
+        of a different message (say, message 1234) by doing '1234,' or
+        ',1234', though oddly if you try either, mailx finds the comma and
+        ignores the number).
+
+        It might also be a bit more intuitive to today's users to use Git's parent
+        notation (e.g. the parent of 123 would be 123^ or 123~1). This could
+        be fairly convenient for a message that is in reply to multiple
+        messages, though I don't know that MIME supports that, because the Git
+        notation lets you select which parent (e.g. 123^2 picks the second
+        parent). Of course, the caret/circumflex ('^') is already special,
+        though tilde ('~') is available.
+
+        Other annoying quirks of mailx:
+
+            :d only works in the undelete command. You cannot list deleted
+            messages by doing 'f :d' for example. You cannot display a deleted
+            message by using :d or by giving the actual message number. You
+            have to undelete it before it is accessible again.
         """
 
         s=set()
         # Second pass, read a few specials 
+        if args == '.':
+            return [self.C.currentMessage]
+        if args == '+':
+            # TODO: boundary check
+            return [self.C.currentMessage + 1]
+        if args == '-':
+            # TODO: boundary check
+            return [self.C.currentMessage - 1]
+        if args == '`':
+            return self.C.lastList
+        if args == '^':
+            return [1]
+        if args == '$':
+            return [self.C.lastMessage]
         if args == ":u":
             data = self.C.connection.search("UTF-8", "unseen")
-            print(data)
+            if debug:
+                print(data)
             return map(int, data)
         if args == ":f":
             data = self.C.connection.search("UTF-8", "flagged")
-            print(data)
+            if debug:
+                print(data)
             return map(int, data)
         # First pass, lets just handle numbers.
         for r in args.split():
@@ -749,6 +815,8 @@ class Cmd(cmdprompt.CmdPrompt):
             print
             return self.do_exit(a)
         elif args.isdigit():
+            # TODO: Should just try to do a parse of the line, independant of
+            # if it looks like digits
             self.C.currentMessage = int(args)
             self.do_print("")
             self.C.lastcommand=""
@@ -766,6 +834,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # flagged or unread message. In which case, the implicit
             # "next" command shows the message marked as current.
             #
+            # Likewise, after a from command, the current message is used
+            # instead of the next.
+            #
             # Plan: Have both currentMessage and nextMessage. Typically
             # they are different, but can be the same.
             #
@@ -775,10 +846,11 @@ class Cmd(cmdprompt.CmdPrompt):
             # Ideally, we'd mention the active list in the prompt. Ideally
             # we'd also list what the implicit command is in the prompt
             # (e.g. next or search continuation)
-            if (self.C.currentMessage == self.C.lastMessage):
+            if (self.C.nextMessage > self.C.lastMessage):
                 print("at EOF")
             else:
-                self.C.currentMessage += 1
+                self.C.currentMessage = self.C.nextMessage
+                # print will update nextMessage for us
                 self.do_print("")
 
     def do_testq(self, text):
@@ -806,6 +878,7 @@ class Cmd(cmdprompt.CmdPrompt):
             return
         C.connection = M
         C.currentMessage = 1
+        C.nextMessage = 1
         C.lastMessage = len(M) - 1
         print("Opened maildir with %i messages." % len(M))
     def do_connect(self, args):
@@ -917,6 +990,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # This should only really happen when lastMessage is 0, but
                 # range checking is probably good anyway.
                 self.C.currentMessage = self.C.lastMessage
+            self.C.nextMessage = C.currentMessage
             if debug:
                 print("Current message: %s. Last message: %s" % (self.C.currentMessage, self.C.lastMessage))
 
@@ -1228,6 +1302,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # However, some people probably like the mailx behavior better
             # because they are used to it, so we ought to support it.
             M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
+            # Update message stuffs. Should probably update the 'lastList' as
+            # well.
+            C.nextMessage = C.currentMessage + 1
 
     @needsConnection
     def do_latest_threads(self, args):
@@ -1737,6 +1814,12 @@ class Cmd(cmdprompt.CmdPrompt):
             print("No matches")
             return
         self.showHeaders("%s" % ",".join(map(str,res)))
+        # TODO: Should just have a function that takes the current list and
+        # updates the lastList, prevMessage, and currentMessage in one go
+        C.lastList = res
+        C.prevMessage = C.currentMessage
+        C.currentMessage = res[-1] # This is another annoying mailx behavior. It'd be nice if the first message in the list were selected
+        c.nextMessage = C.currentMessage
     @needsConnection
     def do_namespace(self, args):
         C = self.C
