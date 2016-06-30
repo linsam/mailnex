@@ -10,7 +10,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-debug = 1
+debug = 0
 imapdebug = 0
 debug_parse = 0
 debug_struct = 0
@@ -180,11 +180,14 @@ class structureLeaf(structureRoot):
         #
         # All *args end with md5, disposition, language, and location.
         structureRoot.__init__(self, tag, type_, subtype)
-        # attrs
-        # bodyID
-        # description
-        # encoding
-        # size
+        if attrs:
+            self.attrs = dictifyList(attrs)
+        else:
+            self.attrs = attrs
+        self.bid = bid # Body ID
+        self.description = description
+        self.encoding = encoding
+        self.size = size # octets of encoded message
         if type_ == "text":
             self.lines, args = args[0], args[1:]
         self.md5, self.disposition, self.language, self.location = args
@@ -195,7 +198,7 @@ class structureMessage(structureRoot):
         # attrs
         # bid
         # description
-        # encoding
+        self.encoding = encoding
         # size
         # envelope
         # substruct (auto-add? ignore?)
@@ -333,6 +336,15 @@ def normalizeFetch(data):
             # implementation.
             res.append("\n".join(data[i]))
     return res
+
+def dictifyList(lst):
+    # convert to list of key,val pairs, then to dictionary
+    # See http://stackoverflow.com/a/1625023/4504704 (answer to
+    # http://stackoverflow.com/questions/1624883/alternative-way-to-split-a-list-into-groups-of-n)
+    # TODO: Probably possible that there could be duplicate keys. Probably
+    # need a custom dictionary to handle that. Might also be handy to store
+    # the original case of the key and value.
+    return dict(zip(*(iter(map(lambda x: x.lower(),lst)),)*2))
 
 def processAtoms(text):
     """Process a set of IMAP ATOMs
@@ -1116,9 +1128,14 @@ class Cmd(cmdprompt.CmdPrompt):
             # We probably want that anyway since other parts would utilize
             # this, such as message reply/forwarding
             extra = ""
+            skip = False
             if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                 extra += " (%s)" % struct.disposition[0]
-                # TODO: Add filename if present
+                if struct.disposition[0].lower() == "attachment":
+                    skip = True
+                dispattrs = dictifyList(struct.disposition[1])
+                if 'filename' in dispattrs:
+                    extra += " (name: %s)" % dispattrs['filename']
             # TODO XXX: Preprocess control chars out of all strings before
             # display to terminal!
             structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
@@ -1129,13 +1146,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 # TODO: write the following a bit more efficiently. Like,
                 # split only once, use second part of return only, perhaps?
                 innerTag = ".".join(struct.tag.split('.')[1:])
-                fetchParts.append((innerTag, struct))
+                if not skip:
+                    fetchParts.append((innerTag, struct))
             if isinstance(struct, structureMessage):
                 extra = ""
                 # Switch to the inner for further processing
                 struct = struct.subs[0]
                 if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                     extra += " (%s)" % struct.disposition[0]
+
                 structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
             elif hasattr(struct, "subs"):
                 for i in struct.subs:
@@ -1150,6 +1169,9 @@ class Cmd(cmdprompt.CmdPrompt):
         for p,o in zip(parts,fetchParts):
             dstr = getResultPart(p, dpart[0])
             encoding = o[1].encoding
+            if debug:
+                body += "encoding: " + encoding + "\r\n"
+                body += "struct: " + repr(o[1].__dict__) + "\r\n"
             # First, check for transfer encoding
             if encoding in [None, "", "NIL"]:
                 # Don't need to do anything
@@ -1160,10 +1182,26 @@ class Cmd(cmdprompt.CmdPrompt):
                 dstr = dstr.decode("base64")
             else:
                 body += "Part %s: unknown encoding %s\r\n" % (o[0], encoding)
+                continue
             # Finally, check for character set encoding
-            # TODO! For now, assume either windows or utf-8...
-            body += dstr.decode('windows-1252')
-            #body += dstr.decode('utf-8')
+            if o[1].attrs and 'charset' in o[1].attrs:
+                charset = o[1].attrs['charset']
+                try:
+                    # TODO: Is this possibly a security risk? Is there any
+                    # value that causes the decode function to go awry?
+                    body += dstr.decode(charset)
+                except:
+                    if charset == 'iso8895-1':
+                        # MS Outlook lies about its charset, so we'll try what
+                        # they mean instead of what they say. TODO: Should we
+                        # complain about this? Not like the user can do much
+                        # except encourage the sender to stop using outlook.
+                        try:
+                            body += dstr.decode('windows-1252')
+                        except:
+                            body += "Part %s: failed to decode as %s or windows-1252\r\n" % (o[0], charset)
+                    else:
+                        body += "Part %s: failed to decode as %s\r\n" % (o[0], charset)
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         #s.communicate(headers + body.decode('latin-1').encode('utf-8'))
