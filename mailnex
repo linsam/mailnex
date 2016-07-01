@@ -436,7 +436,7 @@ def processAtoms(text):
                 if debug_parse:
                     print(" End of token. Append completed word to list:", curtext)
                 inspace = True
-                curlist.append("".join(curtext))
+                curlist.append(b"".join(curtext))
                 curtext=[]
                 continue
             continue
