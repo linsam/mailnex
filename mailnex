@@ -1235,8 +1235,17 @@ class Cmd(cmdprompt.CmdPrompt):
                     pickparts(i)
         pickparts(struct)
         structureString = u"\n".join(structureStrings)
-        fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
-        parts = ["BODY[%s]" % s[0] for s in fetchParts]
+        if len(fetchParts) == 0:
+            print("Message doesn't have any displayable parts.")
+            return
+        elif len(fetchParts) == 1 and len(fetchParts[0][0]) == 0:
+            # This message doesn't have parts, so fetch "part 1" to get the
+            # body
+            fparts = ["BODY.PEEK[1]"]
+            parts = ["BODY[1]"]
+        else:
+            fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
+            parts = ["BODY[%s]" % s[0] for s in fetchParts]
         data = M.fetch(index, '(%s)' % " ".join(fparts))
         body = structureString + '\r\n\r\n'
         dpart = processAtoms(data[0][1])
@@ -1247,7 +1256,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 body += "encoding: " + encoding + "\r\n"
                 body += "struct: " + repr(o[1].__dict__) + "\r\n"
             # First, check for transfer encoding
-            if encoding in [None, "", "NIL", '7bit']:
+            if encoding in [None, "", "NIL", '7bit', '8bit']:
                 # Don't need to do anything
                 pass
             elif encoding == "quoted-printable":
