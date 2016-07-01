@@ -1819,7 +1819,7 @@ class Cmd(cmdprompt.CmdPrompt):
         C.lastList = res
         C.prevMessage = C.currentMessage
         C.currentMessage = res[-1] # This is another annoying mailx behavior. It'd be nice if the first message in the list were selected
-        c.nextMessage = C.currentMessage
+        C.nextMessage = C.currentMessage
     @needsConnection
     def do_namespace(self, args):
         C = self.C
