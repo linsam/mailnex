@@ -10,11 +10,6 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-debug = 0
-imapdebug = 0
-debug_parse = 0
-debug_struct = 0
-
 #  Search indexing
 #  ---------------
 # Terms:
@@ -79,9 +74,11 @@ import xdg.BaseDirectory
 import cmdprompt
 # Date handler
 import dateutil.parser
+# Other
 import tempfile
 import pyuv
 import time
+import settings
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
@@ -212,7 +209,7 @@ class structureMessage(structureRoot):
         assert isinstance(sub, structureRoot), "%s isn't a structureRoot or similar" % type(sub)
         self.subs.append(sub)
 
-def unpackStruct(data, depth=1, tag="", predesc=""):
+def unpackStruct(data, options, depth=1, tag="", predesc=""):
     """Recursively unpack the structure of a message (as given by IMAP's BODYSTRUCTURE message-data)
 
     @param data hierarchy of BODYSTRUCTURE elements
@@ -262,11 +259,11 @@ def unpackStruct(data, depth=1, tag="", predesc=""):
             extra = " (attachment)"
         elif data[i + 2] and data[i + 2][0] and data[i + 2][0] == "inline":
             extra = " (inline)"
-        if debug_struct:
+        if options.debug.struct:
             print("%s   %s%s/%s%s" % (tag, predesc, "multipart", data[i], extra))
         j = 1
         for dat in data[:i]:
-            this.addSub(unpackStruct(dat, depth + 1, tag + '.' + str(j)))
+            this.addSub(unpackStruct(dat, options, depth + 1, tag + '.' + str(j)))
             j += 1
     else:
         # If we are message/rfc822, then we have further subdivision!
@@ -276,7 +273,7 @@ def unpackStruct(data, depth=1, tag="", predesc=""):
                 extra = " (attachment)"
             elif data[11] and data[11][0] and data[11][0] == "inline":
                 extra = " (inline)"
-            this.addSub(unpackStruct(data[8], depth + 1, tag, "message/rfc822%s, which is " % (extra)))
+            this.addSub(unpackStruct(data[8], options, depth + 1, tag, "message/rfc822%s, which is " % (extra)))
         else:
             this = structureLeaf(tag, *data)
             if data[0].lower() == "text":
@@ -289,7 +286,7 @@ def unpackStruct(data, depth=1, tag="", predesc=""):
                     extra = " (attachment)"
                 elif data[8] and data[8][0] and data[8][0] == "inline":
                     extra = " (inline)"
-            if debug_struct:
+            if options.debug.struct:
                 print("%s   %s%s/%s%s" % (tag, predesc, data[0], data[1], extra))
     return this
 
@@ -346,7 +343,7 @@ def dictifyList(lst):
     # the original case of the key and value.
     return dict(zip(*(iter(map(lambda x: x.lower(),lst)),)*2))
 
-def processAtoms(text):
+def processAtoms(text, options):
     """Process a set of IMAP ATOMs
 
     ATOMs are roughly space separated text that can be quoted and can contain
@@ -392,7 +389,7 @@ def processAtoms(text):
     pos = -1
     for c in text:
         pos += 1
-        if debug_parse:
+        if options.debug.parse:
             print(" Processing %s" % repr(c))
         if skipCrLf:
             # True or 1 means check the CR of CRLF, then expect the LF of CRLF
@@ -402,7 +399,7 @@ def processAtoms(text):
             else:
                 check = '\n'
             if c != check:
-                if debug_parse:
+                if options.debug.parse:
                     print("before", repr(text[:pos]))
                     print("at", repr(text[pos]))
                     print("after", repr(text[pos+1:]))
@@ -415,25 +412,25 @@ def processAtoms(text):
         if inliteral:
             curtext.append(c)
             literalRemain -= 1
-            if debug_parse:
+            if options.debug.parse:
                 print("literal append %s, remaining %i" % (repr(c), literalRemain))
             if literalRemain == 0:
                 inliteral = False
                 # TODO: Should we assume this completes the token and go back
                 # to inspace?
-                if debug_parse:
+                if options.debug.parse:
                     print("  Literal complete. Resume normal parsing")
             continue
-        if debug_parse:
+        if options.debug.parse:
             print("Processing char", repr(c))
         if c == ' ' or c == '\t':
             if inquote:
-                if debug_parse:
+                if options.debug.parse:
                     print(" keep space, we are quoted")
                 curtext.append(c)
                 continue
             if not inspace:
-                if debug_parse:
+                if options.debug.parse:
                     print(" End of token. Append completed word to list:", curtext)
                 inspace = True
                 curlist.append(b"".join(curtext))
@@ -441,14 +438,14 @@ def processAtoms(text):
                 continue
             continue
         if inbrace and c == '}':
-            if debug_parse:
+            if options.debug.parse:
                 print("Literal size find:",literalSizeString)
             inbrace = False
             inliteral = True
             skipCrLf = True
             if literalSizeString.isdigit():
                 literalRemain = int(literalSizeString)
-                if debug_parse:
+                if options.debug.parse:
                     print("Start literal. %i remain" % literalRemain)
                 if literalRemain == 0:
                     # Still, skip the CrLf, but don't bother entering the
@@ -474,24 +471,24 @@ def processAtoms(text):
         if c == '"': #TODO single quote too? -- no.
             if inquote:
                 # TODO: Does ending a quote terminate an atom?
-                if debug_parse:
+                if options.debug.parse:
                     print(" Leaving quote")
                 inquote = False
             else:
                 # TODO: Are we allowed to start a quote mid-atom?
-                if debug_parse:
+                if options.debug.parse:
                     print(" Entering quote")
                 inquote = True
             continue
         if c == '(':
             if inquote:
-                if debug_parse:
+                if options.debug.parse:
                     print(" keep paren, we are quoted")
                 curtext.append(c)
                 continue
             if len(curtext):
                 raise Exception("Need space before open paren?")
-            if debug_parse:
+            if options.debug.parse:
                 print(" start new list")
             curlist=[]
             lset.append(curlist)
@@ -499,12 +496,12 @@ def processAtoms(text):
             continue
         if c == ')':
             if inquote:
-                if debug_parse:
+                if options.debug.parse:
                     print(" keep paren, we are quoted")
                 curtext.append(c)
                 continue
             if len(curtext):
-                if debug_parse:
+                if options.debug.parse:
                     print(" finish atom before finishing list", curtext)
                 curlist.append(b"".join(curtext))
                 curtext=[]
@@ -513,12 +510,12 @@ def processAtoms(text):
             if len(lset) < 1:
                 raise Exception("Malformed input. Unbalanced parenthesis: too many close parenthesis")
             curlist = lset[-1]
-            if debug_parse:
+            if options.debug.parse:
                 print(" finish list", t)
             curlist.append(t)
             inspace = True
             continue
-        if debug_parse:
+        if options.debug.parse:
             print(" normal character")
         curtext.append(c)
     if inquote:
@@ -528,7 +525,7 @@ def processAtoms(text):
         curlist.append("".join(curtext))
     if len(lset) > 1:
         raise Exception("Malformed input. Unbalanced parentheses: Not enough close parenthesis")
-    if debug_parse:
+    if options.debug.parse:
         print("lset", lset)
         print("cur", curlist)
         print("leftover", curtext)
@@ -767,12 +764,12 @@ class Cmd(cmdprompt.CmdPrompt):
             return [self.C.lastMessage]
         if args == ":u":
             data = self.C.connection.search("UTF-8", "unseen")
-            if debug:
+            if self.C.settings.debug.general:
                 print(data)
             return map(int, data)
         if args == ":f":
             data = self.C.connection.search("UTF-8", "flagged")
-            if debug:
+            if self.C.settings.debug.general:
                 print(data)
             return map(int, data)
         # First pass, lets just handle numbers.
@@ -855,7 +852,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
     def do_testq(self, text):
         try:
-            print(processAtoms(text))
+            print(processAtoms(text), self.C.settings)
         except Exception as ev:
             print(ev)
 
@@ -930,7 +927,7 @@ class Cmd(cmdprompt.CmdPrompt):
             raise Exception("Unknown connect format")
         import imap4
         c = imap4.imap4ClientConnection()
-        c.debug = imapdebug
+        c.debug = C.settings.debug.imap
         print("WARNING: Certificates aren't checked. Remote host may be spoofed!")
         try:
             c.connect(host, port=port)
@@ -991,7 +988,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 # range checking is probably good anyway.
                 self.C.currentMessage = self.C.lastMessage
             self.C.nextMessage = C.currentMessage
-            if debug:
+            if self.C.settings.debug.general:
+                # TODO: Maybe we should output this kind of info anyway...
                 print("Current message: %s. Last message: %s" % (self.C.currentMessage, self.C.lastMessage))
 
         except KeyboardInterrupt:
@@ -1044,7 +1042,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 #print("------------ Message %i -----------" % i)
                 #print(data[1][1])
 
-                data = processAtoms(data[0][1])
+                data = processAtoms(data[0][1], self.C.settings)
 
                 headers = data[0][1]
                 headers = processHeaders(headers)
@@ -1171,7 +1169,7 @@ class Cmd(cmdprompt.CmdPrompt):
             return
 
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
-        parts = processAtoms(data[0][1])
+        parts = processAtoms(data[0][1], self.C.settings)
         headers = getResultPart('BODY[HEADER]', parts[0])
         # TODO: Get content-type of body and convert to TTY, or at least utf-8
         # Options: Can look at the bodystructure to get the encoding (this
@@ -1190,7 +1188,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # content-type text/plain or multipart/alternative or whatever.
         #
         structstr = getResultPart('BODYSTRUCTURE', parts[0])
-        struct = unpackStruct(structstr, tag=str(index))
+        struct = unpackStruct(structstr, self.C.settings, tag=str(index))
         structureStrings = []
         fetchParts = []
         def pickparts(struct):
@@ -1248,11 +1246,11 @@ class Cmd(cmdprompt.CmdPrompt):
             parts = ["BODY[%s]" % s[0] for s in fetchParts]
         data = M.fetch(index, '(%s)' % " ".join(fparts))
         body = structureString + '\r\n\r\n'
-        dpart = processAtoms(data[0][1])
+        dpart = processAtoms(data[0][1], self.C.settings)
         for p,o in zip(parts,fetchParts):
             dstr = getResultPart(p, dpart[0])
             encoding = o[1].encoding
-            if debug:
+            if self.C.settings.debug.general:
                 body += "encoding: " + encoding + "\r\n"
                 body += "struct: " + repr(o[1].__dict__) + "\r\n"
             # First, check for transfer encoding
@@ -1330,7 +1328,7 @@ class Cmd(cmdprompt.CmdPrompt):
         M = self.C.connection
         index = int(args)
         data = M.fetch(index, '(BODY.PEEK[HEADER])')
-        data = processAtoms(data[0][1])
+        data = processAtoms(data[0][1], self.C.settings)
         headers = processHeaders(data[0][1])
         term = None
         if 'thread-index' in headers:
@@ -1394,7 +1392,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("No applicable messages")
             return
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-        parts = processAtoms(data[0][1])
+        parts = processAtoms(data[0][1], self.C.settings)
         headers = parts[0][1]
         body = parts[0][3]
         #content = headers.encode('utf-8') + body.encode('utf-8')
@@ -1434,7 +1432,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # through multiparts), and should decode each part (in particular,
         # undo base64 or quoted printable)
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-        parts = processAtoms(data[0][1])
+        parts = processAtoms(data[0][1], self.C.settings)
         headers = parts[0][1]
         body = parts[0][3]
         hdrs = processHeaders(headers)
@@ -1585,12 +1583,7 @@ class Cmd(cmdprompt.CmdPrompt):
         m = tpart
         # Mandatory headers: From: and Date:
         # TODO: Allow this to be set by the user on a per-message basis
-        if 'from' in self.C.settings:
-            m['From'] = self.C.settings['from']
-        else:
-            # Use the username and hostname of this machine as a (hopefully
-            # reasonable) guess.
-            m['From'] = getpass.getuser() + "@" + os.uname()[1]
+        m['From'] = options['from'].value
         m['Date'] = email.utils.formatdate(localtime=True) # Allow user to override local and possibly timezone?
         # Should headers: Message-Id
         m['Message-Id'] = email.utils.make_msgid("mailnex")
@@ -1633,7 +1626,7 @@ class Cmd(cmdprompt.CmdPrompt):
         else:
             index = C.currentMessage
         data = M.fetch(args, '(BODY.PEEK[HEADER])')
-        headers = processHeaders(processAtoms(data[0][1])[0][1])
+        headers = processHeaders(processAtoms(data[0][1])[0][1], self.C.settings)
         if "subject" in headers:
             print("Subject:", headers["subject"][-1])
         if "date" in headers:
@@ -1666,7 +1659,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # We should get a list of the form (ID, DATA)
                 # where DATA is a list of the form ("BODYSTRUCTURE", struct)
                 # and where struct is the actual structure
-                d = processAtoms(entry[1])
+                d = processAtoms(entry[1], self.C.settings)
                 val = str(entry[0])
                 d = d[0]
             except Exception as ev:
@@ -1676,8 +1669,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("fail?")
                 print(d)
                 return
-            res = unpackStruct(d[1], tag=val)
-            if debug_struct:
+            res = unpackStruct(d[1], self.C.settings, tag=val)
+            if C.settings.debug.struct:
                 print("---")
             def disp(struct):
                 extra = ""
@@ -1752,7 +1745,7 @@ class Cmd(cmdprompt.CmdPrompt):
         #data = normalizeFetch(data)
         for d in data:
             try:
-                d = (d[0], processAtoms(d[1]))
+                d = (d[0], processAtoms(d[1], self.C.settings))
             except Exception as ev:
                 print("  %s  (error parsing envelope!)" % d[0], ev)
                 continue
@@ -1836,7 +1829,7 @@ class Cmd(cmdprompt.CmdPrompt):
         res,data = M.namespace()
         #print(res)
         try:
-            data = processAtoms(data[0])
+            data = processAtoms(data[0], self.C.settings)
         except Exception as ev:
             print(ev)
             return
@@ -1903,6 +1896,116 @@ class Cmd(cmdprompt.CmdPrompt):
                     'weight': match.weight,
                     }
                     )
+    def do_unset(self, args):
+        """Unset an option.
+
+        For program options, this restores the default value (same as 'set {option}&').
+        For user options, removes the option from the system."""
+        try:
+            opt = self.C.settings[args]
+            if isinstance(opt, settings.UserOption):
+                self.C.settings.removeOption(args)
+                # Remove user option
+                pass
+            else:
+                # Restore default value
+                opt.value = opt.default
+        except KeyError:
+            print("No setting named %s" % args)
+
+    def do_set(self, args):
+        """Set or get option values
+
+        set                 show options that differ from their default value
+        set all             show all options and their values
+        set {option}?       show value of given option
+        set {option}??      show default and current values of option with description
+        set {option}&       reset option to default
+        set {option}        assert a boolean option
+        set no{option}      deassert a boolean option
+        set inv{option}     toggle a boolean option
+        set {option}!       equivalent to inv{option}
+        set {option}={val}  set numeric, string, or flag list option to val.
+                            Numbers are decimal, unles prefixed by 0x for hex
+                            or 0 for octal.
+        set {option}+={val} Append val to string or flag list. Increment
+                            numeric option by val
+        set {option}^={val} Prepend val to string or flag list. Multiply
+                            numeric option by val
+        set {option}-={val} Remove val from string or flag list. Subtract
+                            numeric option by val"""
+        if args == "":
+            # TODO: order by type (e.g. booleans first)
+            for opt in self.C.settings:
+                if opt.value != opt.default:
+                    print(opt)
+        elif args == "all":
+            # TODO: order by type (e.g. booleans first)
+            for opt in self.C.settings:
+                print(opt)
+        else:
+            sep = args.find('=')
+            if sep == -1:
+                # No equals, might be boolean or reset to default...
+                if args[-2:] == '??':
+                    # Print details
+                    opt = self.C.settings[args[:-2]]
+                    print("Setting: %s" % args[:-2])
+                    # TODO: Show type
+                    print("Description:")
+                    if not opt.doc:
+                        print("  (none given)")
+                    else:
+                        for line in opt.doc.split("\n"):
+                            print("   %s" % line)
+                    oldval = opt.value
+                    opt.value = opt.default
+                    print("Default:", opt)
+                    opt.value = oldval
+                    print("current:", opt)
+                elif args[-1] == '?':
+                    # Print current value
+                    print(self.C.settings[args[:-1]])
+                elif args[-1] == '&':
+                    # Reset to default value
+                    opt = self.C.settings[args[:-1]]
+                    opt.value = opt.default
+                elif args[-1].isalpha():
+                    # Must be a boolean
+                    print("nye")
+                else:
+                    print("invalid suffix")
+                return
+            else:
+                if sep == 0:
+                    print("invalid")
+                    return
+                mod = args[sep - 1]
+                if mod == '+':
+                    # Add/append
+                    print("nye")
+                    return
+                elif mod == '^':
+                    # multiply/prepend
+                    print("nye")
+                    return
+                elif mod == '-':
+                    # subtract/remove
+                    print("nye")
+                    return
+                elif not mod.isalpha:
+                    # Weird, perhaps an operator we'll have in the future?
+                    print("invalid operator")
+                    return
+                else:
+                    # Straight assignment
+                    key,value = map(lambda x: x.strip(), args.split('=', 1))
+                    try:
+                        self.C.settings[key] = value
+                    except KeyError:
+                        self.C.settings.addOption(settings.UserOption(key, None))
+                        self.C.settings[key] = value
+
 
     def do_quit(self, args):
         # TODO: Support synchronizing if user setting asks for it. Something like:
@@ -1923,13 +2026,20 @@ def interact():
     C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
     C.lastcommand=""
     cmd.C = C
-    # Default settings. TODO: Put defaults in a separate dictionary or
-    # something, so that if the user 'unset's something, we can fall back on
-    # the default instead of breaking
-    C.settings = {
-            'PAGER': 'internal', # How to display stuff
-            'defaultTZ': 'UTC', # What timezone to put email that lacks a zone specifier (which is out of spec, but lots of scripts are poorly written)
-            }
+    options = settings.Options()
+    # Debug options:
+    #   exception - show detailed exceptions instead of short messages
+    #   general - show general tidbits during runtime
+    #   imap - debug output from imap handler
+    #   parse - debug output from parsers (e.g. atoms and such)
+    #   struct - debug output from structure heirarchy parser
+    options.addOption(settings.FlagsOption("debug", []))
+    # Use the username and hostname of this machine as a (hopefully reasonable)
+    # guess for the from line.
+    options.addOption(settings.StringOption("from", "%s@%s" % (getpass.getuser(), os.uname()[1]), doc="Value to use for From field of composed email messages"))
+    options.addOption(settings.StringOption("PAGER", "internal"))
+    options.addOption(settings.StringOption("defaultTZ", "UTC"))
+    C.settings = options
     postConfFolder = None
     if confFile:
         # Walk through the config file
@@ -1949,7 +2059,12 @@ def interact():
                         print("Failed to parse set command in line %i" % lineno)
                         continue
                     key, value = m.groups()
-                    C.settings[key] = value
+                    try:
+                        C.settings[key] = value
+                    except KeyError:
+                        C.settings.addOption(settings.UserOption(key, None))
+                        C.settings[key] = value
+
                 elif line.strip().startswith("folder "):
                     postConfFolder = line.strip()[7:]
                 else:
@@ -1963,7 +2078,7 @@ def interact():
     except KeyboardInterrupt:
         cmd.do_exit("")
     except Exception as ev:
-        if debug:
+        if options.debug.exception:
             raise
         else:
             print("Bailing on exception",ev)
