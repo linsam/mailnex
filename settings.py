@@ -55,6 +55,8 @@ class Option(object):
     """Root class for all options."""
     def __init__(self, name, default, doc=None):
         object.__init__(self)
+        assert not name.startswith("no"), "Options must not start with 'no' or 'inv' to prevent clashes with set command syntax/semantics"
+        assert not name.startswith("inv"), "Options must not start with 'no' or 'inv' to prevent clashes with set command syntax/semantics"
         self.name = name
         self.default = default
         self.value = default
