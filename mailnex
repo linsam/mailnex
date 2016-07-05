@@ -1099,13 +1099,17 @@ class Cmd(cmdprompt.CmdPrompt):
         C = self.C
         M = C.connection
         if args:
-            try:
-                index = int(args)
-            except:
-                print("bad arguments")
+            msgs = self.parseMessageList(args)
+            if len(msgs) == 0:
+                print("No matches")
                 return
         else:
             index = C.currentMessage
+            if index == 0 or index > self.C.lastMessage:
+                print("No applicable messages")
+                return
+            msgs = [index]
+
         # Note: when we go to get the body structure, we should do a simple
         # search for text/plain. We *should* walk each level of the body
         # structure and interpret an action for it in constructing the
@@ -1171,9 +1175,8 @@ class Cmd(cmdprompt.CmdPrompt):
         # For rendering, the img2txt program (from caca-utils) might be a good
         # option.
 
-        if index == 0 or index > self.C.lastMessage:
-            print("No applicable messages")
-            return
+        # TODO: Support lists. For now, just handle the first in the list
+        index = msgs[0]
 
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
         parts = processAtoms(data[0][1], self.C.settings)
@@ -1218,13 +1221,13 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO XXX: Preprocess control chars out of all strings before
             # display to terminal!
             structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
+            innerTag = ".".join(struct.tag.split('.')[1:])
             # First pass, we'll just grab all text/plain parts. Later we'll
             # want to check disposition, and later we'll want to deal with
             # multipart/alternative better (and multipart/related)
             if struct.type_ == "text" and struct.subtype == "plain":
                 # TODO: write the following a bit more efficiently. Like,
                 # split only once, use second part of return only, perhaps?
-                innerTag = ".".join(struct.tag.split('.')[1:])
                 if not skip:
                     fetchParts.append((innerTag, struct))
             if isinstance(struct, structureMessage):
@@ -1235,7 +1238,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     extra += " (%s)" % struct.disposition[0]
 
                 structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
-            elif hasattr(struct, "subs"):
+                fetchParts.append(("%s.HEADER" % innerTag, struct))
+            if hasattr(struct, "subs"):
                 for i in struct.subs:
                     pickparts(i)
         pickparts(struct)
@@ -1256,6 +1260,15 @@ class Cmd(cmdprompt.CmdPrompt):
         dpart = processAtoms(data[0][1], self.C.settings)
         for p,o in zip(parts,fetchParts):
             dstr = getResultPart(p, dpart[0])
+            if isinstance(o[1], structureMultipart):
+                o[1].encoding = None
+                o[1].attrs = None
+                # TODO: Use terminfo/termcap (or perhaps pygments or
+                # prompt_toolkit) for styling
+                # Should perhaps also do all parts or all major parts.
+                # Ideally, subparts like attatched messages should be
+                # indented, perhaps with a colored bar
+                body += "\n\033[7mPart %s:\033[0m\n" % (o[0])
             encoding = o[1].encoding
             if self.C.settings.debug.general:
                 body += "encoding: " + encoding + "\r\n"
@@ -1290,10 +1303,22 @@ class Cmd(cmdprompt.CmdPrompt):
                             body += "Part %s: failed to decode as %s or windows-1252\r\n" % (o[0], charset)
                     else:
                         body += "Part %s: failed to decode as %s\r\n" % (o[0], charset)
+            else:
+                body += dstr
         import subprocess
-        s = subprocess.Popen("less", stdin=subprocess.PIPE)
-        #s.communicate(headers + body.decode('latin-1').encode('utf-8'))
-        content = headers.decode('windows-1252').encode('utf-8')
+        s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
+        # TODO: Headers are required to be ASCII or encoded using a header
+        # encoding that results in ASCII (lists charset and encodes as
+        # quoted-printable or base64 with framing). We should decode headers
+        # to unicode using ASCII and, if failing, replace with highlighted
+        # error boxes or something (not question marks, ideally). Then, we
+        # should look for the header encoding markers and handle those as
+        # well.
+
+        # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
+        # for styling
+        content = "\033[7mMessage %i:\033[0m\n\n" % index
+        content += headers.decode('windows-1252').encode('utf-8')
         content += body.encode('utf-8')
         s.communicate(content)
         res = s.wait()
@@ -1694,7 +1719,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                         extra += " (%s)" % struct.disposition[0]
                     print("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
-                elif hasattr(struct, "subs"):
+                if hasattr(struct, "subs"):
                     for i in struct.subs:
                         disp(i)
             disp(res)
