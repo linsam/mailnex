@@ -69,6 +69,23 @@ class BoolOption(Option):
             return "%s" % (self.name,)
         else:
             return "no%s" % (self.name,)
+    def setValue(self, value):
+        if isinstance(value, (str,unicode)):
+            if value.lower() in ["1", "true", self.name]:
+                self.value = True
+            elif value.lower() in ["0", "false", "no" + self.name]:
+                self.value = False
+            elif value.lower == "inv" + self.name:
+                self.value = False if self.value else True
+            else:
+                raise ValueError()
+        else:
+            # Attempt to coerce it; let the conversions raise valueError
+            # themselves.
+            self.value=bool(int(value))
+    def __bool__(self): # Python 3
+        return self.value
+    __nonzero__ = __bool__ # Python 2 compat
 
 class NumericOption(Option):
     def __str__(self):
