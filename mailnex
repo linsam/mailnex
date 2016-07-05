@@ -1265,9 +1265,13 @@ class Cmd(cmdprompt.CmdPrompt):
                 o[1].attrs = None
                 # TODO: Use terminfo/termcap (or perhaps pygments or
                 # prompt_toolkit) for styling
-                # Should perhaps also do all parts or all major parts.
                 # Ideally, subparts like attatched messages should be
                 # indented, perhaps with a colored bar
+                if not self.C.settings.allpartlabels:
+                    # Don't show a label here if we are going to show it
+                    # anyway below.
+                    body += "\n\033[7mPart %s:\033[0m\n" % (o[0])
+            if self.C.settings.allpartlabels:
                 body += "\n\033[7mPart %s:\033[0m\n" % (o[0])
             encoding = o[1].encoding
             if self.C.settings.debug.general:
@@ -2071,6 +2075,7 @@ def interact():
     options.addOption(settings.StringOption("from", "%s@%s" % (getpass.getuser(), os.uname()[1]), doc="Value to use for From field of composed email messages"))
     options.addOption(settings.StringOption("PAGER", "internal"))
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
+    options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     C.settings = options
     postConfFolder = None
     if confFile:
