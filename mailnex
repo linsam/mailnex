@@ -793,6 +793,12 @@ class Cmd(cmdprompt.CmdPrompt):
         #TODO Simulate the tokenizer of mailx a bit better. For example,
         # 'print5' will print message 5 instead of erroring that 'print5'
         # isn't a command.
+        if not c:
+            # Sometimes, parseline assumes there are aguments and no commands.
+            # E.g. '-' and '$' result in c="", with a and l containing the
+            # given string.
+            c = l
+            a = ''
         if c == 'h':
             #TODO: process shortcuts/aliases/whatever
             return self.do_headers(a)
