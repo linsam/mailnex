@@ -1011,6 +1011,12 @@ class Cmd(cmdprompt.CmdPrompt):
         # becuase something was added and something else was expunged.
         # Probably need to track untagged fetch results to see that.
         self.cli.run_in_terminal(lambda: print("Info: %s: %i New messages" % (time.asctime(), delta)))
+        # TODO: Run these in a libuv callback; doing it now can be problematic
+        # (e.g. we are very likely in the middle of some command, like NOOP)
+        if delta == 1:
+            self.cli.run_in_terminal(lambda: self.showHeaders("%i" % value))
+        else:
+            self.cli.run_in_terminal(lambda: lself.showHeaders("%i:%i" % (value - delta, value)))
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing
         # the server to send us untagged updates (e.g. new message
