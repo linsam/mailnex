@@ -1845,12 +1845,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
                 froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
-                print("{this} "
-                    "{num:4} "
-                    "{date:19} "
-                    "{from:<15.15} "
-                    "{t.italic_blue}{subject:<30.30}{t.normal} "
-                    "|{flags}".format(**{
+                print(self.C.settings.headers.value.format(**{
                         'this': '>' if this else ' ',
                         'num': num,
                         'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
@@ -2106,6 +2101,36 @@ def interact():
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.BoolOption("receiptheaders", 0, doc="Show headers for messages as they arrive"))
+    options.addOption(settings.StringOption("headers", "{this} {num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
+        doc="""Format string for headers lines (e.g. in headers and from commands)
+
+        The format string follows the python format specification.
+        Field replacement is done between braces.
+        Literal braces must be doubled.
+
+        For example: "this {{is}} the {subject}" where subject is
+        "red ball" results in "this {is} the red ball"
+
+        Field width and precision can be used to make the output columnar.
+        E.g. {subject:<30.30} pads or truncates the subject to exactly 30
+        characters. Instead of '<' you can use '>' to right align or '^' to
+        center the subject.
+
+        The following are currently supported fields (subject to change):
+
+            this        - a '>' if the message is the current message, a
+                          space otherwise
+            num         - the message number
+            date        - the message date - TODO: custom date formatting
+            subject     - the subject of the message
+            flags       - space saparated list of imap flags
+            from        - first from entry as name or address (TODO: setting to control that)
+            t           - terminal attributes. Use as 't.red' to make following
+                          text red, or 't.bold' for bold. 't.normal' returns to
+                          normal text. Attributes can be combined:
+                          't.italic_blue_on_red' makes italic blue text on red
+                          background.
+        """))
     C.settings = options
     postConfFolder = None
     if confFile:
