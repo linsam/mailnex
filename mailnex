@@ -1855,7 +1855,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         't': self.C.t,
                     }))
             except Exception as ev:
-                print("  %s  (error displaying because '%s'. Data follows)" % (d[0], ev), repr(d))
+                print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d))
 
     @shortcut("f")
     @needsConnection
