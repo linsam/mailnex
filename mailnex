@@ -117,6 +117,33 @@ def getResultPart(part, data):
     # weird like returning a class or something.
     raise Exception("Part %s not found" % part)
 
+class Envelope(object):
+    # Envelope fields:
+    #   0 - date
+    #   1 - subject
+    #   2 - from (list or NIL)
+    #   3 - sender (list or NIL)
+    #   4 - reply-to (list or NIL)
+    #   5 - to (list or NIL)
+    #   6 - cc (lis or NIL)
+    #   7 - bcc (list or NIL)
+    #   8 - in-reply-to
+    #   9 - message-id
+    #
+    #   The elements of 2 through 7 consist of name,
+    #   at-domain-list (aka source route; typically NIL), mailbox
+    #   name, and host name.
+    #   Unless it is a group name; see page 77 of RFC 3501 for
+    #   details.
+    def __init__(self, date, subject, from_, sender, replyTo, to, cc, bcc, inReplyTo, messageId):
+        # Assign each of our arguments to attributes of the same name
+        for i in "date subject from_ sender replyTo to cc bcc inReplyTo messageId".split():
+            setattr(self, i, locals()[i])
+    def print(self):
+        for i in "date subject from_ sender replyTo to cc bcc inReplyTo messageId".split():
+            print("%s: %s" % (i, getattr(self, i)))
+
+
 # Some decorators
 def needsConnection(func):
     @wraps(func)
@@ -1792,27 +1819,12 @@ class Cmd(cmdprompt.CmdPrompt):
             envelope = getResultPart("ENVELOPE", d[1][0])
             internaldate = getResultPart("INTERNALDATE", d[1][0])
             flags = getResultPart("FLAGS", d[1][0])
+            envelope = Envelope(*envelope)
+
             try:
-                # Envelope fields:
-                #   0 - date
-                #   1 - subject
-                #   2 - from (list or NIL)
-                #   3 - sender (list or NIL)
-                #   4 - reply-to (list or NIL)
-                #   5 - to (list or NIL)
-                #   6 - cc (lis or NIL)
-                #   7 - bcc (list or NIL)
-                #   8 - in-reply-to
-                #   9 - message-id
-                #
-                #   The elements of 2 through 7 consist of name,
-                #   at-domain-list (aka source route; typically NIL), mailbox
-                #   name, and host name.
-                #   Unless it is a group name; see page 77 of RFC 3501 for
-                #   details.
                 num = int(d[0])
-                datestr = envelope[0]
-                if datestr == 'NIL':
+                datestr = envelope.date
+                if datestr == 'NIL' or datestr == None:
                     datestr = internaldate
                 if datestr == None or datestr == "NIL":
                     date = nodate()
@@ -1828,14 +1840,21 @@ class Cmd(cmdprompt.CmdPrompt):
                     # perhaps better, make it part of the headline setting so if
                     # the user wants, they can see both.
                     date = date.astimezone(dateutil.tz.tzlocal())
-                subject = envelope[1]
+                subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
-                print("%(this)s %(num)4s %(date)19s %(subject)-30.30s |%(flags)s" % {
-                    'this': '>' if this else ' ',
-                    'num': num,
-                    'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
-                    'subject': subject,
-                    'flags': " ".join(flags),
+                froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
+                print("%(this)s "
+                    "%(num)4s "
+                    "%(date)19s "
+                    "%(from)-15.15s "
+                    "\033[3;34m%(subject)-30.30s\033[0m "
+                    "|%(flags)s" % {
+                        'this': '>' if this else ' ',
+                        'num': num,
+                        'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
+                        'subject': subject,
+                        'flags': " ".join(flags),
+                        'from': froms[0],
                     }
                     )
             except Exception as ev:
