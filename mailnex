@@ -1878,6 +1878,47 @@ class Cmd(cmdprompt.CmdPrompt):
         C.prevMessage = C.currentMessage
         C.currentMessage = res[-1] # This is another annoying mailx behavior. It'd be nice if the first message in the list were selected
         C.nextMessage = C.currentMessage
+
+    @needsConnection
+    def do_flag(self, args):
+        """Flag messages.
+
+        Marks messages as 'flagged'. Flagged messages show up with the ":f" message specifier.
+        This is similar to marking a message as a favorite or "starring" or "pinning" in other systems.
+        There is no special meaning to flagged messages; it is just a marking."""
+        if args:
+            res = self.parseMessageList(args)
+            if len(res) == 0:
+                print("No matches")
+                return
+        else:
+            res = [self.C.currentMessage]
+        if len(res) > 1:
+            print("Don't support multiple messages yet")
+        try:
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Flagged)" % res[0])
+        except Exception as ev:
+            print("Failed to flag: %s" % ev)
+    @needsConnection
+    def do_unflag(self, args):
+        """Remove Flag from messages.
+
+        see flag command for information. This command undoes that one.
+        """
+        if args:
+            res = self.parseMessageList(args)
+            if len(res) == 0:
+                print("No matches")
+                return
+        else:
+            res = [self.C.currentMessage]
+        if len(res) > 1:
+            print("Don't support multiple messages yet")
+        try:
+            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Flagged)" % res[0])
+        except Exception as ev:
+            print("Failed to unflag: %s" % ev)
+
     @needsConnection
     def do_namespace(self, args):
         C = self.C
