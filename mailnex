@@ -1843,20 +1843,19 @@ class Cmd(cmdprompt.CmdPrompt):
                 subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
                 froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
-                print("%(this)s "
-                    "%(num)4s "
-                    "%(date)19s "
-                    "%(from)-15.15s "
-                    "\033[3;34m%(subject)-30.30s\033[0m "
-                    "|%(flags)s" % {
+                print("{this} "
+                    "{num:4} "
+                    "{date:19} "
+                    "{from:<15.15} "
+                    "\033[3;34m{subject:<30.30}\033[0m "
+                    "|{flags}".format(**{
                         'this': '>' if this else ' ',
                         'num': num,
                         'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
                         'subject': subject,
                         'flags': " ".join(flags),
                         'from': froms[0],
-                    }
-                    )
+                    }))
             except Exception as ev:
                 print("  %s  (error displaying because '%s'. Data follows)" % (d[0], ev), repr(d))
 
