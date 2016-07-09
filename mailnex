@@ -74,6 +74,8 @@ import xdg.BaseDirectory
 import cmdprompt
 # Date handler
 import dateutil.parser
+# Color and other terminal stuffs
+import blessings
 # Other
 import tempfile
 import pyuv
@@ -1847,7 +1849,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     "{num:4} "
                     "{date:19} "
                     "{from:<15.15} "
-                    "\033[3;34m{subject:<30.30}\033[0m "
+                    "{t.italic_blue}{subject:<30.30}{t.normal} "
                     "|{flags}".format(**{
                         'this': '>' if this else ' ',
                         'num': num,
@@ -1855,6 +1857,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         'subject': subject,
                         'flags': " ".join(flags),
                         'from': froms[0],
+                        't': self.C.t,
                     }))
             except Exception as ev:
                 print("  %s  (error displaying because '%s'. Data follows)" % (d[0], ev), repr(d))
@@ -2131,6 +2134,7 @@ def interact():
                     print("unknown command in line %i" % lineno)
     if postConfFolder:
         cmd.do_connect(postConfFolder)
+    C.t = blessings.Terminal()
     t = pyuv.Timer(cmd.ptkevloop.realloop)
     t.start(cmd.bgcheck, 1, 5)
     try:
