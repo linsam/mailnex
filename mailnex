@@ -1835,7 +1835,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         print("Couldn't parse date string", datestr)
                         date = nodate()
                     if date.tzinfo is None:
-                        date = date.replace(tzinfo = dateutil.tz.gettz(self.C.settings['defaultTZ']))
+                        date = date.replace(tzinfo = dateutil.tz.gettz(self.C.settings['defaultTZ'].value))
                     # TODO: Make setting for local or original timezone. Or
                     # perhaps better, make it part of the headline setting so if
                     # the user wants, they can see both.
