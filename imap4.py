@@ -294,7 +294,16 @@ class imap4ClientConnection(object):
                         print("Unexpected tag %s received; was waiting for %s" % (tag, tagstr))
                         # Keep waiting for *our* tag
                         continue
-                    # TODO: Raise an exception for non OK replies
+                    if status.upper() != 'OK':
+                        # TODO: Use our own exception class
+                        # Ideally, we'd have one kind of exception for NO and
+                        # another for BAD, and one for whatever else we might
+                        # get back.
+                        e = Exception("IMAP error: %s" % string)
+                        e.imap_status = status
+                        e.imap_code = code
+                        e.imap_string = string
+                        raise e
                     return status, code, string
                 else:
                     # Process this line, but keep going
