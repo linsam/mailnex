@@ -2062,10 +2062,14 @@ class Cmd(cmdprompt.CmdPrompt):
                     # Straight assignment
                     key,value = map(lambda x: x.strip(), args.split('=', 1))
                     try:
-                        self.C.settings[key] = value
-                    except KeyError:
-                        self.C.settings.addOption(settings.UserOption(key, None))
-                        self.C.settings[key] = value
+                        try:
+                            self.C.settings[key] = value
+                        except KeyError:
+                            self.C.settings.addOption(settings.UserOption(key, None))
+                            self.C.settings[key] = value
+                    except ValueError:
+                        print("Invalid value for setting")
+
 
 
     def do_quit(self, args):
