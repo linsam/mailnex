@@ -1756,14 +1756,11 @@ class Cmd(cmdprompt.CmdPrompt):
         C = self.C
         M = C.connection
         if (args):
-            # TODO: Support any message nomenclature. In particular, '-'
-            if args == '$':
-                C.currentMessage = C.lastMessage
-            elif not args.isdigit():
-                print("Bad parms")
-                return
-            else:
-                C.currentMessage = int(args)
+            res = self.parseMessageList(args)
+            if len(res) == 0:
+                print("No matches")
+            C.currentMessage = res[0]
+            # TODO: update last list and such
         rows = 25 # TODO get from terminal
         start = (C.currentMessage - 1) // rows * rows
         # alternatively, start = C.currentMessage - (C.currentMessage % rows)
