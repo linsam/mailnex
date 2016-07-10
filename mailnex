@@ -1479,11 +1479,15 @@ class Cmd(cmdprompt.CmdPrompt):
         if args:
             to = args
         else:
+            # TODO: Support completions from, e.g. Khard
             to = self.singleprompt("To: ")
         # Default is space separated:
         to = to.split()
         subject = self.singleprompt("Subject: ")
-        return self.editMessage(to, subject, "")
+        newmsg = email.mime.text.MIMEText("")
+        newmsg['To'] = ", ".join(to)
+        newmsg['Subject'] = subject
+        return self.editMessage(newmsg)
 
     @needsConnection
     def do_reply(self, args):
@@ -1525,11 +1529,17 @@ class Cmd(cmdprompt.CmdPrompt):
             to[0:0] = [from_]
         else:
             from_ = "unkown"
+        newmsg = email.mime.text.MIMEText("Quoth %s\r\n%s" % (from_, body))
+        newmsg['To'] = ", ".join(to)
+        newmsg['From'] = self.C.settings['from'].value
+        newmsg['Subject'] = subject
+        if 'cc' in hdrs:
+            newmsg['Cc'] = ", ".join(",".join(hdrs['cc']).split(','))
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
-        return self.editMessage(to, subject, "Quoth %s:\r\n%s" % (from_, body))
+        return self.editMessage(newmsg)
 
 
-    def editMessage(self, to, subject, messageText):
+    def editMessage(self, message):
         while True:
             try:
                 # TODO: allow tabs in the input
@@ -1542,13 +1552,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 line = '.'
             if line.startswith("~~"):
                 # User wants to start the line with a tidle
-                messageText += line[1:] + '\r\n'
+                message.set_payload(message.get_payload() + line[1:] + '\r\n')
             elif line.startswith("~h"):
                 print("""  Help:
                     ~~ Text -> ~ Text   (enter a line starting with a single '~' into the message)
                     .          Send message
                     ~.         Send message
-                    ~q         Quit composing. Don't send. Append message to ~/dead.letter, unless 'drafts' is set.
+                    ~p         Print current message.
+                    ~q         Quit composing. Don't send. Append message to ~/dead.letter if save is set, unless 'drafts' is set.
+                    ~v         Edit message in external (visual) editor
                     ~x         Quit composing. Don't send. Discard current progress.
                     """)
                 # ~!command    = execute shell command
@@ -1597,17 +1609,18 @@ class Cmd(cmdprompt.CmdPrompt):
                     # the user's message if at all possible.
                     ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
                     # This is probably not the right format for dead.letter
-                    ofile.write("From user@localhost\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n" % (to, subject, messageText))
+                    ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
                 return
             elif line.startswith("~x"):
                 print("Message abandoned")
                 return
             elif line.startswith("~p"):
-                print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
+                print(message.as_string())
+                #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
             elif line.startswith("~v"):
                 f=tempfile.mkstemp()
                 #TODO: If editHeaders is set, also save the headers
-                os.write(f[0], messageText)
+                os.write(f[0], message.get_payload())
 
                 # Would normally do cli.run_in_terminal, but that tries to
                 # obtain the cursor position when done by asking the terminal
@@ -1629,7 +1642,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     os.lseek(f[0], 0, os.SEEK_SET)
                     fil = os.fdopen(f[0])
-                    messageText = fil.read()
+                    message.set_payload(fil.read())
                     fil.close()
                     del fil
                     os.unlink(f[1])
@@ -1641,30 +1654,33 @@ class Cmd(cmdprompt.CmdPrompt):
             # contents), and to add/edit arbitrary message parts. Should be
             # able to mark parts for signing, encryption, compression, etc.
             else:
-                messageText += line + '\r\n'
+                message.set_payload(message.get_payload() + line + '\r\n')
 
-        tpart = email.mime.text.MIMEText(quopri.encodestring(messageText))
-        tpart.set_charset("utf-8")
-        del tpart['Content-transfer-encoding']
-        tpart['Content-Transfer-Encoding'] = 'quoted-printable'
-        # m is the outer message. tpart is the text part of the message.
+        message.set_payload(quopri.encodestring(message.get_payload()))
+        message.set_charset("utf-8")
+        del message['Content-transfer-encoding']
+        message['Content-Transfer-Encoding'] = 'quoted-printable'
+        # m is the outer message. message is the text part of the message.
         # Simple case, these are the same. Eventually, m is a
-        # multipart/something that contains tpart somewhere within it. This is
+        # multipart/something that contains message somewhere within it. This is
         # the case for at least rich text, file attachments, and
         # signature/encryption messages. We'll start simple.
-        m = tpart
+        m = message
         # Mandatory headers: From: and Date:
         # TODO: Allow this to be set by the user on a per-message basis
-        m['From'] = self.C.settings['from'].value
-        m['Date'] = email.utils.formatdate(localtime=True) # Allow user to override local and possibly timezone?
+        if not 'From' in m:
+            m['From'] = self.C.settings['from'].value
+        if not 'Date' in m:
+            m['Date'] = email.utils.formatdate(localtime=True) # Allow user to override local and possibly timezone?
         # Should headers: Message-Id
-        m['Message-Id'] = email.utils.make_msgid("mailnex")
-        # Delivery headers: To:, Cc:, possibly Bcc:
-        m['To'] = ",".join(to)
-        # Why wouldn't you do this headers: Subject
-        m['Subject'] = subject
+        if not 'Message-Id' in m:
+            m['Message-Id'] = email.utils.make_msgid("mailnex")
         # Misc headers
-        m['User-Agent'] = 'mailnex 0.0' # TODO: Use global version string; allow user override
+        if not 'User-Agent' in m:
+            # TODO: User-Agent isn't actually a mail header, it is a news
+            # header. IANA doesn't currently recognize any header for email
+            # MUA. mailx and Thunderbird us User-Agent. Eudora and Outlook use X-Mailer.
+            m['User-Agent'] = 'mailnex 0.0' # TODO: Use global version string; allow user override
         # TODO: break out sending the message to a function. The function
         # should be invoked by the caller of this function instead of this
         # function. Rationale: perhaps we want to support editing a message
