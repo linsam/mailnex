@@ -83,6 +83,22 @@ import settings
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
+# Enums
+ATTR_NEW = 0
+ATTR_UNREAD = 1
+ATTR_NEWREAD = 2
+ATTR_OLD = 3
+ATTR_SAVED = 4
+ATTR_PRESERVED = 5
+ATTR_MBOXED = 6
+ATTR_FLAGGED = 7
+ATTR_ANSWERED = 8
+ATTR_DRAFT = 9
+ATTR_KILLED = 10
+ATTR_THREAD_START = 11
+ATTR_THREAD = 12
+ATTR_JUNK = 13
+
 class Context(object):
     def __init__(self):
         object.__init__(self)
@@ -1826,6 +1842,34 @@ class Cmd(cmdprompt.CmdPrompt):
             flags = getResultPart("FLAGS", d[1][0])
             envelope = Envelope(*envelope)
 
+            # Handle attrs. First pass, only do collapsed form.
+            # TODO for second pass, define a class that is initialized with
+            # the flags (and possibly other data) with a __format__  method
+            # that allows the user to specify groups of characters with
+            # priorities. E.g. first char is the NURO set, second is flagged,
+            # third is answered, 4+ is whatever is left.
+            # TODO: The priorities for flags are guessed by me based on what
+            # I'd want to see. I'm guessing there's a POSIX standard for this.
+            # Or I could look at mailx source code, but so far I've done
+            # neither.
+            uflags = map(lambda x: x.upper(), flags)
+            if '\FLAGGED' in uflags:
+                attr = self.C.settings.attrlist.value[ATTR_FLAGGED]
+            elif '\DRAFT' in uflags:
+                attr = self.C.settings.attrlist.value[ATTR_DRAFT]
+            elif '\ANSWERED' in uflags:
+                attr = self.C.settings.attrlist.value[ATTR_ANSWERED]
+            elif '\RECENT' in uflags:
+                if '\SEEN' in uflags:
+                    attr = self.C.settings.attrlist.value[ATTR_NEWREAD]
+                else:
+                    attr = self.C.settings.attrlist.value[ATTR_NEW]
+            else:
+                if '\SEEN' in uflags:
+                    attr = self.C.settings.attrlist.value[ATTR_OLD]
+                else:
+                    attr = self.C.settings.attrlist.value[ATTR_UNREAD]
+
             try:
                 num = int(d[0])
                 datestr = envelope.date
@@ -1849,6 +1893,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 this = True if (num == self.C.currentMessage) else False
                 froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
                 print(self.C.settings.headline.value.format(**{
+                        'attr': attr,
                         'this': '>' if this else ' ',
                         'num': num,
                         'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
@@ -2273,6 +2318,22 @@ def interact():
     C.lastcommand=""
     cmd.C = C
     options = settings.Options()
+    options.addOption(settings.StringOption("attrlist", "NUROSPMFATK+-J", doc=
+        """Character mapping for attribute in headline.
+
+        Characters represent: new, unread but old, new but read, read and old,
+        saved, preserved, mboxed, flagged, answered, draft, killed, thread
+        start, thread, and junk.
+
+        Currently, we don't support saved, preserved, mboxed, killed, threads,
+        or junk.
+
+        Default mailx (presumably POSIX) is "NUROSPMFATK+-J".
+        BSD style uses "NU  *HMFATK+-J.", which is read messages aren't
+        marked, and saved/preserved get different letters (presumably 'Held'
+        instead of 'Preserved')
+        """
+        ))
     # Debug options:
     #   exception - show detailed exceptions instead of short messages
     #   general - show general tidbits during runtime
@@ -2287,7 +2348,7 @@ def interact():
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.BoolOption("receiptheaders", 0, doc="Show headers for messages as they arrive"))
-    options.addOption(settings.StringOption("headline", "{this} {num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
+    options.addOption(settings.StringOption("headline", "{this}{attr}{num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
         doc="""Format string for headers lines (e.g. in headers and from commands)
 
         The format string follows the python format specification.
@@ -2305,12 +2366,16 @@ def interact():
         The following are currently supported fields (subject to change):
 
             this        - a '>' if the message is the current message, a
-                          space otherwise
-            num         - the message number
+                          space otherwise (%> from mailx)
+            attr        - Collapsed attribute from attrlist setting ('%a'
+                          from mailx) when plain. Use format for more control.
+            num         - the message number (%m from mailx)
             date        - the message date - TODO: custom date formatting
-            subject     - the subject of the message
+                          (roughly %d)
+            subject     - the subject of the message (%s)
             flags       - space saparated list of imap flags
             from        - first from entry as name or address (TODO: setting to control that)
+                          (%f from mailx)
             t           - terminal attributes. Use as 't.red' to make following
                           text red, or 't.bold' for bold. 't.normal' returns to
                           normal text. Attributes can be combined:
