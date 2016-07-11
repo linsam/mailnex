@@ -1810,7 +1810,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: update last list and such
         rows = 25 # TODO get from terminal
         start = (C.currentMessage - 1) // rows * rows
-        # alternatively, start = C.currentMessage - (C.currentMessage % rows)
+        # ^- alternatively, start = C.currentMessage - (C.currentMessage % rows)
         start += 1 # IMAP is 1's based
         last = start + rows - 1
         if (args):
@@ -1828,7 +1828,11 @@ class Cmd(cmdprompt.CmdPrompt):
         self.showHeaders("%i:%i" % (start, last))
 
     def showHeaders(self, messageList):
-        data = self.C.connection.fetch("%s" % messageList, "(ENVELOPE INTERNALDATE FLAGS)")
+        msgset = "%s" % messageList
+        args = "(ENVELOPE INTERNALDATE FLAGS)"
+        if self.C.settings.debug.general:
+            print("executing IMAP command FETCH {} {}".format(msgset, args))
+        data = self.C.connection.fetch(msgset, args)
         #data = normalizeFetch(data)
         for d in data:
             try:
@@ -2124,7 +2128,133 @@ class Cmd(cmdprompt.CmdPrompt):
                     except ValueError:
                         print("Invalid value for setting")
 
+    def do_z(self, args):
+        """Scroll pages of headers
 
+        On its own, go to next page.
+        Given a +/-, go to next/previous page.
+        Given a number, go to that page number.
+        Given +/- and a number, go that many pages forward/back.
+        The first page is page 0"""
+        # TODO: Allow pages to be 1's based indexing, most of the rest of this
+        # program is 1's based (the first message is message 1, not 0). Should
+        # be an option.
+
+        # First, find out where we are
+        rows = 25
+        start = (self.C.currentMessage - 1) // rows * rows
+        # ^- alternatively, start = self.C.currentMessage - (self.C.currentMessage % rows)
+        # Next, figure out where we are going
+        if not args:
+            args = '+1'
+        elif args == '+':
+            args = '+1'
+        elif args == '-':
+            args = '-1'
+        if args[0] not in ['+', '-']:
+            # Absolute page
+            if not args.isdigit():
+                print("unrecognized scrolling command \"%s\"" % args)
+                return
+            start = int(args) * rows
+        else:
+            # Relative page
+            if not args[1:].isdigit():
+                print("unrecognized scrolling command \"%s\"" % args)
+                return
+            if args[0] == '+':
+                start += int(args[1:]) * rows
+            else:
+                start -= int(args[1:]) * rows
+        if start < 0:
+            print("On first page of message")
+            start = 0
+        if start > self.C.lastMessage - 1:
+            print("On last page of messages")
+            start = (self.C.lastMessage - 1) // rows * rows
+        start += 1 # IMAP is 1's based
+        last = start + rows - 1
+        if last > self.C.lastMessage:
+            last = self.C.lastMessage
+        self.C.prevMessage = self.C.currentMessage
+        self.C.currentMessage = start
+        # NOTE: in mailx, this command does not 'mark any messages', which is
+        # to say, doesn't update the lastList (whereas 'headers' with an
+        # argument does)
+        self.showHeaders("%i:%i" % (start, last))
+
+    def do_Z(self, args):
+        """Like z, but for interesting messages.
+
+        Goes to page with flagged or new (not just unread) messages.
+
+        Unlike z, doesn't take numbers, only nothing, +, or -
+        """
+        # TODO: Allow it to take numbers? Presumably, this would select the
+        # page among the interesting pages, so the first thing to do is get a
+        # list of interesting pages, then figure out where we are, then move
+        # through the list. We have to do most of that anyway, so I don't know
+        # why mailx doesn't do this. Maybe they do a linear search?
+        rows = 25
+        msgs = map(int,self.C.connection.search('utf-8', '(or FLAGGED NEW)'))
+        if self.C.settings.debug.general:
+            print("{} msgs {}".format(len(msgs), msgs))
+        # Observing mailx behavior, if there isn't anything interesting, go to
+        # the last page. If we were on the last page, and '-' isn't specified
+        # in args, display also the "On last page or messages" message.
+        # Likewise, if the current page is after the last interesting page,
+        # display the message and go to the last interesting page.
+        # This should be able to be generalized by selecting the last message
+        # for the target page and performing the normal actions.
+        if len(msgs) == 0:
+            msgs = [self.C.lastMessage]
+        currentPage = (self.C.currentMessage - 1) // rows
+        lastPage = (self.C.lastMessage - 1) // rows
+        interestingPages = sorted(list(set((x - 1) // rows for x in msgs)))
+        if self.C.settings.debug.general:
+            print("Current {}\nLast {}\n{} Interesting {}\n".format(currentPage, lastPage, len(interestingPages), tuple((x, x * rows) for x in interestingPages)))
+        if currentPage in interestingPages:
+            i = interestingPages.index(currentPage)
+        else:
+            # insert current page into list so that we can get a list index
+            # for it. There is surely a more effecient way to do this, but I'm
+            # hoping no one has a huge list of interesting messages anyway.
+            for i in range(len(interestingPages)):
+                if interestingPages[i] > currentPage:
+                    interestingPages.insert(i, currentPage)
+                    break
+            else:
+                # Didn't find it yet, so we must be biggest, append to list
+                interestingPages.append(currentPage)
+                i += 1
+        if self.C.settings.debug.general:
+            print("page index {} of {}".format(i, interestingPages))
+        # Now proceed like 'z', but on our list. Also, don't accept anything
+        # other than '+' and '-' (for whatever reason). TODO: Allow it via an
+        # option? Just allow it anyhow?
+        if not args:
+            args = "+"
+        if args == "+":
+            i += 1
+            if i >= len(interestingPages):
+                print("On last page of messages")
+                i = len(interestingPages) - 1
+        elif args == "-":
+            i -= 1
+            if i < 0:
+                print("On first page of messages")
+                i = 0
+        else:
+            print("Bad argument to Z")
+            return
+        page = interestingPages[i]
+        start = page * rows + 1
+        end = (page + 1) * rows
+        if end > self.C.lastMessage:
+            end = self.C.lastMessage
+        self.C.prevMessage = self.C.currentMessage
+        self.C.currentMessage = start
+        self.showHeaders("{}:{}".format(start, end))
 
     def do_quit(self, args):
         # TODO: Support synchronizing if user setting asks for it. Something like:
