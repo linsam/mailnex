@@ -2208,6 +2208,10 @@ class Cmd(cmdprompt.CmdPrompt):
         # for the target page and performing the normal actions.
         if len(msgs) == 0:
             msgs = [self.C.lastMessage]
+        # These ignores feel dirty
+        ignoreFirstPage = False
+        ignoreLastPage = False
+        # Current information.
         currentPage = (self.C.currentMessage - 1) // rows
         lastPage = (self.C.lastMessage - 1) // rows
         interestingPages = sorted(list(set((x - 1) // rows for x in msgs)))
@@ -2222,11 +2226,14 @@ class Cmd(cmdprompt.CmdPrompt):
             for i in range(len(interestingPages)):
                 if interestingPages[i] > currentPage:
                     interestingPages.insert(i, currentPage)
+                    if (i == 0):
+                        ignoreFirstPage = True
                     break
             else:
                 # Didn't find it yet, so we must be biggest, append to list
                 interestingPages.append(currentPage)
                 i += 1
+                ignoreLastPage = True
         if self.C.settings.debug.general:
             print("page index {} of {}".format(i, interestingPages))
         # Now proceed like 'z', but on our list. Also, don't accept anything
@@ -2236,14 +2243,14 @@ class Cmd(cmdprompt.CmdPrompt):
             args = "+"
         if args == "+":
             i += 1
-            if i >= len(interestingPages):
+            if i >= len(interestingPages) - int(ignoreLastPage):
                 print("On last page of messages")
-                i = len(interestingPages) - 1
+                i = len(interestingPages) - 1 - int(ignoreLastPage)
         elif args == "-":
             i -= 1
-            if i < 0:
+            if i < 0 + int(ignoreFirstPage):
                 print("On first page of messages")
-                i = 0
+                i = 0 + int(ignoreFirstPage)
         else:
             print("Bad argument to Z")
             return
