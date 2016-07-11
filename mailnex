@@ -787,6 +787,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: boundary check
             return [self.C.currentMessage - 1]
         if args == '`':
+            # TODO: print "No previously marked messages" if the list is empty
             return self.C.lastList
         if args == '^':
             return [1]
@@ -1027,6 +1028,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if self.C.settings.debug.general:
                 # TODO: Maybe we should output this kind of info anyway...
                 print("Current message: %s. Last message: %s" % (self.C.currentMessage, self.C.lastMessage))
+            self.C.lastList = []
 
         except KeyboardInterrupt:
             print("Aborting connection")
