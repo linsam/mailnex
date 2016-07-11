@@ -148,6 +148,12 @@ class imap4ClientConnection(object):
         # This function exists so that we can have a static interface while
         # experimenting with changing the backend.
         self.cbs[name] = function
+    def clearCB(self, name):
+        try:
+            del self.cbs[name]
+        except KeyError:
+            # Don't worry if the callback doesn't exist
+            pass
     def processCodes(self, status, code, string):
         # Assert code[0] == '[' and code[-1] == ']'
         codes = code[1:-1].split()
