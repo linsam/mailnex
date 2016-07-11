@@ -1822,6 +1822,11 @@ class Cmd(cmdprompt.CmdPrompt):
         if last == 0:
             print("No applicable messages")
             return
+        print("Page {current} of {last}, {rows} per page".format(
+            current = (start - 1) // rows,
+            last = (self.C.lastMessage - 1) // rows,
+            rows = rows,
+            ))
         self.showHeaders("%i:%i" % (start, last))
 
     def showHeaders(self, messageList):
@@ -2216,6 +2221,11 @@ class Cmd(cmdprompt.CmdPrompt):
         # NOTE: in mailx, this command does not 'mark any messages', which is
         # to say, doesn't update the lastList (whereas 'headers' with an
         # argument does)
+        print("Page {current} of {last}, {rows} per page".format(
+            current = (start - 1) // rows,
+            last = (self.C.lastMessage - 1) // rows,
+            rows = rows,
+            ))
         self.showHeaders("%i:%i" % (start, last))
 
     def do_Z(self, args):
@@ -2254,6 +2264,8 @@ class Cmd(cmdprompt.CmdPrompt):
             print("Current {}\nLast {}\n{} Interesting {}\n".format(currentPage, lastPage, len(interestingPages), tuple((x, x * rows) for x in interestingPages)))
         if currentPage in interestingPages:
             i = interestingPages.index(currentPage)
+            addedPage = False
+            incDrop = False
         else:
             # insert current page into list so that we can get a list index
             # for it. There is surely a more effecient way to do this, but I'm
@@ -2269,6 +2281,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 interestingPages.append(currentPage)
                 i += 1
                 ignoreLastPage = True
+            addedPage = True
+            incDrop = True
         if self.C.settings.debug.general:
             print("page index {} of {}".format(i, interestingPages))
         # Now proceed like 'z', but on our list. Also, don't accept anything
@@ -2281,11 +2295,14 @@ class Cmd(cmdprompt.CmdPrompt):
             if i >= len(interestingPages) - int(ignoreLastPage):
                 print("On last page of messages")
                 i = len(interestingPages) - 1 - int(ignoreLastPage)
+                incDrop = False
         elif args == "-":
+            incDrop = False # don't drop the index for negative going movement
             i -= 1
             if i < 0 + int(ignoreFirstPage):
                 print("On first page of messages")
                 i = 0 + int(ignoreFirstPage)
+                incDrop = addedPage
         else:
             print("Bad argument to Z")
             return
@@ -2296,6 +2313,13 @@ class Cmd(cmdprompt.CmdPrompt):
             end = self.C.lastMessage
         self.C.prevMessage = self.C.currentMessage
         self.C.currentMessage = start
+        print("Page {current} of {last}, Interesting Page {icurrent} of {ilast}, {rows} per page".format(
+            current = (start - 1) // rows,
+            last = (self.C.lastMessage - 1) // rows,
+            icurrent = i - int(incDrop),
+            ilast = len(interestingPages) - 1 - int(addedPage),
+            rows = rows,
+            ))
         self.showHeaders("{}:{}".format(start, end))
 
     def do_quit(self, args):
@@ -2344,6 +2368,7 @@ def interact():
     # Use the username and hostname of this machine as a (hopefully reasonable)
     # guess for the from line.
     options.addOption(settings.StringOption("from", "%s@%s" % (getpass.getuser(), os.uname()[1]), doc="Value to use for From field of composed email messages"))
+    options.addOption(settings.BoolOption("headerstats", 0, doc="Show information about the page of message headers displayed in headers and z/Z commands"))
     options.addOption(settings.StringOption("PAGER", "internal"))
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
