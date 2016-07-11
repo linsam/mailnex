@@ -1842,7 +1842,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
                 froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
-                print(self.C.settings.headers.value.format(**{
+                print(self.C.settings.headline.value.format(**{
                         'this': '>' if this else ' ',
                         'num': num,
                         'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
@@ -2272,7 +2272,7 @@ def interact():
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.BoolOption("receiptheaders", 0, doc="Show headers for messages as they arrive"))
-    options.addOption(settings.StringOption("headers", "{this} {num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
+    options.addOption(settings.StringOption("headline", "{this} {num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
         doc="""Format string for headers lines (e.g. in headers and from commands)
 
         The format string follows the python format specification.
