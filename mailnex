@@ -2049,7 +2049,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 # No equals, might be boolean or reset to default...
                 if args[-2:] == '??':
                     # Print details
-                    opt = self.C.settings[args[:-2]]
+                    try:
+                        opt = self.C.settings[args[:-2]]
+                    except KeyError:
+                        print("No setting named %s" % args[:-2])
                     print("Setting: %s" % args[:-2])
                     # TODO: Show type
                     print("Description:")
@@ -2065,10 +2068,16 @@ class Cmd(cmdprompt.CmdPrompt):
                     print("current:", opt)
                 elif args[-1] == '?':
                     # Print current value
-                    print(self.C.settings[args[:-1]])
+                    try:
+                        print(self.C.settings[args[:-1]])
+                    except KeyError:
+                        print("No setting named %s" % args[:-1])
                 elif args[-1] == '&':
                     # Reset to default value
-                    opt = self.C.settings[args[:-1]]
+                    try:
+                        opt = self.C.settings[args[:-1]]
+                    except KeyError:
+                        print("No setting named %s" % args[:-1])
                     opt.value = opt.default
                 elif args[-1].isalpha():
                     # Must be a boolean
