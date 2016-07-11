@@ -196,6 +196,13 @@ class imap4ClientConnection(object):
         # CONDSTORE additions
         elif codename == "HIGHESTMODSEQ":
             self.highestmodseq = int(codes[1], 10)
+        elif codename == "NOMODSEQ":
+            self.highestmodseq = None
+        # QRESYNC additions
+        elif codename == "CLOSED":
+            pass
+            # Also VANISHED, but that shouldn't happen unless we explicitly
+            # enable QRESYNC
         else:
             print("unknown code '%s'; ignoring" % codename)
 
