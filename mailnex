@@ -870,12 +870,16 @@ class Cmd(cmdprompt.CmdPrompt):
         C.nextMessage = 1
         C.lastMessage = len(M) - 1
         print("Opened maildir with %i messages." % len(M))
-    def do_connect(self, args):
-        """Connect to the given imap host using local username.
+    def do_folder(self, args):
+        """Connect to the given mailbox.
 
-        You should use the folder command once that's working instead.
+        If argument starts with a '+', the value of setting 'folder' is prepended to the target
 
-        This function should eventually dissappear."""
+        Currently supported protocols:
+            imap://     - IMAP4r1 with STARTTLS
+            imaps://    - IMAP4r1 over SSL
+        """
+
         C = self.C
         argss = args.split()
         user = None
@@ -884,6 +888,8 @@ class Cmd(cmdprompt.CmdPrompt):
             host = argss[0]
             port = int(argss[1])
         elif len(argss) == 1:
+            if args.startswith("+"):
+                args = self.C.settings.folder.value + args[1:]
             m = None
             if args.startswith("imap://"):
                 m = re.match(r'([^@]*@)?([^/]*)(/.*)', args[7:])
@@ -2302,6 +2308,7 @@ def interact():
                           't.italic_blue_on_red' makes italic blue text on red
                           background.
         """))
+    options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
     C.settings = options
     postConfFolder = None
     if confFile:
@@ -2333,7 +2340,7 @@ def interact():
                 else:
                     print("unknown command in line %i" % lineno)
     if postConfFolder:
-        cmd.do_connect(postConfFolder)
+        cmd.do_folder(postConfFolder)
     C.t = blessings.Terminal()
     t = pyuv.Timer(cmd.ptkevloop.realloop)
     t.start(cmd.bgcheck, 1, 5)
