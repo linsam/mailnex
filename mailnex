@@ -57,8 +57,7 @@ from functools import wraps
 # xapian search engine
 import xapian
 # various email helpers
-import imaplib
-imaplib._MAXLINE *= 10
+import imap4
 import email
 import email.utils
 import email.mime.text
@@ -319,50 +318,6 @@ def unpackStruct(data, options, depth=1, tag="", predesc=""):
             if options.debug.struct:
                 print("%s   %s%s/%s%s" % (tag, predesc, data[0], data[1], extra))
     return this
-
-def normalizeFetch(data):
-    """Re-listize fetch results.
-
-    python standard imaplib (at least in python 2.7) has a hard-to-fathom way
-    to represent results, especially when the results include literal data.
-
-    This function attempts to re-structure the results into a sane enough
-    array that processAtoms() can handle it.
-    """
-    # Idea here is that continuation data starts with a space. I hope.
-    # example from fetching envelope data from two messages, 898 and 899. 898
-    # has some literal data. I've obscured and redacted some stuff for
-    # clarity.
-    #
-    # r = [
-    #   (
-    #     '898 (ENVELOPE ("date" {81}',
-    #     'Subject that is 81 bytes long'
-    #   ),
-    #   ' ((address)) ((address)) ((etc..)) NIL NIL "messageid" "messageid")),
-    #   '899 (ENVELOPE ("date" "Subject" ((addr)) ((addr)) ((etc...)) NIL NIL NIL "messageid"))'
-    # ]
-    #
-    # As can be seen, message 898's data is spread across r[0][0], r[0][1],
-    # and r[1]. Message 899's data is in r[2].
-    #
-    # Without knowing a-priori that 898 had a literal in it, it is impossible
-    # just to know where the second requested result is (you'd expect 898 in
-    # r[0] and 899 in r[1] and not expect there to even be an r[2]).
-    res = []
-    for i in range(len(data)):
-        if isinstance(data[i], str):
-            if data[i][0] == ' ':
-                res[-1] += data[i]
-            else:
-                res.append(data[i])
-        else:
-            # NOTE: This isn't good; we have probable data loss. It is unknown
-            # if the literal should have had a \r or \n or \r\n in it,
-            # assuming imaplib messed it up. We really should do our own
-            # implementation.
-            res.append("\n".join(data[i]))
-    return res
 
 def dictifyList(lst):
     # convert to list of key,val pairs, then to dictionary
@@ -926,7 +881,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("disconnecting")
             C.connection.close()
             #C.connection.logout()
-            C = None
+            C.connection = None
         print("Connecting to '%s'" % args)
         argss = args.split()
         user = None
@@ -962,7 +917,6 @@ class Cmd(cmdprompt.CmdPrompt):
                     box = box[1:]
         else:
             raise Exception("Unknown connect format")
-        import imap4
         c = imap4.imap4ClientConnection()
         c.debug = C.settings.debug.imap
         print("WARNING: Certificates aren't checked. Remote host may be spoofed!")
@@ -1061,8 +1015,6 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @needsConnection
     def do_index(self, args):
-        #M = imaplib.IMAP4("localhost")
-        #M.login("john", getpass.getpass())
         C = self.C
         M = C.connection
         i = 1
