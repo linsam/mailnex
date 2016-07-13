@@ -1779,12 +1779,6 @@ class Cmd(cmdprompt.CmdPrompt):
                         disp(i)
             disp(res)
 
-# 254 area is interesting; actually uses literals :-/
-
-    #def complete_headers(self, *args):
-        #print(" complete_headers", args)
-        # Args are 'word', 'line', word start, cursor (I *think*)
-        #return ['meh', 'stuff']
     @shortcut("h")
     @needsConnection
     def do_headers(self, args):
@@ -2456,5 +2450,3 @@ def interact():
 if __name__ == "__main__":
     import sys
     interact()
-
-# 2357
