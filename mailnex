@@ -184,6 +184,89 @@ def shortcut(name):
         return shortcutWrapper
     return wrap1
 
+def argsToMessageList(func):
+    """This decorator causes a call to self.parseMessageList on the single (non-self) argument, then calls the real function with the list as a single array parameter or None.
+
+    If no arguments are provided, uses None. This allows a command to distinguish between arguments that produce no patch, and a lack of arguments.
+
+    We could just return the current message when nothing is given, but that would make the updateMessageSelectionAtEnd decorator much harder to implement, since it should unmark on no argument (that is, clear the lastList).
+
+    As well, some commands behave differently with or without an argument. E.g. headers does different selection updates and displays markers differently.
+    """
+    @wraps(func)
+    def argsToMessageListWrapper(self, args):
+        if args:
+            msglist = self.parseMessageList(args)
+        else:
+            msglist = None
+        return func(self, msglist)
+    return argsToMessageListWrapper
+
+def updateMessageSelectionAtEnd(func):
+    """This decorator updates message selections after the wrapped function completes, but only if no exception is raised.
+
+    The wrapped function must take a message list as its first non-self parameter. (for example, wrap this with argsToMessageList)
+
+    Most commands select the last message of the message list as the current message and update the previous message to the previously current message, and update the marked message list to be the given message list.
+    """
+    @wraps(func)
+    def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
+        # First, cache the current message; the command we run might change
+        # it, but we need it to update the last message correctly. We'll also
+        # use it to restore the current message if the function fails.
+        previouslyCurrent = self.C.currentMessage
+        try:
+            print("running func with {}".format(msglist))
+            res = func(self, msglist, *args, **kwargs)
+        except Exception:
+            # First restore the current message if we can, but don't fail if
+            # we can't.
+            try:
+                self.C.currentMessage = previouslyCurrent
+            except:
+                pass
+            # Next pass it on up
+            raise
+        # We successfully finished (well, didn't have an exception), so
+        # update the values
+        # However, don't update if the message list was empty
+        if msglist is None:
+            self.C.lastList = []
+        else:
+            self.C.lastList = msglist
+            if len(msglist):
+                self.C.prevMessage = previouslyCurrent
+                self.C.currentMessage = msglist[-1]
+                #TODO how to handle self.C.nextMessage?
+        return res
+    return updateMessageSelectionAtEnd
+
+def showExceptions(func):
+    """This decorator displays exceptions and returns to normal operation.
+
+    It should only wrap commands, not the functions that commands call, because we cannot know what a
+    valid return value would be. It takes do_* argument 'args' only, to reduce the likelihood of
+    mis-application. As such, it should probably be the outermost wrapper.
+
+    This will print a short exception unless the debug setting contains the exception flag, in which
+    case a full stack trace will be shown."""
+    @wraps(func)
+    def showExceptionsWrapper(self, args):
+        try:
+            return func(self, args)
+        except Exception as ev:
+            import traceback
+            if not self.C.settings.debug.exception:
+                # TODO: Print the exception type hierarchy. E.g.
+                # "exceptions.KeyError" instead of just "KeyError", since some
+                # modules may define same-named exceptions with different
+                # meanings.
+                print("Error occurred in command '{}': {}".format(func.__name__.lstrip('do_'), traceback.format_exception_only(type(ev), ev)[-1]))
+            else:
+                traceback.print_exc()
+            print("Warning: mailnex may now be in an inconsistent state due to the above error.")
+    return showExceptionsWrapper
+
 class structureRoot(object):
     def __init__(self, tag, type_, subtype):
         object.__init__(self)
@@ -786,7 +869,7 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 s.add(int(r))
 
-        return list(s)
+        return sorted(list(s))
 
     
     def default(self, args):
@@ -858,12 +941,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 # print will update nextMessage for us
                 self.do_print("")
 
+    @showExceptions
     def do_testq(self, text):
-        try:
-            print(processAtoms(text), self.C.settings)
-        except Exception as ev:
-            print(ev)
+        print(processAtoms(text), self.C.settings)
 
+    @showExceptions
     def do_maildir(self, args):
         """Connect to the given maildir.
 
@@ -886,6 +968,8 @@ class Cmd(cmdprompt.CmdPrompt):
         C.nextMessage = 1
         C.lastMessage = len(M) - 1
         print("Opened maildir with %i messages." % len(M))
+
+    @showExceptions
     def do_folder(self, args):
         """Connect to the given mailbox.
 
@@ -1000,6 +1084,7 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.connection = c
             # By default, mailx marks the first unseen or flagged message as
             # the current message.
+            # TODO: Actually, I think its the first new message, then flagged.
             if not hasattr(self.C.connection, 'unseen') or not self.C.connection.unseen:
                 # IMAP server didn't give us the first unseen message on
                 # connect; we'll have to ask for it. It could either be that
@@ -1033,6 +1118,7 @@ class Cmd(cmdprompt.CmdPrompt):
         except KeyboardInterrupt:
             print("Aborting")
             return
+
     def newExist(self, value):
         delta = value - self.C.lastMessage
         self.C.lastMessage = value
@@ -1048,6 +1134,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.cli.run_in_terminal(lambda: self.showHeaders("%i" % value))
             else:
                 self.cli.run_in_terminal(lambda: lself.showHeaders("%i:%i" % (value - delta, value)))
+
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing
         # the server to send us untagged updates (e.g. new message
@@ -1058,6 +1145,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # time.
         self.C.connection.doSimpleCommand("noop")
 
+    @showExceptions
     @needsConnection
     def do_index(self, args):
         C = self.C
@@ -1129,21 +1217,21 @@ class Cmd(cmdprompt.CmdPrompt):
         print()
         print("Done!")
 
+    @showExceptions
     @needsConnection
-    def do_print(self, args):
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_print(self, msglist):
         C = self.C
         M = C.connection
-        if args:
-            msgs = self.parseMessageList(args)
-            if len(msgs) == 0:
-                print("No matches")
-                return
-        else:
+        if msglist is None:
             index = C.currentMessage
             if index == 0 or index > self.C.lastMessage:
                 print("No applicable messages")
                 return
             msgs = [index]
+        else:
+            msgs = msglist
 
         # Note: when we go to get the body structure, we should do a simple
         # search for text/plain. We *should* walk each level of the body
@@ -1384,6 +1472,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # well.
             C.nextMessage = C.currentMessage + 1
 
+    @showExceptions
     @needsConnection
     def do_latest_threads(self, args):
         """Show the latest 10 threads. If given a number, show the thread containing *that* message.
@@ -1446,32 +1535,37 @@ class Cmd(cmdprompt.CmdPrompt):
             # text. A difficulty will be in-line responses. Almost impossible
             # will probably be people who inline response with color only
             # where their reply doesn't mark quoted lines (like Outlook)
+
+    @showExceptions
     @needsConnection
-    def do_show(self, args):
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_show(self, msglist):
         """Show the raw, unprocessed message"""
         C = self.C
         M = C.connection
-        if args:
-            try:
-                index = int(args)
-            except:
-                print("bad arguments")
-                return
-        else:
+        if msglist is None:
             index = C.currentMessage
-        if index == 0 or index > self.C.lastMessage:
-            print("No applicable messages")
-            return
-        data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-        parts = processAtoms(data[0][1], self.C.settings)
-        headers = parts[0][1]
-        body = parts[0][3]
-        #content = headers.encode('utf-8') + body.encode('utf-8')
-        content = str(headers) + str(body)
+            if index == 0 or index > self.C.lastMessage:
+                print("No applicable messages")
+                return
+            msgs = [index]
+        else:
+            msgs = msglist
+        content = b""
+        for index in msgs:
+            data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+            parts = processAtoms(data[0][1], self.C.settings)
+            headers = parts[0][1]
+            body = parts[0][3]
+            #content = headers.encode('utf-8') + body.encode('utf-8')
+            content += "Message {}:\n".format(index) + str(headers) + str(body)
+        # TODO: Process content for control chars?
         import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         s.communicate(content)
 
+    @showExceptions
     def do_mail(self, args):
         """Compose and send a message"""
         # TODO: Completion of email addresses
@@ -1488,6 +1582,7 @@ class Cmd(cmdprompt.CmdPrompt):
         newmsg['Subject'] = subject
         return self.editMessage(newmsg)
 
+    @showExceptions
     @needsConnection
     def do_reply(self, args):
         C = self.C
@@ -1700,18 +1795,25 @@ class Cmd(cmdprompt.CmdPrompt):
         s.communicate(m.as_string())
 
 
+    @showExceptions
     @needsConnection
-    def do_mheader(self, args):
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_mheader(self, msglist):
         C = self.C
         M = C.connection
-        if 0 and args:
-            try:
-                index = int(args)
-            except:
-                print("bad arguments")
-                return
-        else:
+        if msglist is None:
             index = C.currentMessage
+            if index == 0 or index > self.C.lastMessage:
+                print("No applicable messages")
+                return
+        elif len(msglist) == 0:
+            print("No matches")
+            return
+        else:
+            # For now, only support showing one set of headers. This is a
+            # debugging command for now anyhow.
+            index = msglist[0]
         data = M.fetch(args, '(BODY.PEEK[HEADER])')
         headers = processHeaders(processAtoms(data[0][1])[0][1], self.C.settings)
         if "subject" in headers:
@@ -1726,18 +1828,24 @@ class Cmd(cmdprompt.CmdPrompt):
             for i in range(len(val)):
                 print("%s[%i]=%s" % (key, i, repr(val)))
 
+    @showExceptions
     @needsConnection
-    def do_structure(self, args):
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_structure(self, msglist):
         C = self.C
         M = C.connection
-        if args:
-            try:
-                index = int(args)
-            except:
-                print("bad arguments")
-                return
-        else:
+        if msglist is None:
             index = C.currentMessage
+            if index == 0 or index > self.C.lastMessage:
+                print("No applicable messages")
+                return
+        elif len(msglist) == 0:
+            print("No matches")
+            return
+        else:
+            # For now, only support showing one set of headers.
+            index = msglist[0]
         data = M.fetch(index, '(BODYSTRUCTURE)')
         #print(data)
         for entry in data:
@@ -1780,8 +1888,10 @@ class Cmd(cmdprompt.CmdPrompt):
             disp(res)
 
     @shortcut("h")
+    @showExceptions
     @needsConnection
-    def do_headers(self, args):
+    @argsToMessageList
+    def do_headers(self, msglist):
         """List headers around the current message. (h for short)"""
         # heirloom-mailx says that it gives 18-message groups, but actually
         # shows about how many will fit on the active terminal.
@@ -1793,18 +1903,18 @@ class Cmd(cmdprompt.CmdPrompt):
         # the active one, but I haven't tested.
         C = self.C
         M = C.connection
-        if (args):
-            res = self.parseMessageList(args)
-            if len(res) == 0:
+        if msglist is not None:
+            if len(msglist) == 0:
                 print("No matches")
-            C.currentMessage = res[0]
-            # TODO: update last list and such
+                return
+            C.currentMessage = msglist[0]
+            C.lastList = msglist
         rows = 25 # TODO get from terminal
         start = (C.currentMessage - 1) // rows * rows
         # ^- alternatively, start = C.currentMessage - (C.currentMessage % rows)
         start += 1 # IMAP is 1's based
         last = start + rows - 1
-        if (args):
+        if msglist:
             # mailx has this behaviour where specifying a location causes the
             # current message to become the first message in the list of
             # headings that contains the requested message. It is a bit
@@ -1905,8 +2015,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d))
 
     @shortcut("f")
+    @showExceptions
     @needsConnection
-    def do_from(self, args):
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_from(self, msglist):
         """List messages (like headers command) for given message list only."""
         # I originally thought 'f' was short for 'find' or something like
         # that. As near as I can guess, earlier implementations of mailx
@@ -1914,58 +2027,59 @@ class Cmd(cmdprompt.CmdPrompt):
         # message list. Later others were added, but the name was fixed.
         C = self.C
         M = C.connection
-        res = self.parseMessageList(args)
-        if len(res) == 0:
+        if msglist is None:
+            msglist = [self.C.currentMessage]
+        elif len(msglist) == 0:
             print("No matches")
             return
-        self.showHeaders("%s" % ",".join(map(str,res)))
-        # TODO: Should just have a function that takes the current list and
-        # updates the lastList, prevMessage, and currentMessage in one go
-        C.lastList = res
-        C.prevMessage = C.currentMessage
-        C.currentMessage = res[-1] # This is another annoying mailx behavior. It'd be nice if the first message in the list were selected
+
+        self.showHeaders("%s" % ",".join(map(str,msglist)))
         C.nextMessage = C.currentMessage
 
+    @showExceptions
     @needsConnection
-    def do_flag(self, args):
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_flag(self, msglist):
         """Flag messages.
 
         Marks messages as 'flagged'. Flagged messages show up with the ":f" message specifier.
         This is similar to marking a message as a favorite or "starring" or "pinning" in other systems.
         There is no special meaning to flagged messages; it is just a marking."""
-        if args:
-            res = self.parseMessageList(args)
-            if len(res) == 0:
+        if msglist is None:
+            msglist = [self.C.currentMessage]
+        elif len(msglist) == 0:
                 print("No matches")
                 return
-        else:
-            res = [self.C.currentMessage]
-        if len(res) > 1:
-            print("Don't support multiple messages yet")
         try:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Flagged)" % res[0])
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Flagged)" % ",".join(map(str,msglist)))
+            # TODO: either run once per flag, or collect errors to show at
+            # end.
         except Exception as ev:
             print("Failed to flag: %s" % ev)
+
+    @showExceptions
     @needsConnection
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
     def do_unflag(self, args):
         """Remove Flag from messages.
 
         see flag command for information. This command undoes that one.
         """
-        if args:
-            res = self.parseMessageList(args)
-            if len(res) == 0:
+        if msglist is None:
+            msglist = [self.C.currentMessage]
+        elif len(msglist) == 0:
                 print("No matches")
                 return
-        else:
-            res = [self.C.currentMessage]
-        if len(res) > 1:
-            print("Don't support multiple messages yet")
         try:
-            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Flagged)" % res[0])
+            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Flagged)" % ",".join(map(str, msglist)))
+            # TODO: either run once per flag, or collect errors to show at
+            # end.
         except Exception as ev:
             print("Failed to unflag: %s" % ev)
 
+    @showExceptions
     @needsConnection
     def do_namespace(self, args):
         C = self.C
@@ -2017,6 +2131,8 @@ class Cmd(cmdprompt.CmdPrompt):
 
         #print(data[0])
         return data, matches
+
+    @showExceptions
     def do_search(self, args, offset=0, pagesize=10):
         C = self.C
         C.lastsearch = args
@@ -2040,6 +2156,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     'weight': match.weight,
                     }
                     )
+
+    @showExceptions
     def do_unset(self, args):
         """Unset an option.
 
@@ -2057,6 +2175,7 @@ class Cmd(cmdprompt.CmdPrompt):
         except KeyError:
             print("No setting named %s" % args)
 
+    @showExceptions
     def do_set(self, args):
         """Set or get option values
 
@@ -2162,6 +2281,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     except ValueError:
                         print("Invalid value for setting")
 
+    @showExceptions
+    @needsConnection
     def do_z(self, args):
         """Scroll pages of headers
 
@@ -2222,6 +2343,8 @@ class Cmd(cmdprompt.CmdPrompt):
             ))
         self.showHeaders("%i:%i" % (start, last))
 
+    @showExceptions
+    @needsConnection
     def do_Z(self, args):
         """Like z, but for interesting messages.
 
@@ -2316,6 +2439,7 @@ class Cmd(cmdprompt.CmdPrompt):
             ))
         self.showHeaders("{}:{}".format(start, end))
 
+    @showExceptions
     def do_quit(self, args):
         # TODO: Support synchronizing if user setting asks for it. Something like:
         #print("Synchronizing events")
@@ -2325,6 +2449,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # TODO: Synchronize and quit
         return True
 
+    @showExceptions
     def do_exit(self, args):
         # TODO: Disconnect but not synchronize and quit
         return True
