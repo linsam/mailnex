@@ -2020,7 +2020,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
                 froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
-                print(self.C.settings.headline.value.format(**{
+                if self.C.virtfolder and len(self.C.settings.headlinevf.value):
+                    headline = self.C.settings.headlinevf.value
+                else:
+                    headline = self.C.settings.headline.value
+                print(headline.format(**{
                         'attr': attr,
                         'this': '>' if this else ' ',
                         'num': num,
@@ -2587,6 +2591,7 @@ def interact():
                           't.italic_blue_on_red' makes italic blue text on red
                           background.
         """))
+    options.addOption(settings.StringOption("headlinevf", "{this}{attr}{num:2}(g{gnum:4}) {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}", doc="Headline in virtual folder mode. If blank, use normal headline."))
     options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
     C.settings = options
     postConfFolder = None
