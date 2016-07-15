@@ -216,7 +216,6 @@ def updateMessageSelectionAtEnd(func):
         # use it to restore the current message if the function fails.
         previouslyCurrent = self.C.currentMessage
         try:
-            print("running func with {}".format(msglist))
             res = func(self, msglist, *args, **kwargs)
         except Exception:
             # First restore the current message if we can, but don't fail if
