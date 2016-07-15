@@ -185,10 +185,16 @@ class CmdPrompt(cmd.Cmd):
             self.history = prompt_toolkit.history.InMemoryHistory()
         if prompt is None:
             prompt = "> "
+        self.prompt = prompt
+        def gpt(cli):
+            return [
+                    (Token, self.prompt),
+                    ]
         self.ptkevloop = ptk_pyuv_wrapper(eventloop)
         self.cli = prompt_toolkit.interface.CommandLineInterface(
                 application = prompt_toolkit.shortcuts.create_prompt_application(
-                    prompt,
+                    u"",
+                    get_prompt_tokens = gpt,
                     style = prompt_style,
                     lexer = PygmentsLexer(PromptLexer),
                     completer = self.completer,
@@ -198,6 +204,10 @@ class CmdPrompt(cmd.Cmd):
                 eventloop = self.ptkevloop,
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
         )
+
+    def setPrompt(self, newprompt):
+        """Set the prompt string"""
+        self.prompt = newprompt
 
     def singleprompt(self, prompt, ispassword=False):
         tmpcli = prompt_toolkit.interface.CommandLineInterface(
