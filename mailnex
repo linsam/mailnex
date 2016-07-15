@@ -2453,6 +2453,13 @@ class Cmd(cmdprompt.CmdPrompt):
         # TODO: Disconnect but not synchronize and quit
         return True
 
+    @showExceptions
+    def do_python(self, args):
+        if self.C.settings.debug.python:
+            res = eval(args)
+            if res is not None:
+                print(repr(res))
+
 def interact():
     cmd = Cmd(prompt="mailnex> ", histfile="mailnex_history")
     C = Context()
