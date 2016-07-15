@@ -895,6 +895,8 @@ class Cmd(cmdprompt.CmdPrompt):
             return self.do_print(a)
         elif c == 'q':
             return self.do_quit(a)
+        elif c == 'vf':
+            return self.do_virtfolder(a)
         elif c == 'x':
             return self.do_exit(a)
         elif c == 'EOF':
@@ -1113,6 +1115,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # TODO: Maybe we should output this kind of info anyway...
                 print("Current message: %s. Last message: %s" % (self.C.currentMessage, self.C.lastMessage))
             self.C.lastList = []
+            self.C.virtfolder = None
 
         except KeyboardInterrupt:
             print("Aborting")
@@ -1223,9 +1226,10 @@ class Cmd(cmdprompt.CmdPrompt):
     def do_print(self, msglist):
         C = self.C
         M = C.connection
+        lastMessage = len(self.C.virtfolder) if self.C.virtfolder else self.C.lastMessage
         if msglist is None:
             index = C.currentMessage
-            if index == 0 or index > self.C.lastMessage:
+            if index == 0 or index > lastMessage:
                 print("No applicable messages")
                 return
             msgs = [index]
@@ -1299,6 +1303,11 @@ class Cmd(cmdprompt.CmdPrompt):
 
         # TODO: Support lists. For now, just handle the first in the list
         index = msgs[0]
+        if self.C.virtfolder:
+            if index > lastMessage:
+                print("Message {} out of range".format(index))
+                return
+            index = self.C.virtfolder[index - 1]
 
         data = M.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
         parts = processAtoms(data[0][1], self.C.settings)
@@ -1920,19 +1929,26 @@ class Cmd(cmdprompt.CmdPrompt):
             # confusing, but it is expected by long-time (and medium time)
             # users.
             C.currentMessage = start
-        if last > C.lastMessage:
-            last = C.lastMessage
+        if self.C.virtfolder:
+            lastMessage = len(self.C.virtfolder)
+        else:
+            lastMessage = C.lastMessage
+        if last > lastMessage:
+            last = lastMessage
         if last == 0:
             print("No applicable messages")
             return
         print("Page {current} of {last}, {rows} per page".format(
             current = (start - 1) // rows,
-            last = (self.C.lastMessage - 1) // rows,
+            last = (lastMessage - 1) // rows,
             rows = rows,
             ))
         self.showHeaders("%i:%i" % (start, last))
 
     def showHeaders(self, messageList):
+        if self.C.virtfolder:
+            start,end = map(int,messageList.split(':'))
+            messageList=','.join(map(str,[self.C.virtfolder[x-1] for x in range(start,end+1)]))
         msgset = "%s" % messageList
         args = "(ENVELOPE INTERNALDATE FLAGS)"
         if self.C.settings.debug.general:
@@ -1979,7 +1995,11 @@ class Cmd(cmdprompt.CmdPrompt):
                     attr = self.C.settings.attrlist.value[ATTR_UNREAD]
 
             try:
-                num = int(d[0])
+                gnum = int(d[0])
+                if self.C.virtfolder:
+                    num = self.C.virtfolder.index(int(d[0])) + 1
+                else:
+                    num = gnum
                 datestr = envelope.date
                 if datestr == 'NIL' or datestr == None:
                     datestr = internaldate
@@ -2004,6 +2024,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         'attr': attr,
                         'this': '>' if this else ' ',
                         'num': num,
+                        'gnum': gnum,
                         'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
                         'subject': subject,
                         'flags': " ".join(flags),
@@ -2280,6 +2301,25 @@ class Cmd(cmdprompt.CmdPrompt):
                     except ValueError:
                         print("Invalid value for setting")
 
+    @shortcut("vf")
+    @showExceptions
+    @needsConnection
+    @argsToMessageList
+    def do_virtfolder(self, args):
+        if args is None:
+            self.C.virtfolder = None
+            self.setPrompt("mailnex> ")
+        elif len(args) == 0:
+            print("No Matches")
+            self.setPrompt("mailnex> ")
+        else:
+            self.C.virtfolder = args
+            self.setPrompt("mailnex (vf-{})> ".format(len(args)))
+            self.C.currentMessage = 1
+            self.C.nextMessage = 1
+            self.C.prevMessage = None
+            self.C.lastList = []
+
     @showExceptions
     @needsConnection
     def do_z(self, args):
@@ -2328,8 +2368,12 @@ class Cmd(cmdprompt.CmdPrompt):
             start = (self.C.lastMessage - 1) // rows * rows
         start += 1 # IMAP is 1's based
         last = start + rows - 1
-        if last > self.C.lastMessage:
-            last = self.C.lastMessage
+        if self.C.virtfolder:
+            lastMessage = len(self.C.virtfolder)
+        else:
+            lastMessage = self.C.lastMessage
+        if last > lastMessage:
+            last = lastMessage
         self.C.prevMessage = self.C.currentMessage
         self.C.currentMessage = start
         # NOTE: in mailx, this command does not 'mark any messages', which is
@@ -2357,7 +2401,14 @@ class Cmd(cmdprompt.CmdPrompt):
         # through the list. We have to do most of that anyway, so I don't know
         # why mailx doesn't do this. Maybe they do a linear search?
         rows = 25
+        if self.C.virtfolder:
+            lastMessage = len(self.C.virtfolder)
+        else:
+            lastMessage = self.C.lastMessage
+        #TODO: Make 'interesting' criteria a user setting
         msgs = map(int,self.C.connection.search('utf-8', '(or FLAGGED NEW)'))
+        if self.C.virtfolder:
+            msgs = [self.C.virtfolder.index(x) for x in msgs if x in self.C.virtfolder]
         if self.C.settings.debug.general:
             print("{} msgs {}".format(len(msgs), msgs))
         # Observing mailx behavior, if there isn't anything interesting, go to
@@ -2368,13 +2419,13 @@ class Cmd(cmdprompt.CmdPrompt):
         # This should be able to be generalized by selecting the last message
         # for the target page and performing the normal actions.
         if len(msgs) == 0:
-            msgs = [self.C.lastMessage]
+            msgs = [lastMessage]
         # These ignores feel dirty
         ignoreFirstPage = False
         ignoreLastPage = False
         # Current information.
         currentPage = (self.C.currentMessage - 1) // rows
-        lastPage = (self.C.lastMessage - 1) // rows
+        lastPage = (lastMessage - 1) // rows
         interestingPages = sorted(list(set((x - 1) // rows for x in msgs)))
         if self.C.settings.debug.general:
             print("Current {}\nLast {}\n{} Interesting {}\n".format(currentPage, lastPage, len(interestingPages), tuple((x, x * rows) for x in interestingPages)))
@@ -2425,13 +2476,13 @@ class Cmd(cmdprompt.CmdPrompt):
         page = interestingPages[i]
         start = page * rows + 1
         end = (page + 1) * rows
-        if end > self.C.lastMessage:
-            end = self.C.lastMessage
+        if end > lastMessage:
+            end = lastMessage
         self.C.prevMessage = self.C.currentMessage
         self.C.currentMessage = start
         print("Page {current} of {last}, Interesting Page {icurrent} of {ilast}, {rows} per page".format(
             current = (start - 1) // rows,
-            last = (self.C.lastMessage - 1) // rows,
+            last = (lastMessage - 1) // rows,
             icurrent = i - int(incDrop),
             ilast = len(interestingPages) - 1 - int(addedPage),
             rows = rows,
