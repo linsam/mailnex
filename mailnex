@@ -2071,6 +2071,8 @@ class Cmd(cmdprompt.CmdPrompt):
         elif len(msglist) == 0:
                 print("No matches")
                 return
+        if self.C.virtfolder:
+            msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
             self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Flagged)" % ",".join(map(str,msglist)))
             # TODO: either run once per flag, or collect errors to show at
@@ -2082,7 +2084,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @needsConnection
     @argsToMessageList
     @updateMessageSelectionAtEnd
-    def do_unflag(self, args):
+    def do_unflag(self, msglist):
         """Remove Flag from messages.
 
         see flag command for information. This command undoes that one.
@@ -2092,6 +2094,8 @@ class Cmd(cmdprompt.CmdPrompt):
         elif len(msglist) == 0:
                 print("No matches")
                 return
+        if self.C.virtfolder:
+            msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
             self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Flagged)" % ",".join(map(str, msglist)))
             # TODO: either run once per flag, or collect errors to show at
