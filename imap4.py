@@ -416,7 +416,7 @@ class imap4ClientConnection(object):
         s = socket.socket()
         if useSsl:
             oldSock = s
-            s = ssl.SSLSocket(s)
+            s = ssl.SSLSocket(s, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
         else:
             oldSock = None
         try:
@@ -479,7 +479,7 @@ class imap4ClientConnection(object):
             raise Exception("No TLS on server")
         # TODO: Support client certificate
         self.origsocket = self.socket
-        self.socket = ssl.wrap_socket(self.socket)
+        self.socket = ssl.wrap_socket(self.socket, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
         # TODO: Server Certificate checks and whatnot.
     def login(self, username, password):
         #self.socket.send("T%i LOGIN \"%s\" \"%s\"\r\n" % (self.tag, username, password))

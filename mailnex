@@ -1012,6 +1012,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if not m:
                 host = args
                 port = None
+                box = ""
             else:
                 user, host, box = m.groups()
                 if user:
@@ -1040,12 +1041,13 @@ class Cmd(cmdprompt.CmdPrompt):
             print("Connecting to '%s'" % args)
             c = imap4.imap4ClientConnection()
             c.debug = C.settings.debug.imap
+            c.ca_certs = C.settings.cacertsfile.value
             # Set tracking info for detecting connection reusability
             c.mailnexProto = proto
             c.mailnexUser = user
             c.mailnexHost = host
             c.mailnexPort = port
-            print("WARNING: Certificates aren't checked. Remote host may be spoofed!")
+            print("WARNING: Certificates are only partially checked. Remote host may be spoofed!")
             try:
                 c.connect(host, port=port)
                 if c.isTls():
@@ -2613,6 +2615,10 @@ def interact():
         """))
     options.addOption(settings.StringOption("headlinevf", "{this}{attr}{num:2}(g{gnum:4}) {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}", doc="Headline in virtual folder mode. If blank, use normal headline."))
     options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
+    options.addOption(settings.StringOption("cacertsfile", "/etc/ssl/certs/ca-certificates.crt", doc="""File containing trusted certificate authorities for validating SSL/TLS connections.
+
+    For local imap servers, you can set this to the public cert file of the
+    server, for example '/etc/dovecot/dovecot.pem'"""))
     C.settings = options
     postConfFolder = None
     if confFile:
