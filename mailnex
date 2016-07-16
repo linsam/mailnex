@@ -1116,6 +1116,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("Current message: %s. Last message: %s" % (self.C.currentMessage, self.C.lastMessage))
             self.C.lastList = []
             self.C.virtfolder = None
+            self.C.prevMessage = None
 
         except KeyboardInterrupt:
             print("Aborting")
@@ -2314,15 +2315,19 @@ class Cmd(cmdprompt.CmdPrompt):
     @needsConnection
     @argsToMessageList
     def do_virtfolder(self, args):
-        if args is None:
-            self.C.virtfolder = None
-            self.setPrompt("mailnex> ")
-        elif len(args) == 0:
+        if args is not None and len(args) == 0:
             print("No Matches")
+            args = None
+        if args is None:
+            if self.C.virtfolder:
+                # We were in virtfolder mode, so restore selection
+                (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList) = self.C.virtfolderSavedSelection
+            self.C.virtfolder = None
             self.setPrompt("mailnex> ")
         else:
             self.C.virtfolder = args
             self.setPrompt("mailnex (vf-{})> ".format(len(args)))
+            self.C.virtfolderSavedSelection = (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList)
             self.C.currentMessage = 1
             self.C.nextMessage = 1
             self.C.prevMessage = None
