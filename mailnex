@@ -2400,6 +2400,7 @@ class Cmd(cmdprompt.CmdPrompt):
             last = lastMessage
         self.C.prevMessage = self.C.currentMessage
         self.C.currentMessage = start
+        self.C.nextMessage = start
         # NOTE: in mailx, this command does not 'mark any messages', which is
         # to say, doesn't update the lastList (whereas 'headers' with an
         # argument does)
@@ -2505,6 +2506,7 @@ class Cmd(cmdprompt.CmdPrompt):
             end = lastMessage
         self.C.prevMessage = self.C.currentMessage
         self.C.currentMessage = start
+        self.C.nextMessage = start
         if self.C.settings.headerstats:
             print("Page {current} of {last}, Interesting Page {icurrent} of {ilast}, {rows} per page".format(
                 current = (start - 1) // rows,
