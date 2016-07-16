@@ -2344,6 +2344,10 @@ class Cmd(cmdprompt.CmdPrompt):
 
         # First, find out where we are
         rows = 25
+        if self.C.virtfolder:
+            lastMessage = len(self.C.virtfolder)
+        else:
+            lastMessage = self.C.lastMessage
         start = (self.C.currentMessage - 1) // rows * rows
         # ^- alternatively, start = self.C.currentMessage - (self.C.currentMessage % rows)
         # Next, figure out where we are going
@@ -2371,15 +2375,11 @@ class Cmd(cmdprompt.CmdPrompt):
         if start < 0:
             print("On first page of message")
             start = 0
-        if start > self.C.lastMessage - 1:
+        if start > lastMessage - 1:
             print("On last page of messages")
-            start = (self.C.lastMessage - 1) // rows * rows
+            start = (lastMessage - 1) // rows * rows
         start += 1 # IMAP is 1's based
         last = start + rows - 1
-        if self.C.virtfolder:
-            lastMessage = len(self.C.virtfolder)
-        else:
-            lastMessage = self.C.lastMessage
         if last > lastMessage:
             last = lastMessage
         self.C.prevMessage = self.C.currentMessage
@@ -2389,7 +2389,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # argument does)
         print("Page {current} of {last}, {rows} per page".format(
             current = (start - 1) // rows,
-            last = (self.C.lastMessage - 1) // rows,
+            last = (lastMessage - 1) // rows,
             rows = rows,
             ))
         self.showHeaders("%i:%i" % (start, last))
