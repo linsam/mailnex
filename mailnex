@@ -2343,7 +2343,9 @@ class Cmd(cmdprompt.CmdPrompt):
         Given a +/-, go to next/previous page.
         Given a number, go to that page number.
         Given +/- and a number, go that many pages forward/back.
-        The first page is page 0"""
+        The first page is page 0
+        The last page is $
+        """
         # TODO: Allow pages to be 1's based indexing, most of the rest of this
         # program is 1's based (the first message is message 1, not 0). Should
         # be an option.
@@ -2365,10 +2367,13 @@ class Cmd(cmdprompt.CmdPrompt):
             args = '-1'
         if args[0] not in ['+', '-']:
             # Absolute page
-            if not args.isdigit():
+            if args == '$':
+                start = (lastMessage - 1) // rows * rows
+            elif not args.isdigit():
                 print("unrecognized scrolling command \"%s\"" % args)
                 return
-            start = int(args) * rows
+            else:
+                start = int(args) * rows
         else:
             # Relative page
             if not args[1:].isdigit():
