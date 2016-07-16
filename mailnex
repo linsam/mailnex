@@ -80,6 +80,7 @@ import tempfile
 import pyuv
 import time
 import settings
+import subprocess
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 
@@ -1426,9 +1427,16 @@ class Cmd(cmdprompt.CmdPrompt):
                 try:
                     # TODO: Is this possibly a security risk? Is there any
                     # value that causes the decode function to go awry?
-                    body += dstr.decode(charset)
+                    d = dstr.decode(charset)
+                    # Look for common control characters that likely mean a
+                    # decode error. Most common is MS Outlook encoding text in
+                    # CP1252 and then claiming it is iso-8859-1.
+                    for c in map(chr, range(0x80,0xa0)):
+                        if c in d:
+                            raise UnicodeDecodeError()
+                    body += d
                 except:
-                    if charset == 'iso8895-1':
+                    if charset == 'iso-8859-1':
                         # MS Outlook lies about its charset, so we'll try what
                         # they mean instead of what they say. TODO: Should we
                         # complain about this? Not like the user can do much
@@ -1441,8 +1449,6 @@ class Cmd(cmdprompt.CmdPrompt):
                         body += "Part %s: failed to decode as %s\r\n" % (o[0], charset)
             else:
                 body += dstr
-        import subprocess
-        s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
         # TODO: Headers are required to be ASCII or encoded using a header
         # encoding that results in ASCII (lists charset and encodes as
         # quoted-printable or base64 with framing). We should decode headers
@@ -1453,9 +1459,10 @@ class Cmd(cmdprompt.CmdPrompt):
 
         # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
         # for styling
-        content = "\033[7mMessage %i:\033[0m\n\n" % index
+        content = b"\033[7mMessage %i:\033[0m\n\n" % index
         content += headers.decode('windows-1252').encode('utf-8')
         content += body.encode('utf-8')
+        s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
         s.communicate(content)
         res = s.wait()
         if res == 0:
@@ -1570,7 +1577,6 @@ class Cmd(cmdprompt.CmdPrompt):
             #content = headers.encode('utf-8') + body.encode('utf-8')
             content += "Message {}:\n".format(index) + str(headers) + str(body)
         # TODO: Process content for control chars?
-        import subprocess
         s = subprocess.Popen("less", stdin=subprocess.PIPE)
         s.communicate(content)
 
@@ -1791,7 +1797,6 @@ class Cmd(cmdprompt.CmdPrompt):
         #
         # Broken out function should probably be replaceable or configurable.
         # For example, should support sending via sendmail or smtp.
-        import subprocess
         s = subprocess.Popen([
             # TODO: Allow the user to override this somehow
             "sendmail", # Use sendmail to, well, send the mail
