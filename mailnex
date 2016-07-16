@@ -1149,7 +1149,8 @@ class Cmd(cmdprompt.CmdPrompt):
         # to make their timeout as small as 30 minutes). When not idling, this
         # can be set much quicker to find new mail in a reasonable amount of
         # time.
-        self.C.connection.doSimpleCommand("noop")
+        if self.C.connection:
+            self.C.connection.doSimpleCommand("noop")
 
     @showExceptions
     @needsConnection
