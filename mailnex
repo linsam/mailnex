@@ -1939,11 +1939,12 @@ class Cmd(cmdprompt.CmdPrompt):
         if last == 0:
             print("No applicable messages")
             return
-        print("Page {current} of {last}, {rows} per page".format(
-            current = (start - 1) // rows,
-            last = (lastMessage - 1) // rows,
-            rows = rows,
-            ))
+        if self.C.settings.headerstats:
+            print("Page {current} of {last}, {rows} per page".format(
+                current = (start - 1) // rows,
+                last = (lastMessage - 1) // rows,
+                rows = rows,
+                ))
         self.showHeaders("%i:%i" % (start, last))
 
     def showHeaders(self, messageList):
@@ -2392,11 +2393,12 @@ class Cmd(cmdprompt.CmdPrompt):
         # NOTE: in mailx, this command does not 'mark any messages', which is
         # to say, doesn't update the lastList (whereas 'headers' with an
         # argument does)
-        print("Page {current} of {last}, {rows} per page".format(
-            current = (start - 1) // rows,
-            last = (lastMessage - 1) // rows,
-            rows = rows,
-            ))
+        if self.C.settings.headerstats:
+            print("Page {current} of {last}, {rows} per page".format(
+                current = (start - 1) // rows,
+                last = (lastMessage - 1) // rows,
+                rows = rows,
+                ))
         self.showHeaders("%i:%i" % (start, last))
 
     @showExceptions
@@ -2493,13 +2495,14 @@ class Cmd(cmdprompt.CmdPrompt):
             end = lastMessage
         self.C.prevMessage = self.C.currentMessage
         self.C.currentMessage = start
-        print("Page {current} of {last}, Interesting Page {icurrent} of {ilast}, {rows} per page".format(
-            current = (start - 1) // rows,
-            last = (lastMessage - 1) // rows,
-            icurrent = i - int(incDrop),
-            ilast = len(interestingPages) - 1 - int(addedPage),
-            rows = rows,
-            ))
+        if self.C.settings.headerstats:
+            print("Page {current} of {last}, Interesting Page {icurrent} of {ilast}, {rows} per page".format(
+                current = (start - 1) // rows,
+                last = (lastMessage - 1) // rows,
+                icurrent = i - int(incDrop),
+                ilast = len(interestingPages) - 1 - int(addedPage),
+                rows = rows,
+                ))
         self.showHeaders("{}:{}".format(start, end))
 
     @showExceptions
