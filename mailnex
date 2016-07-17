@@ -1188,9 +1188,9 @@ class Cmd(cmdprompt.CmdPrompt):
             l()
         if self.C.settings.headers_newmsg if self.C.settings.headers_newmsg.value is not None else self.C.settings.headers:
             if delta == 1:
-                l = lambda: self.showHeaders("%i" % value)
+                l = lambda: self.showHeadersNonVF("%i" % value)
             else:
-                l = lambda: lself.showHeaders("%i:%i" % (value - delta, value))
+                l = lambda: lself.showHeadersNonVF("%i:%i" % (value - delta, value))
             def tcb(handle):
                 if self.cli._is_running:
                     self.cli.run_in_terminal(l)
@@ -2014,9 +2014,13 @@ class Cmd(cmdprompt.CmdPrompt):
         self.showHeaders("%i:%i" % (start, last))
 
     def showHeaders(self, messageList):
+        """Show headers. Takes virtual folders into consideration."""
         if self.C.virtfolder:
             start,end = map(int,messageList.split(':'))
             messageList=','.join(map(str,[self.C.virtfolder[x-1] for x in range(start,end+1)]))
+        self.showHeadersNonVF(messageList)
+    def showHeadersNonVF(self, messageList):
+        """Show headers, given a global message list only"""
         msgset = "%s" % messageList
         args = "(ENVELOPE INTERNALDATE FLAGS)"
         if self.C.settings.debug.general:
@@ -2065,7 +2069,7 @@ class Cmd(cmdprompt.CmdPrompt):
             try:
                 gnum = int(d[0])
                 if self.C.virtfolder:
-                    num = self.C.virtfolder.index(int(d[0])) + 1
+                    num = self.C.virtfolder.index(gnum) + 1 if gnum in self.C.virtfolder else ""
                 else:
                     num = gnum
                 datestr = envelope.date
