@@ -994,6 +994,23 @@ class Cmd(cmdprompt.CmdPrompt):
             imaps://    - IMAP4r1 over SSL
         """
 
+        if args == "":
+            # Just show information about the current connection, if any
+            if not self.C.connection:
+                print("No connection")
+                return
+            print("\"{}://{}@{}:{}/{}\": {} messages {} unread".format(
+                self.C.connection.mailnexProto,
+                self.C.connection.mailnexUser,
+                self.C.connection.mailnexHost,
+                self.C.connection.mailnexPort,
+                self.C.connection.mailnexBox,
+                self.C.lastMessage,
+                len(self.C.connection.search("utf-8", "UNSEEN")),
+                ))
+            return
+
+
         C = self.C
         argss = args.split()
         user = None
@@ -1063,6 +1080,7 @@ class Cmd(cmdprompt.CmdPrompt):
             c.mailnexUser = user
             c.mailnexHost = host
             c.mailnexPort = port
+            c.mailnexBox = box
             print("WARNING: Certificates are only partially checked. Remote host may be spoofed!")
             try:
                 c.connect(host, port=port)
@@ -1147,6 +1165,14 @@ class Cmd(cmdprompt.CmdPrompt):
         except KeyboardInterrupt:
             print("Aborting")
             return
+        # Finally, print stats about the connection
+        # We already print this when called with no CLI arguments, so... just
+        # call ourselves with empty CLI arguments to display it.
+        self.do_folder("")
+        # Finally finally, if 'headers' or 'headers_folder' is set, display
+        # headers
+        if self.C.settings.headers_folder if self.C.settings.headers_folder.value is not None else self.C.settings.headers:
+            self.do_headers("")
 
     def newExist(self, value):
         delta = value - self.C.lastMessage
@@ -2603,6 +2629,17 @@ def interact():
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.BoolOption("receiptheaders", 0, doc="Show headers for messages as they arrive"))
+    options.addOption(settings.BoolOption("headers", 1, doc="""Show headers on events that update them.
+
+    This includes things like connecting and receiving new messages. This setting covers the default.
+    Individual events can be controlled by seting headers_EVENT where EVENT is the event's name.
+
+    Current events:
+        * folder    (changing folders)
+        * newmsg
+    """))
+    options.addOption(settings.BoolOption("headers_folder", None))
+    options.addOption(settings.BoolOption("headers_newmsg", None))
     options.addOption(settings.StringOption("headline", "{this}{attr}{num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
         doc="""Format string for headers lines (e.g. in headers and from commands)
 
@@ -2673,9 +2710,9 @@ def interact():
                     postConfFolder = line.strip()[7:]
                 else:
                     print("unknown command in line %i" % lineno)
+    C.t = blessings.Terminal()
     if postConfFolder:
         cmd.do_folder(postConfFolder)
-    C.t = blessings.Terminal()
     t = pyuv.Timer(cmd.ptkevloop.realloop)
     t.start(cmd.bgcheck, 1, 5)
     try:
