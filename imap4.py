@@ -136,6 +136,7 @@ class imap4ClientConnection(object):
         self.cb_fetch = None
         self.cb_search = None
         self.debug = False
+        self.ca_certs = None
         # Callbacks dictionary
         self.cbs = {}
     def close(self):
@@ -144,6 +145,15 @@ class imap4ClientConnection(object):
             self.socket.close()
         # Reset all attributes
         self.__init__()
+    def setCaCerts(self, certs):
+        """Use to enable certificate verification for SSL and STARTTLS sessions.
+
+        Set to a string containing the path and filename of the CA certificates.
+        Set to None to disable certificate verification.
+
+        For example, set to /etc/ssl/certs/ca-certificates.crt
+        """
+        self.ca_certs = certs
     def setCB(self, name, function):
         # This function exists so that we can have a static interface while
         # experimenting with changing the backend.

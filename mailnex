@@ -1053,7 +1053,11 @@ class Cmd(cmdprompt.CmdPrompt):
             print("Connecting to '%s'" % args)
             c = imap4.imap4ClientConnection()
             c.debug = C.settings.debug.imap
-            c.ca_certs = C.settings.cacertsfile.value
+
+            if "cacertsfile_{}".format(host) in self.C.settings:
+                c.setCaCerts(getattr(self.C.settings, "cacertsfile_{}".format(host)).value)
+            else:
+                c.setCaCerts(C.settings.cacertsfile.value)
             # Set tracking info for detecting connection reusability
             c.mailnexProto = proto
             c.mailnexUser = user
@@ -1088,6 +1092,13 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("Info: Loggin complete")
             except KeyboardInterrupt:
                 print("Aborting connection")
+                self.C.connection = None
+                return
+            except imap4.ssl.SSLError as ev:
+                print("Failed to establish a secure connection:", ev)
+                print("Probably the certificate chain couldn't be verified. If you have\n"
+                        "a trusted cert or authority for this host, try setting it in\n"
+                        "cecertsfile_{}".format(host))
                 self.C.connection = None
                 return
         try:
