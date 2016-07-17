@@ -1492,11 +1492,11 @@ class Cmd(cmdprompt.CmdPrompt):
                     # Look for common control characters that likely mean a
                     # decode error. Most common is MS Outlook encoding text in
                     # CP1252 and then claiming it is iso-8859-1.
-                    for c in map(chr, range(0x80,0xa0)):
+                    for c in map(unichr, range(0x80,0xa0)):
                         if c in d:
                             raise UnicodeDecodeError()
                     body += d
-                except:
+                except UnicodeDecodeError:
                     if charset == 'iso-8859-1':
                         # MS Outlook lies about its charset, so we'll try what
                         # they mean instead of what they say. TODO: Should we
