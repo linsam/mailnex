@@ -252,9 +252,19 @@ def showExceptions(func):
     case a full stack trace will be shown."""
     @wraps(func)
     def showExceptionsWrapper(self, args):
+        if not hasattr(self.C, "excTrack"):
+            self.C.excTrack = True
+        if self.C.excTrack:
+            self.C.excTrack = False
+            topException = True
+        else:
+            topException = False
+
         try:
             return func(self, args)
         except Exception as ev:
+            if not topException:
+                raise
             import traceback
             if not self.C.settings.debug.exception:
                 # TODO: Print the exception type hierarchy. E.g.
@@ -265,6 +275,8 @@ def showExceptions(func):
             else:
                 traceback.print_exc()
             print("Warning: mailnex may now be in an inconsistent state due to the above error.")
+        if topException:
+            self.C.excTrack = True
     return showExceptionsWrapper
 
 class structureRoot(object):
