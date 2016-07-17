@@ -1181,14 +1181,22 @@ class Cmd(cmdprompt.CmdPrompt):
         # be negative). Might also be the case where this doesn't change value
         # becuase something was added and something else was expunged.
         # Probably need to track untagged fetch results to see that.
-        self.cli.run_in_terminal(lambda: print("Info: %s: %i New messages" % (time.asctime(), delta)))
+        l = lambda: print("Info: %s: %i New messages" % (time.asctime(), delta))
+        if self.cli._is_running:
+            self.cli.run_in_terminal(l)
+        else:
+            l()
         # TODO: Run these in a libuv callback; doing it now can be problematic
         # (e.g. we are very likely in the middle of some command, like NOOP)
         if self.C.settings.receiptheaders:
             if delta == 1:
-                self.cli.run_in_terminal(lambda: self.showHeaders("%i" % value))
+                l = lambda: self.showHeaders("%i" % value)
             else:
-                self.cli.run_in_terminal(lambda: lself.showHeaders("%i:%i" % (value - delta, value)))
+                l = lambda: lself.showHeaders("%i:%i" % (value - delta, value))
+            if self.cli._is_running:
+                self.cli.run_in_terminal(l)
+            else:
+                l()
 
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing
