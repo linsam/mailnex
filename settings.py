@@ -34,6 +34,8 @@ class Options(object):
         if not name in self.options:
             raise KeyError("No option named %s" % key)
         del self.options[name]
+    def __contains__(self, key):
+        return self.options.__contains__(key)
     def __iter__(self):
         # First pass: hand off to underlying type
         return self.options.itervalues()
