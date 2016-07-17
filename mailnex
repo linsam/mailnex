@@ -1186,17 +1186,18 @@ class Cmd(cmdprompt.CmdPrompt):
             self.cli.run_in_terminal(l)
         else:
             l()
-        # TODO: Run these in a libuv callback; doing it now can be problematic
-        # (e.g. we are very likely in the middle of some command, like NOOP)
-        if self.C.settings.receiptheaders:
+        if self.C.settings.headers_newmsg if self.C.settings.headers_newmsg.value is not None else self.C.settings.headers:
             if delta == 1:
                 l = lambda: self.showHeaders("%i" % value)
             else:
                 l = lambda: lself.showHeaders("%i:%i" % (value - delta, value))
-            if self.cli._is_running:
-                self.cli.run_in_terminal(l)
-            else:
-                l()
+            def tcb(handle):
+                if self.cli._is_running:
+                    self.cli.run_in_terminal(l)
+                else:
+                    l()
+            t = pyuv.Timer(self.ptkevloop.realloop)
+            t.start(tcb,0.1,0)
 
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing
@@ -2636,7 +2637,6 @@ def interact():
     options.addOption(settings.StringOption("PAGER", "internal"))
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
-    options.addOption(settings.BoolOption("receiptheaders", 0, doc="Show headers for messages as they arrive"))
     options.addOption(settings.BoolOption("headers", 1, doc="""Show headers on events that update them.
 
     This includes things like connecting and receiving new messages. This setting covers the default.
