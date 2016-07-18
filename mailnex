@@ -1768,7 +1768,12 @@ class Cmd(cmdprompt.CmdPrompt):
         if 'cc' in hdrs:
             newmsg['Cc'] = ", ".join(",".join(hdrs['cc']).split(','))
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
-        return self.editMessage(newmsg)
+        sent = self.editMessage(newmsg)
+        if sent:
+            M.doSimpleCommand("STORE %s +FLAGS (\Answered)" % index)
+            # Update message stuffs. Should probably update the 'lastList' as
+            # well.
+            C.nextMessage = C.currentMessage + 1
 
 
     def editMessage(self, message):
@@ -1842,10 +1847,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
                     # This is probably not the right format for dead.letter
                     ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
-                return
+                return False
             elif line.startswith("~x"):
                 print("Message abandoned")
-                return
+                return False
             elif line.startswith("~p"):
                 print(message.as_string())
                 #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
@@ -1929,7 +1934,18 @@ class Cmd(cmdprompt.CmdPrompt):
             "-t", # Get recipients from message headers. TODO: We should specify the addresses on sendmail's commandline such that we can manage the Bcc list.
             ],
             stdin=subprocess.PIPE)
-        s.communicate(m.as_string())
+        resstr = s.communicate(m.as_string())
+        res = s.wait()
+        if res == 0:
+            return True
+        else:
+            # Try to save the message?
+            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+            # This is probably not the right format for dead.letter
+            ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
+            print("Failed to save with error {}, messages {}".format(res, resstr))
+            print("Message saved to dead.letter")
+            return False
 
 
     @showExceptions
