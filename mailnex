@@ -1282,6 +1282,151 @@ class Cmd(cmdprompt.CmdPrompt):
         print()
         print("Done!")
 
+    def getTextPlainParts(self, index):
+        """Get the plain text parts of a message.
+
+        Returns a list of tuples. Each list entry represents one part.
+        Each tuple consists of the part number and unicode version of the text, already converted from specified or guessed charsets.
+        Currently this includes the message headers (as the first section). Handling of sub-messages is TBD."""
+        resparts = []
+        data = self.C.connection.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
+        parts = processAtoms(data[0][1], self.C.settings)
+        headers = getResultPart('BODY[HEADER]', parts[0])
+        # TODO: Headers are required to be ASCII or encoded using a header
+        # encoding that results in ASCII (lists charset and encodes as
+        # quoted-printable or base64 with framing). We should decode headers
+        # to unicode using ASCII and, if failing, replace with highlighted
+        # error boxes or something (not question marks, ideally). Then, we
+        # should look for the header encoding markers and handle those as
+        # well.
+        resparts.append((None, None, headers.decode('windows-1252')))
+        # We look at the bodystructure to get the encoding since we already
+        # have to fetch it to find the text/plain parts. The other options was
+        # to explicitly fetch the MIME data of each sub-part.
+        #
+        # The spec is interesting here. In a MIME message, there are headers
+        # for the message, and then headers for each part of a multipart. In
+        # IMAP, the "HEADER" part specifier for fetch refers to the top-level
+        # (overall) message, or to the headers of a message/rfc822 subpart.
+        # The "MIME" part specifier refers to the headers for the various
+        # parts, but cannot be applied to the overall message.
+        # This is actually because the subpart has its own mime headers BEFORE
+        # the encapsulated message's headers. (e.g the sub part has a content
+        # type of message/rfc822, but *that* message has a header of
+        # content-type text/plain or multipart/alternative or whatever.
+        #
+        structstr = getResultPart('BODYSTRUCTURE', parts[0])
+        struct = unpackStruct(structstr, self.C.settings, tag=str(index))
+        structureStrings = []
+        fetchParts = []
+        def pickparts(struct):
+            """Pick the parts we are going to use to produce a regular view of the message.
+
+            We'll build a visualization of the structure while we are at it (much of
+            this code is duplicated from do_structure)"""
+            # TODO: unify the code with do_structure? Make its own function?
+            # We probably want that anyway since other parts would utilize
+            # this, such as message reply/forwarding
+            extra = ""
+            skip = False
+            if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+                extra += " (%s)" % struct.disposition[0]
+                if struct.disposition[0].lower() == "attachment":
+                    skip = True
+                dispattrs = dictifyList(struct.disposition[1])
+                if 'filename' in dispattrs:
+                    extra += " (name: %s)" % dispattrs['filename']
+            # TODO XXX: Preprocess control chars out of all strings before
+            # display to terminal!
+            structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
+            innerTag = ".".join(struct.tag.split('.')[1:])
+            # First pass, we'll just grab all text/plain parts. Later we'll
+            # want to check disposition, and later we'll want to deal with
+            # multipart/alternative better (and multipart/related)
+            if struct.type_ == "text" and struct.subtype == "plain":
+                # TODO: write the following a bit more efficiently. Like,
+                # split only once, use second part of return only, perhaps?
+                if not skip:
+                    fetchParts.append((innerTag, struct))
+            if isinstance(struct, structureMessage):
+                extra = ""
+                # Switch to the inner for further processing
+                struct = struct.subs[0]
+                if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+                    extra += " (%s)" % struct.disposition[0]
+
+                structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
+                fetchParts.append(("%s.HEADER" % innerTag, struct))
+            if hasattr(struct, "subs"):
+                for i in struct.subs:
+                    pickparts(i)
+        pickparts(struct)
+        structureString = u"\n".join(structureStrings)
+        if len(fetchParts) == 0:
+            print("Message doesn't have any displayable parts.")
+            return []
+        elif len(fetchParts) == 1 and len(fetchParts[0][0]) == 0:
+            # This message doesn't have parts, so fetch "part 1" to get the
+            # body
+            fparts = ["BODY.PEEK[1]"]
+            parts = ["BODY[1]"]
+        else:
+            fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
+            parts = ["BODY[%s]" % s[0] for s in fetchParts]
+        data = self.C.connection.fetch(index, '(%s)' % " ".join(fparts))
+        resparts.append((None, None, structureString + '\r\n\r\n'))
+        dpart = processAtoms(data[0][1], self.C.settings)
+        for p,o in zip(parts,fetchParts):
+            dstr = getResultPart(p, dpart[0])
+            if isinstance(o[1], structureMultipart):
+                o[1].encoding = None
+                o[1].attrs = None
+            encoding = o[1].encoding
+            # First, check for transfer encoding
+            if encoding in [None, "", "NIL", '7bit', '8bit']:
+                # Don't need to do anything
+                pass
+            elif encoding == "quoted-printable":
+                dstr = dstr.decode("quopri")
+            elif encoding == "base64":
+                dstr = dstr.decode("base64")
+            else:
+                resparts.append((o[0],o[1],"Part %s: unknown encoding %s\r\n" % (o[0], encoding)))
+                continue
+            # Finally, check for character set encoding
+            # and other layers, like format flowed
+            if o[1].attrs and 'charset' in o[1].attrs:
+                charset = o[1].attrs['charset']
+                try:
+                    # TODO: Is this possibly a security risk? Is there any
+                    # value that causes the decode function to go awry?
+                    d = dstr.decode(charset)
+                    # Look for common control characters that likely mean a
+                    # decode error. Most common is MS Outlook encoding text in
+                    # CP1252 and then claiming it is iso-8859-1.
+                    for c in map(unichr, range(0x80,0xa0)):
+                        if c in d:
+                            raise UnicodeDecodeError()
+                except UnicodeDecodeError:
+                    if charset == 'iso-8859-1':
+                        # MS Outlook lies about its charset, so we'll try what
+                        # they mean instead of what they say. TODO: Should we
+                        # complain about this? Not like the user can do much
+                        # except encourage the sender to stop using outlook.
+                        try:
+                            d = dstr.decode('windows-1252')
+                        except:
+                            d = "Part %s: failed to decode as %s or windows-1252\r\n" % (o[0], charset)
+                    else:
+                        d = "Part %s: failed to decode as %s\r\n" % (o[0], charset)
+            else:
+                d = dstr
+            if o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
+                #TODO: Flowed format handling
+                pass
+            resparts.append((o[0], o[1], d))
+        return resparts
+
     @showExceptions
     @needsConnection
     @argsToMessageList
@@ -1371,157 +1516,30 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("Message {} out of range".format(index))
                 return
             index = self.C.virtfolder[index - 1]
-
-        data = M.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
-        parts = processAtoms(data[0][1], self.C.settings)
-        headers = getResultPart('BODY[HEADER]', parts[0])
-        # TODO: Get content-type of body and convert to TTY, or at least utf-8
-        # Options: Can look at the bodystructure to get the encoding (this
-        # seems good, since we already will have fetched it to find the
-        # text/plain bit anyhow), or we can explicitly fetch the MIME data of
-        # a sub-part.
-        # The spec is interesting here. In a MIME message, there are headers
-        # for the message, and then headers for each part of a multipart. In
-        # IMAP, the "HEADER" part specifier for fetch refers to the top-level
-        # (overall) message, or to the headers of a message/rfc822 subpart.
-        # The "MIME" part specifier refers to the headers for the various
-        # parts, but cannot be applied to the overall message.
-        # This is actually because the subpart has its own mime headers BEFORE
-        # the encapsulated message's headers. (e.g the sub part has a content
-        # type of message/rfc822, but *that* message has a header of
-        # content-type text/plain or multipart/alternative or whatever.
-        #
-        structstr = getResultPart('BODYSTRUCTURE', parts[0])
-        struct = unpackStruct(structstr, self.C.settings, tag=str(index))
-        structureStrings = []
-        fetchParts = []
-        def pickparts(struct):
-            """Pick the parts we are going to use to produce a regular view of the message.
-
-            We'll build a visualization of the structure while we are at it (much of
-            this code is duplicated from do_structure)"""
-            # TODO: unify the code with do_structure? Make its own function?
-            # We probably want that anyway since other parts would utilize
-            # this, such as message reply/forwarding
-            extra = ""
-            skip = False
-            if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
-                extra += " (%s)" % struct.disposition[0]
-                if struct.disposition[0].lower() == "attachment":
-                    skip = True
-                dispattrs = dictifyList(struct.disposition[1])
-                if 'filename' in dispattrs:
-                    extra += " (name: %s)" % dispattrs['filename']
-            # TODO XXX: Preprocess control chars out of all strings before
-            # display to terminal!
-            structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
-            innerTag = ".".join(struct.tag.split('.')[1:])
-            # First pass, we'll just grab all text/plain parts. Later we'll
-            # want to check disposition, and later we'll want to deal with
-            # multipart/alternative better (and multipart/related)
-            if struct.type_ == "text" and struct.subtype == "plain":
-                # TODO: write the following a bit more efficiently. Like,
-                # split only once, use second part of return only, perhaps?
-                if not skip:
-                    fetchParts.append((innerTag, struct))
-            if isinstance(struct, structureMessage):
-                extra = ""
-                # Switch to the inner for further processing
-                struct = struct.subs[0]
-                if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
-                    extra += " (%s)" % struct.disposition[0]
-
-                structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
-                fetchParts.append(("%s.HEADER" % innerTag, struct))
-            if hasattr(struct, "subs"):
-                for i in struct.subs:
-                    pickparts(i)
-        pickparts(struct)
-        structureString = u"\n".join(structureStrings)
-        if len(fetchParts) == 0:
-            print("Message doesn't have any displayable parts.")
-            return
-        elif len(fetchParts) == 1 and len(fetchParts[0][0]) == 0:
-            # This message doesn't have parts, so fetch "part 1" to get the
-            # body
-            fparts = ["BODY.PEEK[1]"]
-            parts = ["BODY[1]"]
-        else:
-            fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
-            parts = ["BODY[%s]" % s[0] for s in fetchParts]
-        data = M.fetch(index, '(%s)' % " ".join(fparts))
-        body = structureString + '\r\n\r\n'
-        dpart = processAtoms(data[0][1], self.C.settings)
-        for p,o in zip(parts,fetchParts):
-            dstr = getResultPart(p, dpart[0])
-            if isinstance(o[1], structureMultipart):
-                o[1].encoding = None
-                o[1].attrs = None
-                # TODO: Use terminfo/termcap (or perhaps pygments or
-                # prompt_toolkit) for styling
+        body = u''
+        for part in self.getTextPlainParts(index):
+            if part[0] is None:
+                # Headers or structure
+                body += part[2]
+                continue
+            if isinstance(part[1], structureMultipart):
                 # Ideally, subparts like attatched messages should be
                 # indented, perhaps with a colored bar
                 if not self.C.settings.allpartlabels:
                     # Don't show a label here if we are going to show it
                     # anyway below.
-                    body += "\n\033[7mPart %s:\033[0m\n" % (o[0])
+                    body += "\n\033[7mPart %s:\033[0m\n" % (part[0])
             if self.C.settings.allpartlabels:
-                body += "\n\033[7mPart %s:\033[0m\n" % (o[0])
-            encoding = o[1].encoding
+                body += "\n\033[7mPart %s:\033[0m\n" % (part[0])
             if self.C.settings.debug.general:
-                body += "encoding: " + encoding + "\r\n"
-                body += "struct: " + repr(o[1].__dict__) + "\r\n"
-            # First, check for transfer encoding
-            if encoding in [None, "", "NIL", '7bit', '8bit']:
-                # Don't need to do anything
-                pass
-            elif encoding == "quoted-printable":
-                dstr = dstr.decode("quopri")
-            elif encoding == "base64":
-                dstr = dstr.decode("base64")
-            else:
-                body += "Part %s: unknown encoding %s\r\n" % (o[0], encoding)
-                continue
-            # Finally, check for character set encoding
-            if o[1].attrs and 'charset' in o[1].attrs:
-                charset = o[1].attrs['charset']
-                try:
-                    # TODO: Is this possibly a security risk? Is there any
-                    # value that causes the decode function to go awry?
-                    d = dstr.decode(charset)
-                    # Look for common control characters that likely mean a
-                    # decode error. Most common is MS Outlook encoding text in
-                    # CP1252 and then claiming it is iso-8859-1.
-                    for c in map(unichr, range(0x80,0xa0)):
-                        if c in d:
-                            raise UnicodeDecodeError()
-                    body += d
-                except UnicodeDecodeError:
-                    if charset == 'iso-8859-1':
-                        # MS Outlook lies about its charset, so we'll try what
-                        # they mean instead of what they say. TODO: Should we
-                        # complain about this? Not like the user can do much
-                        # except encourage the sender to stop using outlook.
-                        try:
-                            body += dstr.decode('windows-1252')
-                        except:
-                            body += "Part %s: failed to decode as %s or windows-1252\r\n" % (o[0], charset)
-                    else:
-                        body += "Part %s: failed to decode as %s\r\n" % (o[0], charset)
-            else:
-                body += dstr
-        # TODO: Headers are required to be ASCII or encoded using a header
-        # encoding that results in ASCII (lists charset and encodes as
-        # quoted-printable or base64 with framing). We should decode headers
-        # to unicode using ASCII and, if failing, replace with highlighted
-        # error boxes or something (not question marks, ideally). Then, we
-        # should look for the header encoding markers and handle those as
-        # well.
+                body += "encoding: " + part[1].encoding + "\r\n"
+                body += "struct: " + repr(part[1].__dict__) + "\r\n"
+            body += part[2]
+
 
         # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
         # for styling
         content = b"\033[7mMessage %i:\033[0m\n\n" % index
-        content += headers.decode('windows-1252').encode('utf-8')
         content += body.encode('utf-8')
         s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
         s.communicate(content)
