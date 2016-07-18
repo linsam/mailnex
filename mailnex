@@ -1692,14 +1692,8 @@ class Cmd(cmdprompt.CmdPrompt):
         if index == 0 or index > self.C.lastMessage:
             print("No applicable messages")
             return
-        # TODO: Should generate the body the same way we do for printing (walk
-        # through multiparts), and should decode each part (in particular,
-        # undo base64 or quoted printable)
-        data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-        parts = processAtoms(data[0][1], self.C.settings)
-        headers = parts[0][1]
-        body = parts[0][3]
-        hdrs = processHeaders(headers)
+        parts = self.getTextPlainParts(index)
+        hdrs = processHeaders(parts[0][2])
         if 'to' in hdrs:
             # There can be multiple 'to' lines, theoretically. Lets merge them
             # and then split the components
@@ -1708,7 +1702,11 @@ class Cmd(cmdprompt.CmdPrompt):
             to = ""
         if 'subject' in hdrs:
             # Take the first subject we find.
-            subject = "Re: " + hdrs['subject'][0]
+            subj = hdrs['subject'][0]
+            if not subj.lower().startswith("re: "):
+                subject = "Re: " + subj
+            else:
+                subject = subj
         else:
             subject = "Re:"
         if 'from' in hdrs:
@@ -1717,10 +1715,56 @@ class Cmd(cmdprompt.CmdPrompt):
             to[0:0] = [from_]
         else:
             from_ = "unkown"
-        newmsg = email.mime.text.MIMEText("Quoth %s\r\n%s" % (from_, body))
+        body = ""
+        for part in parts[2:]:
+            # TODO: really need a better quoting algorithm here
+            for line in part[2].split("\r\n"):
+                if not line.startswith(">"):
+                    # Add a space for padding
+                    body += "> " + line + "\r\n"
+                else:
+                    # Don't add a space; line is already quoted
+                    body += ">" + line + "\r\n"
+        if 'date' in hdrs:
+            newmsg = email.mime.text.MIMEText("Quoth %s on %s:\r\n%s" % (from_, hdrs['date'][0], body))
+        else:
+            newmsg = email.mime.text.MIMEText("Quoth %s\r\n%s" % (from_, body))
         newmsg['To'] = ", ".join(to)
         newmsg['From'] = self.C.settings['from'].value
         newmsg['Subject'] = subject
+        # On identifying fields, RFCs 2822 and 5322 say In-Reply-To should
+        # exist if the parent(s) have message-ids, and should consist of those
+        # id(s).
+        # The References field should copy the parent's (if any) followed by
+        # the parent's id. If no reference in parent's, but parent has
+        # in-reply-to, copy that instead, then the parent's id. Updating
+        # references is unspecified for multi-parent messages.
+        # Apparently some implementations 'walk' the references list for the
+        # purpose of threading, rather than building a heirarchy of
+        # in-reply-to. Concatenating both parents' references headers would
+        # potentially wreak havok on those clients. However, the specs don't
+        # call out which client(s) do this, so who knows if they still exist
+        # or how bad they break. Since it is unspecified, we can do whatever
+        # we want.
+        # For now, though, we only support single parent replies, so that
+        # isn't a problem (yet).
+        if 'message-id' in hdrs:
+            newmsg['In-Reply-To'] = hdrs['message-id'][0]
+        refs = []
+        if 'references' in hdrs:
+            refs.extend(hdrs['references'][0].split())
+            if 'message-id' in hdrs:
+                refs.append(hdrs['message-id'][0])
+        elif 'in-reply-to' in hdrs:
+            # TODO: What if multiple in-reply-to headers instead of a single
+            # space-separated one?
+            refs.extend(hdrs['in-reply-to'][0].split())
+            if 'message-id' in hdrs:
+                refs.append(hdrs['message-id'][0])
+        elif 'message-id' in hdrs:
+            refs.append(hdrs['message-id'][0])
+        if len(refs):
+            newmsg['references'] = " ".join(refs)
         if 'cc' in hdrs:
             newmsg['Cc'] = ", ".join(",".join(hdrs['cc']).split(','))
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
