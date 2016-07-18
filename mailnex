@@ -1190,7 +1190,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if delta == 1:
                 l = lambda: self.showHeadersNonVF("%i" % value)
             else:
-                l = lambda: lself.showHeadersNonVF("%i:%i" % (value - delta, value))
+                l = lambda: self.showHeadersNonVF("%i:%i" % (value - delta, value))
             def tcb(handle):
                 if self.cli._is_running:
                     self.cli.run_in_terminal(l)
