@@ -1678,20 +1678,29 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     @needsConnection
-    def do_reply(self, args):
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_reply(self, msglist):
         C = self.C
         M = C.connection
-        if args:
-            try:
-                index = int(args)
-            except:
-                print("bad arguments")
-                return
-        else:
+        lastMessage = len(self.C.virtfolder) if self.C.virtfolder else self.C.lastMessage
+        if msglist is None:
             index = C.currentMessage
-        if index == 0 or index > self.C.lastMessage:
-            print("No applicable messages")
+            if index == 0 or index > lastMessage:
+                print("No applicable messages")
+                return
+            msgs = [index]
+        else:
+            msgs = msglist
+        if len(msgs) > 1:
+            print("Sorry, don't yet support replying to multiple messages at once")
             return
+        index = msgs[0]
+        if self.C.virtfolder:
+            if index > lastMessage:
+                print("Message {} out of range".format(index))
+                return
+            index = self.C.virtfolder[index - 1]
         parts = self.getTextPlainParts(index)
         hdrs = processHeaders(parts[0][2])
         if 'to' in hdrs:
