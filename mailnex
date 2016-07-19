@@ -1722,10 +1722,15 @@ class Cmd(cmdprompt.CmdPrompt):
             subject = "Re:"
         if 'from' in hdrs:
             from_ = hdrs['from'][0]
-            # Prepend the sender to the to list
-            to[0:0] = [from_]
         else:
+            #TODO: Print a warngin? An error? From is one of only 2 mandatory
+            # fields. Not having it breaks many assumptions.
             from_ = "unkown"
+        # Prepend the sender to the to list
+        if 'reply-to' in hdrs:
+            to[0:0] = hdrs['reply-to'][0]
+        else:
+            to[0:0] = [from_]
         body = ""
         for part in parts[2:]:
             # TODO: really need a better quoting algorithm here
