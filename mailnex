@@ -1674,7 +1674,9 @@ class Cmd(cmdprompt.CmdPrompt):
         newmsg = email.mime.text.MIMEText("")
         newmsg['To'] = ", ".join(to)
         newmsg['Subject'] = subject
-        return self.editMessage(newmsg)
+        if self.C.settings.autobcc:
+            newmsg['Bcc'] = self.C.settings.autobcc.value
+        self.editMessage(newmsg)
 
     @showExceptions
     @needsConnection
@@ -1776,6 +1778,8 @@ class Cmd(cmdprompt.CmdPrompt):
             newmsg['references'] = " ".join(refs)
         if 'cc' in hdrs:
             newmsg['Cc'] = ", ".join(",".join(hdrs['cc']).split(','))
+        if self.C.settings.autobcc:
+            newmsg['Bcc'] = self.C.settings.autobcc.value
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
         sent = self.editMessage(newmsg)
         if sent:
@@ -1934,14 +1938,47 @@ class Cmd(cmdprompt.CmdPrompt):
         #
         # Broken out function should probably be replaceable or configurable.
         # For example, should support sending via sendmail or smtp.
+
+        def addrs(data):
+            return [a[1] for a in email.utils.getaddresses(data)]
+        tos = addrs(m.get_all('To',[]))
+        ccs = addrs(m.get_all('cc',[]))
+        bccs = addrs(m.get_all('bcc',[]))
+        recipients = list(set(tos + ccs + bccs))
+        if len(recipients) == 0:
+            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+            # This is probably not the right format for dead.letter
+            ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
+            print("Coudln't send message; no recipients were specified")
+            print("Message saved to dead.letter")
+            return False
+
+        # TODO: Allow user to select behavior:
+        # 1) message content excludes Bcc list
+        # 2) message content includes Bcc list to users in the Bcc list,
+        # excludes otherwise (Bcc persons get to see other bcc persons)
+        # 3) each user listed in Bcc gets their own message with themselves
+        # only in Bcc, others get no Bcc. (each Bcc person knows they were
+        # supposed to be Bcc'd, but no one knows who else might be on Bcc)
+        # 4) message has an empty Bcc field if there was a anyone listed in
+        # Bcc. (Everyone knows that a Bcc happened, but not to whom)
+        #
+        # For now, we'll just do option 1, because that is easiest, since we
+        # only have to form one copy of the message and only have to call
+        # sendmail once. (Error handling might be more challenging if we had
+        # to do more copies, e.g. what to do if the first sendmail succeeds
+        # and the second fails?)
+        if 'bcc' in m:
+            del m['bcc']
+
+
         s = subprocess.Popen([
             # TODO: Allow the user to override this somehow
             "sendmail", # Use sendmail to, well, send the mail
             "-bm", # postfix says this is "read mail from stdin and arrange for delivery". Hopefully this is standard across implementations
             "-i", # Don't use '.' as end of input. Hopefully this means we don't have to do dot stuffing.
             # TODO: Support delivery status notification settings? "-N" "failure, delay, success, never"
-            "-t", # Get recipients from message headers. TODO: We should specify the addresses on sendmail's commandline such that we can manage the Bcc list.
-            ],
+            ] + recipients,
             stdin=subprocess.PIPE)
         resstr = s.communicate(m.as_string())
         res = s.wait()
@@ -2714,6 +2751,11 @@ def interact():
         instead of 'Preserved')
         """
         ))
+    options.addOption(settings.StringOption("autobcc", None, doc="""Automatically populate the Bcc field of new messages (new, reply, etc).
+    This is useful to include a copy of sent mail to yourself. For example, a procmail or sieve filter can
+    automatically mark messages from yourself as seen and/or put in a 'Sent' folder. Doing this instead of
+    saving the message separately saves a transmission to the server.
+    The downside to this method is that the message wouldn't include other Bcc for your records."""))
     # Debug options:
     #   exception - show detailed exceptions instead of short messages
     #   general - show general tidbits during runtime
