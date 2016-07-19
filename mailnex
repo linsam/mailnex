@@ -1705,6 +1705,17 @@ class Cmd(cmdprompt.CmdPrompt):
             index = self.C.virtfolder[index - 1]
         parts = self.getTextPlainParts(index)
         hdrs = processHeaders(parts[0][2])
+        # The spec doesn't say specifically how to handle replies, leaving it
+        # up to individual implementations.
+        # They give an example where the Reply-To or From is used for the new
+        # To, and the old To and Cc are combined to form the new Cc.
+        # Mailx copied To and Cc from the old and added the Reply-To or From
+        # to the new To.
+        # We'll follow mailx for now, though we'll assume the Reply-To or From
+        # is more important than the old To and put them at the beginning of
+        # the list.
+        # TODO: Allow a user preference setting for how to do this. Maybe
+        # allow a setting of 'ask' to prompt for each message.
         if 'to' in hdrs:
             # There can be multiple 'to' lines, theoretically. Lets merge them
             # and then split the components
