@@ -1735,7 +1735,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # Don't add a space; line is already quoted
                     body += ">" + line + "\r\n"
         if 'date' in hdrs:
-            newmsg = email.mime.text.MIMEText("Quoth %s on %s:\r\n%s" % (from_, hdrs['date'][0], body))
+            newmsg = email.mime.text.MIMEText("Quoth %s on %s:\r\n\r\n%s" % (from_, hdrs['date'][0], body))
         else:
             newmsg = email.mime.text.MIMEText("Quoth %s\r\n%s" % (from_, body))
         newmsg['To'] = ", ".join(to)
@@ -1952,7 +1952,7 @@ class Cmd(cmdprompt.CmdPrompt):
             ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
             # This is probably not the right format for dead.letter
             ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
-            print("Failed to save with error {}, messages {}".format(res, resstr))
+            print("Failed to send with error {}, messages {}".format(res, resstr))
             print("Message saved to dead.letter")
             return False
 
