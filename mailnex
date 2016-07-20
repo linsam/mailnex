@@ -2473,15 +2473,48 @@ class Cmd(cmdprompt.CmdPrompt):
                             numeric option by val
         set {option}-={val} Remove val from string or flag list. Subtract
                             numeric option by val"""
+        if args == "" or args == "all":
+            bools=[]
+            numbers=[]
+            strings=[]
+            flags=[]
+            user=[]
+            unknown=[]
+            for opt in self.C.settings:
+                if isinstance(opt, settings.BoolOption):
+                    bools.append(opt)
+                elif isinstance(opt, settings.NumericOption):
+                    numbers.append(opt)
+                elif isinstance(opt, settings.StringOption):
+                    strings.append(opt)
+                elif isinstance(opt, settings.FlagsOption):
+                    flags.append(opt)
+                elif isinstance(opt, settings.UserOption):
+                    user.append(opt)
+                else:
+                    unknown.append(opt)
+            allsettings = (('boolean', bools),
+                    ('numeric', numbers),
+                    ('strings', strings),
+                    ('flags', flags),
+                    ('user', user),
+                    ('unknown', unknown),
+                    )
         if args == "":
-            # TODO: order by type (e.g. booleans first)
-            for opt in self.C.settings:
-                if opt.value != opt.default:
-                    print(opt)
+            for name, optset in allsettings:
+                if len(optset) == 0:
+                    continue
+                print("\n--- {} ---".format(name))
+                for opt in optset:
+                    if opt.value != opt.default:
+                        print(opt)
         elif args == "all":
-            # TODO: order by type (e.g. booleans first)
-            for opt in self.C.settings:
-                print(opt)
+            for name, optset in allsettings:
+                if len(optset) == 0:
+                    continue
+                print("\n--- {} ---".format(name))
+                for opt in optset:
+                    print(opt)
         else:
             sep = args.find('=')
             if sep == -1:

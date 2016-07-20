@@ -70,7 +70,7 @@ class Option(object):
 class BoolOption(Option):
     def __str__(self):
         if self.value:
-            return "%s" % (self.name,)
+            return "  %s" % (self.name,)
         else:
             return "no%s" % (self.name,)
     def setValue(self, value):
