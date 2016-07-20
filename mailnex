@@ -1924,7 +1924,7 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 message.set_payload(message.get_payload() + line + '\r\n')
 
-        message.set_payload(quopri.encodestring(message.get_payload()))
+        message.set_payload(quopri.encodestring(message.get_payload().encode('utf-8')))
         message.set_charset("utf-8")
         del message['Content-transfer-encoding']
         message['Content-Transfer-Encoding'] = 'quoted-printable'
@@ -2846,6 +2846,7 @@ def interact():
         with open(confFile) as conf:
             print("reading conf from", confFile)
             for lineno, line in enumerate(conf, 1):
+                line = line.decode('utf-8')
                 if line.strip() == "":
                     # Blank line
                     continue
