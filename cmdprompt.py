@@ -209,17 +209,22 @@ class CmdPrompt(cmd.Cmd):
         """Set the prompt string"""
         self.prompt = newprompt
 
-    def singleprompt(self, prompt, ispassword=False):
+    def singleprompt(self, prompt, ispassword=False, default=u'', titlefunc=None):
         tmpcli = prompt_toolkit.interface.CommandLineInterface(
                 application = prompt_toolkit.shortcuts.create_prompt_application(
                     prompt,
-                    is_password=ispassword
+                    is_password=ispassword,
+                    default=default,
+                    get_title = titlefunc,
                     ),
                 eventloop = self.ptkevloop,
                 #TODO: Reuse output from self.cli
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
                 )
-        res = tmpcli.run(True)
+        # Don't reset so we that the default doesn't get blown away. Passing
+        # true blows it away and I don't yet know how to get it back. Since we
+        # create a new prompt for this every time, this isn't an issue.
+        res = tmpcli.run(reset_current_buffer = False)
         text = res.text
         # Uncomment the following line to cause the previous line to fail?
         #tmpcli.exit()
