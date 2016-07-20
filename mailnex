@@ -260,8 +260,9 @@ def showExceptions(func):
         else:
             topException = False
 
+        result = None
         try:
-            return func(self, args)
+            result = func(self, args)
         except Exception as ev:
             if not topException:
                 raise
@@ -277,6 +278,7 @@ def showExceptions(func):
             print("Warning: mailnex may now be in an inconsistent state due to the above error.")
         if topException:
             self.C.excTrack = True
+        return result
     return showExceptionsWrapper
 
 class structureRoot(object):
