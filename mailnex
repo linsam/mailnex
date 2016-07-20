@@ -1821,11 +1821,12 @@ class Cmd(cmdprompt.CmdPrompt):
             if line.startswith("~~"):
                 # User wants to start the line with a tidle
                 message.set_payload(message.get_payload() + line[1:] + '\r\n')
-            elif line.startswith("~h"):
+            elif line.startswith("~?") or line == '~help':
                 print("""  Help:
                     ~~ Text -> ~ Text   (enter a line starting with a single '~' into the message)
                     .          Send message
                     ~.         Send message
+                    ~h         Edit message headers (To, Cc, Bcc, Subject)
                     ~p         Print current message.
                     ~q         Quit composing. Don't send. Append message to ~/dead.letter if save is set, unless 'drafts' is set.
                     ~v         Edit message in external (visual) editor
@@ -1882,6 +1883,39 @@ class Cmd(cmdprompt.CmdPrompt):
             elif line.startswith("~x"):
                 print("Message abandoned")
                 return False
+            elif line.startswith("~h"):
+                newto = self.singleprompt("To: ", default=message['To'] or '')
+                newcc = self.singleprompt("Cc: ", default=message['Cc'] or '')
+                newbcc = self.singleprompt("Bcc: ", default=message['Bcc'] or '')
+                newsubject = self.singleprompt("Subject: ", default=message['Subject'])
+                if newto == "":
+                    del message['To']
+                elif 'To' in message:
+                    message.replace_header('To', newto)
+                else:
+                    message.add_header('To', newto)
+
+                if newcc == "":
+                    del message['Cc']
+                elif 'Cc' in message:
+                    message.replace_header('Cc', newcc)
+                else:
+                    message.add_header('Cc', newcc)
+
+                if newbcc == "":
+                    del message['Bcc']
+                elif 'Bcc' in message:
+                    message.replace_header('Bcc', newbcc)
+                else:
+                    message.add_header('Bcc', newbcc)
+
+                if newsubject == "":
+                    del message['Subject']
+                elif 'Subject' in message:
+                    message.replace_header('Subject', newsubject)
+                else:
+                    message.add_header('Subject', newsubject)
+
             elif line.startswith("~p"):
                 print(message.as_string())
                 #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
