@@ -1755,9 +1755,9 @@ class Cmd(cmdprompt.CmdPrompt):
                     # Don't add a space; line is already quoted
                     body += ">" + line + "\r\n"
         if 'date' in hdrs:
-            newmsg = email.mime.text.MIMEText("Quoth %s on %s:\r\n\r\n%s" % (from_, hdrs['date'][0], body))
+            newmsg = email.mime.text.MIMEText("Quoth {} on {}:\r\n\r\n{}".format(from_, hdrs['date'][0], body).encode('utf-8'))
         else:
-            newmsg = email.mime.text.MIMEText("Quoth %s\r\n%s" % (from_, body))
+            newmsg = email.mime.text.MIMEText("Quoth {}\r\n{}".format(from_, body).encode('utf-8'))
         newmsg['To'] = ", ".join(to)
         newmsg['From'] = self.C.settings['from'].value
         newmsg['Subject'] = subject
