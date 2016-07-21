@@ -2,28 +2,54 @@ Welcome to MailNex.
 
 This is a console/terminal email client (Mail User Agent) in the style of mailx.
 
-Current Status: Very Alpha
+Current Status: Still pretty Alpha
 
 There is a minimal set of functionality for reading *most* mail with a plain
-text part. Common/basic operations like deleting, replying and forwarding are
+text part. Common/basic operations like deleting and forwarding are
 not yet supported, so I cannot consider this program to be generally useful
 yet.
 
-On a similar vein, security is not yet implemented in anything remotely
-resembling correctness. At a baseline, we should be verifying server
-certificates against the system's CA list. On the upside, we do (attempt to)
+On a similar vein, security only somewhat implemented in anything
+remotely resembling correctness. It currently does try to verify
+certificates against the system's CA list, but doesn't verify that the
+host matches the certificate. On the upside, we do (attempt to)
 establish an encrypted channel by default.
 
-Very few mailx commands and settings are implemented so far. For example, you
-have to use 'connect' instead of 'folder' to connect to an imap server.
-Non-imap folders don't work.
+Very few mailx commands and settings are implemented so far. Non-imap
+folders don't work.
 
 All of this is slowly getting better as I work out various issues.
 
-There are a few things where we are already better than mailx. In particular,
-we have command history and (some) command completion, and use a system
-password manager if available. We also show when new mail arrives without
-waiting for the user to run a command.
+There are a few things where we are already better than mailx. In
+particular:
+
+  * Command history and (some) command completion
+  * Uses a system password manager if available.
+  * Show when new mail arrives without waiting for the user to run a
+    command.
+  * preferential header ordering (keep From, To, Date, and Subject
+    together when printing, for example)
+  * Color/attribute support in headline format string
+  * Virtual Folders (make a folder view based on a message list from
+    the real folder, then operate on that list as if it were a folder.
+    Convenient for grouping unread or flagged email together and with
+    low message id numbers).
+  * search engine style searching of messages (after manual indexing)
+
+And, here are a few things that we fall far behind from mailx (or at
+least the heirloom mailx variant):
+
+  * No message forwarding support
+  * many variant commands are missing (e.g. Print (not print))
+  * Hangs if connection goes awry (seems some kind of bug in SSL
+    module; probably doesn't happen on insecure connections)
+  * incomplete message list support (for example, no IMAP search
+    commands)
+  * difficult to install due to non-distro package requirements
+  * No support for local spool/mbox/maildir nor pop3.
+  * no message signing/encryption support
+  * no content-type helper support
+  * no attachment saving/viewing support
 
 
 Goals:
@@ -67,7 +93,7 @@ Goals:
           possibly terminal type
             * e.g. CRT full screen for the find command, but 0 for viewing
               mail.
-            * Might want to disable paging or have a very bit CRT when using
+            * Might want to disable paging or have a very big CRT when using
               tmux so that you get its scroll-back buffer instead.
         * Support better editing of message structure
             * Biggest example is being able to edit an attachement, even
