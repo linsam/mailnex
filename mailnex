@@ -1531,7 +1531,20 @@ class Cmd(cmdprompt.CmdPrompt):
                     for header in self.C.settings.ignoredheaders.value:
                         if header in msg:
                             del msg[header]
-                    body += msg.as_string()
+                    prefheaders = ""
+                    for header in self.C.settings.headerorder.value:
+                        if header in msg:
+                            for val in msg.get_all(header):
+                                prefheaders += "{}: {}\n".format(header, val)
+                            del msg[header]
+                    if self.C.settings.headerorderend:
+                        body += msg.as_string().rstrip('\r\n')
+                        body += '\r\n'
+                        body += prefheaders
+                        body += '\r\n'
+                    else:
+                        body += prefheaders
+                        body += msg.as_string()
                 else:
                     body += part[2]
                 continue
@@ -2922,6 +2935,16 @@ def interact():
         'references',
         'content-type',
         ], doc="Setting form of the ignore command"))
+    options.addOption(settings.FlagsOption('headerorder', [
+        'Date',
+        'Sender',
+        'From',
+        'To',
+        'Cc',
+        'Subject',
+        ], doc="Prefered order of headers. Headers not mentioned in this list are displayed in the order of the message. Set this to empty in order to not re-order any headers for display."))
+    options.addOption(settings.BoolOption('headerorderend', False, doc="Set to display the preferred headers (those mentioned in 'headerorder') at the end of the headers list. Clear to display preferred headers at the start."))
+
     options.addOption(settings.StringOption("cacertsfile", "/etc/ssl/certs/ca-certificates.crt", doc="""File containing trusted certificate authorities for validating SSL/TLS connections.
 
     For local imap servers, you can set this to the public cert file of the
