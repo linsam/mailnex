@@ -1301,7 +1301,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # error boxes or something (not question marks, ideally). Then, we
         # should look for the header encoding markers and handle those as
         # well.
-        resparts.append((None, None, headers.decode('windows-1252')))
+        resparts.append((None, 'header', headers.decode('windows-1252')))
         # We look at the bodystructure to get the encoding since we already
         # have to fetch it to find the text/plain parts. The other options was
         # to explicitly fetch the MIME data of each sub-part.
@@ -1519,10 +1519,21 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
             index = self.C.virtfolder[index - 1]
         body = u''
-        for part in self.getTextPlainParts(index):
+        parts = self.getTextPlainParts(index)
+        if len(parts) < 2:
+            print("Message has no displayable parts")
+            return
+        for part in parts:
             if part[0] is None:
                 # Headers or structure
-                body += part[2]
+                if part[1] == 'header':
+                    msg = email.message_from_string(part[2])
+                    for header in self.C.settings.ignoredheaders.value:
+                        if header in msg:
+                            del msg[header]
+                    body += msg.as_string()
+                else:
+                    body += part[2]
                 continue
             if isinstance(part[1], structureMultipart):
                 # Ideally, subparts like attatched messages should be
@@ -2902,6 +2913,15 @@ def interact():
         """))
     options.addOption(settings.StringOption("headlinevf", "{this}{attr}{num:2}(g{gnum:4}) {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}", doc="Headline in virtual folder mode. If blank, use normal headline."))
     options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
+    options.addOption(settings.FlagsOption("ignoredheaders", [
+        'content-transfer-encoding',
+        'in-reply-to',
+        'message-id',
+        'mime-version',
+        'received',
+        'references',
+        'content-type',
+        ], doc="Setting form of the ignore command"))
     options.addOption(settings.StringOption("cacertsfile", "/etc/ssl/certs/ca-certificates.crt", doc="""File containing trusted certificate authorities for validating SSL/TLS connections.
 
     For local imap servers, you can set this to the public cert file of the
