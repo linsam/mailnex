@@ -1781,10 +1781,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     # Don't add a space; line is already quoted
                     body += ">" + line + "\r\n"
+        # Can't pass unicode to the constructor without having it encoded to a
+        # charset. We'll prefer storing the payload as unicode and converting
+        # it to a charset just before sending, so we don't have to keep
+        # converting back-and-forth during editing.
+        newmsg = email.mime.text.MIMEText("")
         if 'date' in hdrs:
-            newmsg = email.mime.text.MIMEText("Quoth {} on {}:\r\n\r\n{}".format(from_, hdrs['date'][0], body).encode('utf-8'))
+            newmsg.set_payload("Quoth {} on {}:\r\n\r\n{}".format(from_, hdrs['date'][0], body))
         else:
-            newmsg = email.mime.text.MIMEText("Quoth {}\r\n{}".format(from_, body).encode('utf-8'))
+            newmsg.set_payload("Quoth {}\r\n{}".format(from_, body))
         newmsg['To'] = ", ".join(to)
         newmsg['From'] = self.C.settings['from'].value
         newmsg['Subject'] = subject
@@ -1943,13 +1948,20 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     message.add_header('Subject', newsubject)
 
+            elif line.startswith("~px"):
+                print(repr(message.get_payload()))
             elif line.startswith("~p"):
+                # Well, we have to dance here to get the payload. Pretty sure
+                # we must be doing this wrong.
+                orig = message.get_payload()
+                message.set_payload(orig.encode('utf-8'))
                 print(message.as_string())
+                message.set_payload(orig)
                 #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
             elif line.startswith("~v"):
                 f=tempfile.mkstemp()
                 #TODO: If editHeaders is set, also save the headers
-                os.write(f[0], message.get_payload())
+                os.write(f[0], message.get_payload().encode('utf-8'))
 
                 # Would normally do cli.run_in_terminal, but that tries to
                 # obtain the cursor position when done by asking the terminal
@@ -1971,7 +1983,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     os.lseek(f[0], 0, os.SEEK_SET)
                     fil = os.fdopen(f[0])
-                    message.set_payload(fil.read())
+                    message.set_payload(fil.read().decode('utf-8'))
                     fil.close()
                     del fil
                     os.unlink(f[1])
