@@ -659,6 +659,23 @@ def processHeaders(text):
             name = name.lower()
     return headers
 
+def encodeEmail(fullmail):
+    """Encode a full email address.
+
+    This is needed because the email.headers.Header format encodes full
+    strings instead of address parts. The result is both the name, box and
+    host get wrapped up in a single string instead of separately as mandated
+    by the spec. The result of this is some MTA (for example, postfix in
+    default configuration) automatically adds an @host to addresses that lack
+    the @ sign, and it doesn't do RFC2046 decoding to see that (and by that
+    spec it shouldn't have to)
+
+    So, this function encodes the user name part separate and passes the
+    actual address (box and host) verbatim."""
+    parts = email.utils.parseaddr(fullmail)
+    p2 = (str(email.header.Header(parts[0],'utf-8')), parts[1])
+    return email.utils.formataddr(p2)
+
 class Cmd(cmdprompt.CmdPrompt):
     def help_hidden_commands(self):
         print("The following are hidden commands:")
@@ -1791,7 +1808,7 @@ class Cmd(cmdprompt.CmdPrompt):
         else:
             newmsg.set_payload("Quoth {}\r\n{}".format(from_, body))
         newmsg['To'] = ", ".join(to)
-        newmsg['From'] = self.C.settings['from'].value
+        newmsg['From'] = encodeEmail(self.C.settings['from'].value)
         newmsg['Subject'] = subject
         # On identifying fields, RFCs 2822 and 5322 say In-Reply-To should
         # exist if the parent(s) have message-ids, and should consist of those
@@ -2010,7 +2027,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # Mandatory headers: From: and Date:
         # TODO: Allow this to be set by the user on a per-message basis
         if not 'From' in m:
-            m['From'] = self.C.settings['from'].value
+            m['From'] = encodeEmail(self.C.settings['from'].value)
         if not 'Date' in m:
             m['Date'] = email.utils.formatdate(localtime=True) # Allow user to override local and possibly timezone?
         # Should headers: Message-Id
@@ -2304,9 +2321,20 @@ class Cmd(cmdprompt.CmdPrompt):
                     # perhaps better, make it part of the headline setting so if
                     # the user wants, they can see both.
                     date = date.astimezone(dateutil.tz.tzlocal())
-                subject = envelope.subject
+                try:
+                    subject = unicode(email.header.make_header(email.header.decode_header(envelope.subject)))
+                except:
+                    subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
                 froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
+                # Not great, but try to decode the froms fields
+                newfroms = []
+                for fr in froms:
+                    try:
+                        newfroms.append(unicode(email.header.make_header(email.header.decode_header(fr))))
+                    except:
+                        newfroms.append(fr)
+                froms = newfroms
                 if self.C.virtfolder and len(self.C.settings.headlinevf.value):
                     headline = self.C.settings.headlinevf.value
                 else:
