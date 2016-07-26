@@ -1566,6 +1566,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # must be structure
                     if not self.C.settings.showstructure:
                         continue
+                    body += "\033[7mStructure:\033[0m\n"
                     body += part[2]
                 continue
             if isinstance(part[1], structureMultipart):
@@ -1574,9 +1575,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 if not self.C.settings.allpartlabels:
                     # Don't show a label here if we are going to show it
                     # anyway below.
-                    body += "\n\033[7mPart %s:\033[0m\n" % (part[0])
+                    body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
             if self.C.settings.allpartlabels:
-                body += "\n\033[7mPart %s:\033[0m\n" % (part[0])
+                body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
             if self.C.settings.debug.general:
                 body += "encoding: " + part[1].encoding + "\r\n"
                 body += "struct: " + repr(part[1].__dict__) + "\r\n"
@@ -1585,7 +1586,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
         # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
         # for styling
-        content = b"\033[7mMessage %i:\033[0m\n\n" % index
+        content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
         s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
         s.communicate(content)
