@@ -327,7 +327,7 @@ class structureLeaf(structureRoot):
         self.description = description
         self.encoding = encoding
         self.size = size # octets of encoded message
-        if type_ == "text":
+        if type_.lower() == "text":
             self.lines, args = args[0], args[1:]
         self.md5, self.disposition, self.language, self.location = args
 
