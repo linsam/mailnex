@@ -2575,14 +2575,14 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("\n--- {} ---".format(name))
                 for opt in optset:
                     if opt.value != opt.default:
-                        print(opt)
+                        print(unicode(opt))
         elif args == "all":
             for name, optset in allsettings:
                 if len(optset) == 0:
                     continue
                 print("\n--- {} ---".format(name))
                 for opt in optset:
-                    print(opt)
+                    print(unicode(opt))
         else:
             sep = args.find('=')
             if sep == -1:
@@ -2609,7 +2609,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 elif args[-1] == '?':
                     # Print current value
                     try:
-                        print(self.C.settings[args[:-1]])
+                        print(unicode(self.C.settings[args[:-1]]))
                     except KeyError:
                         print("No setting named %s" % args[:-1])
                 elif args[-1] == '&':

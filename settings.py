@@ -103,8 +103,13 @@ class NumericOption(Option):
         self.value = value
 
 class StringOption(Option):
-    def __str__(self):
-        return "%s=%s" % (self.name, self.value)
+    def __unicode__(self):
+        return u"%s=%s" % (self.name, self.value)
+#    def __str__(self):
+#        """Attempt to make a str from unicode by using utf-8. This is not a great way to do it, because it assumes a utf-8 capable system for display, and worse, will break when we move to python3
+#
+#        (python3 uses __bytes__ and __str__ rather than __str__ and __unicode__, so __str__ means different things between the two)"""
+#        return unicode(self).encode('utf-8')
     def __len__(self):
         return len(self.value)
 
