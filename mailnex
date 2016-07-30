@@ -1815,18 +1815,26 @@ class Cmd(cmdprompt.CmdPrompt):
             newmsg.set_payload("Quoth {} on {}:\r\n\r\n{}".format(from_, hdrs['date'][0], body))
         else:
             newmsg.set_payload("Quoth {}\r\n{}".format(from_, body))
-        me = email.utils.parseaddr(self.C.settings['from'].value)
+        me = email.utils.getaddresses([self.C.settings['from'].value] + self.C.settings.altfrom.value)
         addrs=[]
         for addr in email.utils.getaddresses(to):
-            print("Comparing {} to {}".format(addr[1], me[1]))
-            if addr[1] != me[1]:
+            for myaddr in me:
+                if addr[1] == myaddr[1]:
+                    break
+            else:
+                # Made it through for loop without any matches, so this
+                # address isn't us; append it to the list
                 addrs.append(addr)
         print(addrs)
         newmsg['To'] = ", ".join(map(email.utils.formataddr, addrs))
         addrs=[]
         for addr in email.utils.getaddresses(cc):
-            print("Comparing {} to {}".format(addr[1], me[1]))
-            if addr[1] != me[1]:
+            for myaddr in me:
+                if addr[1] == myaddr[1]:
+                    break
+            else:
+                # Made it through for loop without any matches, so this
+                # address isn't us; append it to the list
                 addrs.append(addr)
         print(addrs)
         newmsg['Cc'] = ", ".join(map(email.utils.formataddr, addrs))
@@ -2903,6 +2911,37 @@ class Cmd(cmdprompt.CmdPrompt):
 def getOptionsSet():
     options = settings.Options()
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
+    options.addOption(settings.FlagsOption("altfrom", [], doc="""Alternative Addresses for user.
+
+    There are 2 common use cases. In one, the user has multiple identities, and you'd like to
+    have the From field of a new message match whatever identity received the original message.
+    In the other, the user has multiple valid box names but only one identity. This covers the second
+    case for now.
+
+    For example, your company might have an alias "sales@example.com" that drops into several boxes,
+    and the user is at "foo@example.com". User foo, on replying to a sales email, may want to not
+    have sales end up in the to or cc list. Foo would have sales@example.com as an altfrom in this case.
+
+    Case 1 is more challenging to implement (in particular, what to do if more than 1 valid identity
+    is mentioned in the original email at the same time?) so it is currently not supported."""))
+    # ^-- some notes on the above: Perhaps a more generic mechanism is a
+    # mapping of email addresses to from fields. E.G. foo@example.com and
+    # foo2@example.com map to "Foo User" <foo@example.com>, but
+    # sales@example.com gets mapped to "Sales Enquiries" <sales@example.com>.
+    # That's a tad more flexible in terms of identities, but still doesn't
+    # answer how to deal with multiple identities. It also doesn't cover other
+    # things a user might want to do, such as different autocc per identity.
+    # Perhaps what we really need to do is something akin to mailx account
+    # settings, but for identities. The combo of an identity's 'from' and
+    # 'altfrom' settings cause identity selection, first selection wins
+    # default (unless a priority list is given), and the user can change
+    # identity during message composition. When changing, we can list detected
+    # identities, but allow user to select any identity.
+    #
+    # This is more complicated, because we'd have to keep track of the
+    # addresses that were culled from the to/cc lists from the default
+    # identity to be able to put them back on an identity change.
+
     options.addOption(settings.StringOption("attrlist", "NUROSPMFATK+-J", doc=
         """Character mapping for attribute in headline.
 
