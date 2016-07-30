@@ -1769,6 +1769,13 @@ class Cmd(cmdprompt.CmdPrompt):
             to = ",".join(hdrs['to']).split(',')
         else:
             to = ""
+        if 'cc' in hdrs:
+            cc = ",".join(hdrs['cc']).split(',')
+        else:
+            cc = ""
+        # TODO: What if the message has BCC headers? Warn the user? Prompt?
+        # Discard? Sheepishly discarding for now. Need to see what mailx does,
+        # I guess.
         if 'subject' in hdrs:
             # Take the first subject we find.
             subj = hdrs['subject'][0]
@@ -1808,7 +1815,21 @@ class Cmd(cmdprompt.CmdPrompt):
             newmsg.set_payload("Quoth {} on {}:\r\n\r\n{}".format(from_, hdrs['date'][0], body))
         else:
             newmsg.set_payload("Quoth {}\r\n{}".format(from_, body))
-        newmsg['To'] = ", ".join(to)
+        me = email.utils.parseaddr(self.C.settings['from'].value)
+        addrs=[]
+        for addr in email.utils.getaddresses(to):
+            print("Comparing {} to {}".format(addr[1], me[1]))
+            if addr[1] != me[1]:
+                addrs.append(addr)
+        print(addrs)
+        newmsg['To'] = ", ".join(map(email.utils.formataddr, addrs))
+        addrs=[]
+        for addr in email.utils.getaddresses(cc):
+            print("Comparing {} to {}".format(addr[1], me[1]))
+            if addr[1] != me[1]:
+                addrs.append(addr)
+        print(addrs)
+        newmsg['Cc'] = ", ".join(map(email.utils.formataddr, addrs))
         newmsg['From'] = encodeEmail(self.C.settings['from'].value)
         newmsg['Subject'] = subject
         # On identifying fields, RFCs 2822 and 5322 say In-Reply-To should
@@ -1844,8 +1865,6 @@ class Cmd(cmdprompt.CmdPrompt):
             refs.append(hdrs['message-id'][0])
         if len(refs):
             newmsg['references'] = " ".join(refs)
-        if 'cc' in hdrs:
-            newmsg['Cc'] = ", ".join(",".join(hdrs['cc']).split(','))
         if self.C.settings.autobcc:
             newmsg['Bcc'] = self.C.settings.autobcc.value
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
