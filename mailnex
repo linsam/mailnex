@@ -2881,13 +2881,9 @@ class Cmd(cmdprompt.CmdPrompt):
             if res is not None:
                 print(repr(res))
 
-def interact():
-    cmd = Cmd(prompt="mailnex> ", histfile="mailnex_history")
-    C = Context()
-    C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
-    C.lastcommand=""
-    cmd.C = C
+def getOptionsSet():
     options = settings.Options()
+    options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.StringOption("attrlist", "NUROSPMFATK+-J", doc=
         """Character mapping for attribute in headline.
 
@@ -2909,6 +2905,10 @@ def interact():
     automatically mark messages from yourself as seen and/or put in a 'Sent' folder. Doing this instead of
     saving the message separately saves a transmission to the server.
     The downside to this method is that the message wouldn't include other Bcc for your records."""))
+    options.addOption(settings.StringOption("cacertsfile", "/etc/ssl/certs/ca-certificates.crt", doc="""File containing trusted certificate authorities for validating SSL/TLS connections.
+
+    For local imap servers, you can set this to the public cert file of the
+    server, for example '/etc/dovecot/dovecot.pem'"""))
     # Debug options:
     #   exception - show detailed exceptions instead of short messages
     #   general - show general tidbits during runtime
@@ -2916,13 +2916,11 @@ def interact():
     #   parse - debug output from parsers (e.g. atoms and such)
     #   struct - debug output from structure heirarchy parser
     options.addOption(settings.FlagsOption("debug", []))
+    options.addOption(settings.StringOption("defaultTZ", "UTC"))
+    options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
     # Use the username and hostname of this machine as a (hopefully reasonable)
     # guess for the from line.
     options.addOption(settings.StringOption("from", "%s@%s" % (getpass.getuser(), os.uname()[1]), doc="Value to use for From field of composed email messages"))
-    options.addOption(settings.BoolOption("headerstats", 0, doc="Show information about the page of message headers displayed in headers and z/Z commands"))
-    options.addOption(settings.StringOption("PAGER", "internal"))
-    options.addOption(settings.StringOption("defaultTZ", "UTC"))
-    options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.BoolOption("headers", 1, doc="""Show headers on events that update them.
 
     This includes things like connecting and receiving new messages. This setting covers the default.
@@ -2934,6 +2932,7 @@ def interact():
     """))
     options.addOption(settings.BoolOption("headers_folder", None))
     options.addOption(settings.BoolOption("headers_newmsg", None))
+    options.addOption(settings.BoolOption("headerstats", 0, doc="Show information about the page of message headers displayed in headers and z/Z commands"))
     options.addOption(settings.StringOption("headline", "{this}{attr}{num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
         doc="""Format string for headers lines (e.g. in headers and from commands)
 
@@ -2969,16 +2968,6 @@ def interact():
                           background.
         """))
     options.addOption(settings.StringOption("headlinevf", "{this}{attr}{num:2}(g{gnum:4}) {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}", doc="Headline in virtual folder mode. If blank, use normal headline."))
-    options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
-    options.addOption(settings.FlagsOption("ignoredheaders", [
-        'content-transfer-encoding',
-        'in-reply-to',
-        'message-id',
-        'mime-version',
-        'received',
-        'references',
-        'content-type',
-        ], doc="Setting form of the ignore command"))
     options.addOption(settings.FlagsOption('headerorder', [
         'Date',
         'Sender',
@@ -2988,12 +2977,27 @@ def interact():
         'Subject',
         ], doc="Prefered order of headers. Headers not mentioned in this list are displayed in the order of the message. Set this to empty in order to not re-order any headers for display."))
     options.addOption(settings.BoolOption('headerorderend', False, doc="Set to display the preferred headers (those mentioned in 'headerorder') at the end of the headers list. Clear to display preferred headers at the start."))
+    options.addOption(settings.FlagsOption("ignoredheaders", [
+        'content-transfer-encoding',
+        'in-reply-to',
+        'message-id',
+        'mime-version',
+        'received',
+        'references',
+        'content-type',
+        ], doc="Setting form of the ignore command"))
 
-    options.addOption(settings.StringOption("cacertsfile", "/etc/ssl/certs/ca-certificates.crt", doc="""File containing trusted certificate authorities for validating SSL/TLS connections.
-
-    For local imap servers, you can set this to the public cert file of the
-    server, for example '/etc/dovecot/dovecot.pem'"""))
+    options.addOption(settings.StringOption("PAGER", "internal"))
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
+    return options
+
+def interact():
+    cmd = Cmd(prompt="mailnex> ", histfile="mailnex_history")
+    C = Context()
+    C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
+    C.lastcommand=""
+    cmd.C = C
+    options = getOptionsSet()
     C.settings = options
     postConfFolder = None
     if confFile:
