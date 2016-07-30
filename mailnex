@@ -2991,7 +2991,7 @@ def getOptionsSet():
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
     return options
 
-def interact():
+def interact(invokeOpts):
     cmd = Cmd(prompt="mailnex> ", histfile="mailnex_history")
     C = Context()
     C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
@@ -3000,6 +3000,9 @@ def interact():
     options = getOptionsSet()
     C.settings = options
     postConfFolder = None
+    global confFile
+    if invokeOpts.config:
+        confFile = invokeOpts.config
     if confFile:
         # Walk through the config file
         with open(confFile) as conf:
@@ -3046,4 +3049,8 @@ def interact():
 
 if __name__ == "__main__":
     import sys
-    interact()
+    import argparse
+    parser = argparse.ArgumentParser(description="command line mail user agent")
+    parser.add_argument('--config', help='custom configuration file')
+    args = parser.parse_args()
+    interact(args)
