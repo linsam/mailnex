@@ -1169,6 +1169,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     self.C.currentMessage = 1
             self.C.lastMessage = c.exists
             c.setCB("exists", self.newExist)
+            c.setCB("expunge", self.newExpunge)
             if self.C.currentMessage > self.C.lastMessage:
                 # This should only really happen when lastMessage is 0, but
                 # range checking is probably good anyway.
@@ -1217,6 +1218,14 @@ class Cmd(cmdprompt.CmdPrompt):
                     l()
             t = pyuv.Timer(self.ptkevloop.realloop)
             t.start(tcb,0.1,0)
+
+    def newExpunge(self, value, msg):
+        # TODO: let user know that message numbers have changed, but only do
+        # it once between commands so as not to be a nuisance
+        # Alternatively, use message UIDs behind the scenes so that we can
+        # maintain the message numbers the user expects. Managing the
+        # de-synchronization would probably be challenging, though
+        self.C.lastMessage -= 1
 
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing
@@ -2406,6 +2415,101 @@ class Cmd(cmdprompt.CmdPrompt):
 
         self.showHeaders("%s" % ",".join(map(str,msglist)))
         C.nextMessage = C.currentMessage
+
+    @showExceptions
+    @needsConnection
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_delete(self, msglist):
+        """Mark messages for deletion.
+
+        A deleted message still exists until expunged.
+        """
+        if msglist is None:
+            msglist = [self.C.currentMessage]
+        elif len(msglist) == 0:
+                print("No matches")
+                return
+        if self.C.virtfolder:
+            msglist = [self.C.virtfolder[x - 1] for x in msglist]
+        try:
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Deleted)" % ",".join(map(str,msglist)))
+            # TODO: either run once per flag, or collect errors to show at
+            # end.
+        except Exception as ev:
+            print("Failed to flag: %s" % ev)
+
+    @showExceptions
+    @needsConnection
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_undelete(self, msglist):
+        """Remove deletion mark for a message.
+
+        Message must not yet be expunged.
+        """
+        if msglist is None:
+            msglist = [self.C.currentMessage]
+        elif len(msglist) == 0:
+                print("No matches")
+                return
+        if self.C.virtfolder:
+            msglist = [self.C.virtfolder[x - 1] for x in msglist]
+        try:
+            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Deleted)" % ",".join(map(str, msglist)))
+            # TODO: either run once per flag, or collect errors to show at
+            # end.
+        except Exception as ev:
+            print("Failed to unflag: %s" % ev)
+
+    @showExceptions
+    @needsConnection
+    def do_expunge(self, args):
+        """Flush deleted messages (actually remove them).
+        """
+        self.C.connection.doSimpleCommand("EXPUNGE")
+
+    @showExceptions
+    @needsConnection
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_read(self, msglist):
+        """Mark messages as being seen (read).
+        """
+        if msglist is None:
+            msglist = [self.C.currentMessage]
+        elif len(msglist) == 0:
+                print("No matches")
+                return
+        if self.C.virtfolder:
+            msglist = [self.C.virtfolder[x - 1] for x in msglist]
+        try:
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Seen)" % ",".join(map(str,msglist)))
+            # TODO: either run once per flag, or collect errors to show at
+            # end.
+        except Exception as ev:
+            print("Failed to flag: %s" % ev)
+
+    @showExceptions
+    @needsConnection
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_unread(self, msglist):
+        """Remove Seen flag from messages (make unread).
+        """
+        if msglist is None:
+            msglist = [self.C.currentMessage]
+        elif len(msglist) == 0:
+                print("No matches")
+                return
+        if self.C.virtfolder:
+            msglist = [self.C.virtfolder[x - 1] for x in msglist]
+        try:
+            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Seen)" % ",".join(map(str, msglist)))
+            # TODO: either run once per flag, or collect errors to show at
+            # end.
+        except Exception as ev:
+            print("Failed to unflag: %s" % ev)
 
     @showExceptions
     @needsConnection

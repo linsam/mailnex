@@ -239,6 +239,9 @@ class imap4ClientConnection(object):
                 self.close()
                 raise Exception("Server connection lost? 0 length read occured")
             line += data
+            # TODO: Timeout if X seconds have passed and yet we don't have a
+            # completed request.
+            # Probably requires a select or better yet, eventloop integration.
             if self.maxlinelen and len(line) > self.maxlinelen:
                 # TODO: Try to cleanup by flushing? Let something higher take
                 # care of it?
@@ -365,7 +368,8 @@ class imap4ClientConnection(object):
                             elif typ.upper() == "EXPUNGE":
                                 if self.debug:
                                     print("EXPUNGE for %s" % num)
-                                # TODO: callback for expunge data
+                                if "expunge" in self.cbs:
+                                    self.cbs['expunge'](num, data)
                             # numerical mailbox-data
                             elif typ.upper() == "EXISTS":
                                 if self.debug:
