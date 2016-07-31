@@ -234,7 +234,11 @@ class imap4ClientConnection(object):
         self.socket.send("%s %s\r\n" % (tagstr, cmd))
         line = ""
         while True:
-            line += self.socket.recv(1)
+            data = self.socket.recv(1)
+            if len(data) == 0:
+                self.close()
+                raise Exception("Server connection lost? 0 length read occured")
+            line += data
             if self.maxlinelen and len(line) > self.maxlinelen:
                 # TODO: Try to cleanup by flushing? Let something higher take
                 # care of it?

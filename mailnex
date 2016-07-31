@@ -1227,7 +1227,11 @@ class Cmd(cmdprompt.CmdPrompt):
         # can be set much quicker to find new mail in a reasonable amount of
         # time.
         if self.C.connection:
-            self.C.connection.doSimpleCommand("noop")
+            try:
+                self.C.connection.doSimpleCommand("noop")
+            except:
+                self.C.connection = None
+                raise
 
     @showExceptions
     @needsConnection
@@ -2967,13 +2971,16 @@ def getOptionsSet():
 
     For local imap servers, you can set this to the public cert file of the
     server, for example '/etc/dovecot/dovecot.pem'"""))
-    # Debug options:
-    #   exception - show detailed exceptions instead of short messages
-    #   general - show general tidbits during runtime
-    #   imap - debug output from imap handler
-    #   parse - debug output from parsers (e.g. atoms and such)
-    #   struct - debug output from structure heirarchy parser
-    options.addOption(settings.FlagsOption("debug", []))
+    options.addOption(settings.FlagsOption("debug", [], doc="""Enable various debug modes
+        * exception - show detailed exceptions instead of short messages
+        * general   - show general tidbits during runtime
+        * imap      - debug output from imap handler (only applies on new imap
+                      connections)
+        * parse     - debug from parsers (e.g. IMAP data structures)
+        * python    - enable the python command for mucking with program
+                      internals live.
+        * struct    - debug output from message structure parser
+        """))
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
     # Use the username and hostname of this machine as a (hopefully reasonable)
