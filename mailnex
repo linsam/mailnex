@@ -1438,7 +1438,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # CP1252 and then claiming it is iso-8859-1.
                     for c in map(unichr, range(0x80,0xa0)):
                         if c in d:
-                            raise UnicodeDecodeError()
+                            raise UnicodeDecodeError(str(charset), b"", 0, 1, b"control character detected")
                 except UnicodeDecodeError:
                     if charset == 'iso-8859-1':
                         # MS Outlook lies about its charset, so we'll try what
