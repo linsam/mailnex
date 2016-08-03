@@ -1314,12 +1314,16 @@ class Cmd(cmdprompt.CmdPrompt):
         print()
         print("Done!")
 
-    def getTextPlainParts(self, index):
+    def getTextPlainParts(self, index, allParts=False):
         """Get the plain text parts of a message.
 
         Returns a list of tuples. Each list entry represents one part.
         Each tuple consists of the part number and unicode version of the text, already converted from specified or guessed charsets.
-        Currently this includes the message headers (as the first section). Handling of sub-messages is TBD."""
+        Currently this includes the message headers (as the first section).
+
+        If the optional parameter allParts is set to true, this will actually
+        return everything instead of just text parts.
+        """
         resparts = []
         data = self.C.connection.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
         parts = processAtoms(data[0][1], self.C.settings)
@@ -1351,7 +1355,7 @@ class Cmd(cmdprompt.CmdPrompt):
         struct = unpackStruct(structstr, self.C.settings, tag=str(index))
         structureStrings = []
         fetchParts = []
-        def pickparts(struct):
+        def pickparts(struct, allParts=False):
             """Pick the parts we are going to use to produce a regular view of the message.
 
             We'll build a visualization of the structure while we are at it (much of
@@ -1363,7 +1367,7 @@ class Cmd(cmdprompt.CmdPrompt):
             skip = False
             if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                 extra += " (%s)" % struct.disposition[0]
-                if struct.disposition[0].lower() == "attachment":
+                if not allParts and struct.disposition[0].lower() == "attachment":
                     skip = True
                 dispattrs = dictifyList(struct.disposition[1])
                 if 'filename' in dispattrs:
@@ -1375,11 +1379,16 @@ class Cmd(cmdprompt.CmdPrompt):
             # First pass, we'll just grab all text/plain parts. Later we'll
             # want to check disposition, and later we'll want to deal with
             # multipart/alternative better (and multipart/related)
-            if struct.type_ == "text" and struct.subtype == "plain":
+            if not allParts and struct.type_ == "text" and struct.subtype == "plain":
                 # TODO: write the following a bit more efficiently. Like,
                 # split only once, use second part of return only, perhaps?
                 if not skip:
                     fetchParts.append((innerTag, struct))
+            if allParts and not isinstance(struct, structureMessage) and not hasattr(struct, "subs"):
+                # Probably useful to display, not a multipart itself, or a
+                # message (which *should* have subparts itself?)
+                # TODO: Properly handle attached messages
+                fetchParts.append((innerTag, struct))
             if isinstance(struct, structureMessage):
                 extra = ""
                 # Switch to the inner for further processing
@@ -1391,11 +1400,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 fetchParts.append(("%s.HEADER" % innerTag, struct))
             if hasattr(struct, "subs"):
                 for i in struct.subs:
-                    pickparts(i)
-        pickparts(struct)
+                    pickparts(i, allParts)
+        pickparts(struct, allParts)
         structureString = u"\n".join(structureStrings)
         if len(fetchParts) == 0:
-            print("Message doesn't have any displayable parts.")
             return []
         elif len(fetchParts) == 1 and len(fetchParts[0][0]) == 0:
             # This message doesn't have parts, so fetch "part 1" to get the
@@ -1459,6 +1467,51 @@ class Cmd(cmdprompt.CmdPrompt):
             resparts.append((o[0], o[1], d))
         return resparts
 
+    def partsToString(self, parts):
+        body = u''
+        for part in parts:
+            if part[0] is None:
+                # Headers or structure
+                if part[1] == 'header':
+                    msg = email.message_from_string(part[2])
+                    for header in self.C.settings.ignoredheaders.value:
+                        if header in msg:
+                            del msg[header]
+                    prefheaders = ""
+                    for header in self.C.settings.headerorder.value:
+                        if header in msg:
+                            for val in msg.get_all(header):
+                                prefheaders += "{}: {}\n".format(header, val)
+                            del msg[header]
+                    if self.C.settings.headerorderend:
+                        body += msg.as_string().rstrip('\r\n')
+                        body += '\r\n'
+                        body += prefheaders
+                        body += '\r\n'
+                    else:
+                        body += prefheaders
+                        body += msg.as_string()
+                else:
+                    # must be structure
+                    if not self.C.settings.showstructure:
+                        continue
+                    body += "\033[7mStructure:\033[0m\n"
+                    body += part[2]
+                continue
+            if isinstance(part[1], structureMultipart):
+                # Ideally, subparts like attatched messages should be
+                # indented, perhaps with a colored bar
+                if not self.C.settings.allpartlabels:
+                    # Don't show a label here if we are going to show it
+                    # anyway below.
+                    body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
+            if self.C.settings.allpartlabels:
+                body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
+            if self.C.settings.debug.general:
+                body += "encoding: " + part[1].encoding + "\r\n"
+                body += "struct: " + repr(part[1].__dict__) + "\r\n"
+            body += part[2]
+        return body
     @showExceptions
     @needsConnection
     @argsToMessageList
@@ -1548,54 +1601,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("Message {} out of range".format(index))
                 return
             index = self.C.virtfolder[index - 1]
-        body = u''
         parts = self.getTextPlainParts(index)
         if len(parts) < 2:
             print("Message has no displayable parts")
             return
-        for part in parts:
-            if part[0] is None:
-                # Headers or structure
-                if part[1] == 'header':
-                    msg = email.message_from_string(part[2])
-                    for header in self.C.settings.ignoredheaders.value:
-                        if header in msg:
-                            del msg[header]
-                    prefheaders = ""
-                    for header in self.C.settings.headerorder.value:
-                        if header in msg:
-                            for val in msg.get_all(header):
-                                prefheaders += "{}: {}\n".format(header, val)
-                            del msg[header]
-                    if self.C.settings.headerorderend:
-                        body += msg.as_string().rstrip('\r\n')
-                        body += '\r\n'
-                        body += prefheaders
-                        body += '\r\n'
-                    else:
-                        body += prefheaders
-                        body += msg.as_string()
-                else:
-                    # must be structure
-                    if not self.C.settings.showstructure:
-                        continue
-                    body += "\033[7mStructure:\033[0m\n"
-                    body += part[2]
-                continue
-            if isinstance(part[1], structureMultipart):
-                # Ideally, subparts like attatched messages should be
-                # indented, perhaps with a colored bar
-                if not self.C.settings.allpartlabels:
-                    # Don't show a label here if we are going to show it
-                    # anyway below.
-                    body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
-            if self.C.settings.allpartlabels:
-                body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
-            if self.C.settings.debug.general:
-                body += "encoding: " + part[1].encoding + "\r\n"
-                body += "struct: " + repr(part[1].__dict__) + "\r\n"
-            body += part[2]
-
+        body = self.partsToString(parts)
 
         # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
         # for styling
@@ -1622,6 +1632,51 @@ class Cmd(cmdprompt.CmdPrompt):
             #
             # However, some people probably like the mailx behavior better
             # because they are used to it, so we ought to support it.
+            M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
+            # Update message stuffs. Should probably update the 'lastList' as
+            # well.
+            C.nextMessage = C.currentMessage + 1
+
+    @showExceptions
+    @needsConnection
+    @argsToMessageList
+    @updateMessageSelectionAtEnd
+    def do_Print(self, msglist):
+        """Print all parts of a message."""
+        C = self.C
+        M = C.connection
+        lastMessage = len(self.C.virtfolder) if self.C.virtfolder else self.C.lastMessage
+        if msglist is None:
+            index = C.currentMessage
+            if index == 0 or index > lastMessage:
+                print("No applicable messages")
+                return
+            msgs = [index]
+        else:
+            msgs = msglist
+
+        # TODO: Support lists. For now, just handle the first in the list
+        index = msgs[0]
+        if self.C.virtfolder:
+            if index > lastMessage:
+                print("Message {} out of range".format(index))
+                return
+            index = self.C.virtfolder[index - 1]
+        parts = self.getTextPlainParts(index, allParts=True)
+        if len(parts) < 2:
+            print("Message has no displayable parts")
+            return
+        body = self.partsToString(parts)
+
+        # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
+        # for styling
+        content = b"\033[7mMessage %i:\033[0m\n" % index
+        content += body.encode('utf-8')
+        s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
+        s.communicate(content)
+        res = s.wait()
+        if res == 0:
+            # TODO: Allow asynchronous mode. See do_print for details.
             M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
             # Update message stuffs. Should probably update the 'lastList' as
             # well.
