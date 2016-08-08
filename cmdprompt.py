@@ -209,13 +209,14 @@ class CmdPrompt(cmd.Cmd):
         """Set the prompt string"""
         self.prompt = newprompt
 
-    def singleprompt(self, prompt, ispassword=False, default=u'', titlefunc=None):
+    def singleprompt(self, prompt, ispassword=False, default=u'', titlefunc=None, completer=None):
         tmpcli = prompt_toolkit.interface.CommandLineInterface(
                 application = prompt_toolkit.shortcuts.create_prompt_application(
                     prompt,
                     is_password=ispassword,
                     default=default,
                     get_title = titlefunc,
+                    completer = completer,
                     ),
                 eventloop = self.ptkevloop,
                 #TODO: Reuse output from self.cli
