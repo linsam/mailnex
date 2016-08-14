@@ -40,9 +40,7 @@ And, here are a few things that we fall far behind from mailx (or at
 least the heirloom mailx variant):
 
   * No message forwarding support
-  * many variant commands are missing (e.g. Print (not print))
-  * Hangs if connection goes awry (seems some kind of bug in SSL
-    module; probably doesn't happen on insecure connections)
+  * many variant commands are missing (e.g. Reply (not reply))
   * incomplete message list support (for example, no IMAP search
     commands)
   * difficult to install due to non-distro package requirements
