@@ -198,6 +198,8 @@ class CmdPrompt(cmd.Cmd):
     def __init__(self, prompt=None, histfile=None, eventloop=None):
         cmd.Cmd.__init__(self)
         self.completer = Completer(self)
+        # ttyBusy tracks times when printing is a Bad Idea
+        self.ttyBusy = False
         if histfile:
             self.history = prompt_toolkit.history.FileHistory(histfile)
         else:
@@ -309,10 +311,12 @@ class CmdPrompt(cmd.Cmd):
                 pyuv.StdIO(fd=sys.stdout.fileno(), flags=pyuv.UV_INHERIT_FD),
                 pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
                 ]
+        self.ttyBusy = True
         s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
         com.write(data)
         com.close()
         self.ptkevloop.realloop.run()
+        self.ttyBusy = False
         return res[0]
     def runAProgramStraight(self, args):
         """Run a program without anything special. Leaves stdin/stdout/stderr alone.
@@ -328,6 +332,8 @@ class CmdPrompt(cmd.Cmd):
                 pyuv.StdIO(fd=sys.stdout.fileno(), flags=pyuv.UV_INHERIT_FD),
                 pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
                 ]
+        self.ttyBusy = True
         s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
         self.ptkevloop.realloop.run()
+        self.ttyBusy = False
         return res[0]

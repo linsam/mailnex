@@ -1246,6 +1246,9 @@ class Cmd(cmdprompt.CmdPrompt):
     def newExist(self, value):
         delta = value - self.C.lastMessage
         self.C.lastMessage = value
+        if self.ttyBusy:
+            # TODO: Collect messages for display once it isn't busy any more.
+            return
         # TODO: We might get this on message expunge as well (e.g. delta would
         # be negative). Might also be the case where this doesn't change value
         # becuase something was added and something else was expunged.
