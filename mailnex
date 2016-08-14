@@ -1661,9 +1661,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # for styling
         content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
-        s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
-        s.communicate(content)
-        res = s.wait()
+        res = self.runAProgramWithInput(["less","-R"], content)
         if res == 0:
             # TODO: Allow asynchronous mode. That is, in mailx, we locally
             # keep track of the fact that the message was seen until the user
@@ -1722,9 +1720,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # for styling
         content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
-        s = subprocess.Popen(["less","-R"], stdin=subprocess.PIPE)
-        s.communicate(content)
-        res = s.wait()
+        res = self.runAProgramWithInput(["less","-R"], content)
         if res == 0:
             # TODO: Allow asynchronous mode. See do_print for details.
             M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
@@ -1821,8 +1817,7 @@ class Cmd(cmdprompt.CmdPrompt):
             #content = headers.encode('utf-8') + body.encode('utf-8')
             content += "Message {}:\n".format(index) + str(headers) + str(body)
         # TODO: Process content for control chars?
-        s = subprocess.Popen("less", stdin=subprocess.PIPE)
-        s.communicate(content)
+        res = self.runAProgramWithInput(["less"], content)
 
     @showExceptions
     def do_mail(self, args):
@@ -2140,7 +2135,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # For whatever reason, vim complains the input isn't from
                     # the terminal unless we redirect it ourselves. I'm
                     # guessing prompt_toolkit changed python's stdin somehow
-                    res = os.system("vim %s </dev/tty" % f[1])
+                    res = self.runAProgramStraight(["vim", f[1]])
                 if res != 0:
                     print("Edit aborted; message unchanged")
                 else:

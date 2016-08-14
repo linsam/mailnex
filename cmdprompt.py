@@ -35,8 +35,6 @@ class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
         # monitor terminal resizes, and a callback for when stdin is ready.
         # libuv can do the stdin with the TTY handler, so we'll give that a
         # whirl
-        # TODO: probably only want to init these if we are fresh or have been
-        # 'close()'ed.
         self.sigw = pyuv.Signal(self.realloop)
         self.sigw.start(self.sigwinch, signal.SIGWINCH)
         self.tty = pyuv.TTY(self.realloop, sys.stdin.fileno(), True)
@@ -44,6 +42,25 @@ class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
         self._callbacks = callbacks
         self.inputstream = prompt_toolkit.terminal.vt100_input.InputStream(callbacks.feed_key)
         return self.realloop.run()
+    def ttyPause(self):
+        """Disable receive on the tty.
+
+        This is useful when spawning another program that needs the tty (e.g. less or vim).
+
+        Note: prompt_toolkit calls stop when the prompt completes, and we
+        remove tty and sigwinch watchers on stop and restore on run again
+        (when asking for another prompt), so in those cases, this needn't be
+        called. This probably doesn't hold true for 'full screen' application
+        mode.
+
+        Call ttyResume() to restore input.
+        """
+        self.tty.stop_read()
+    def ttyResume(self):
+        """Restore receive on the tty.
+
+        See ttyPause()."""
+        self.tty.start_read(self.ttyread)
     def sigwinch(self, event, signum):
         # We don't worry about all that executor threading stuffs that
         # prompt_toolkit does, because libuv (is supposed to) give us signals
@@ -66,6 +83,8 @@ class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
         self.sigw.close()
         self.tty.close()
     def stop(self):
+        self.sigw.close()
+        self.tty.close()
         self.realloop.stop()
     def call_from_executor(self, callback, _max_postpone_until=None):
         #TODO: Mess with max postpone? PosixEventLoop uses a pipe to schedule
@@ -275,3 +294,40 @@ class CmdPrompt(cmd.Cmd):
         finally:
             # Any cleanup here? We aren't using readline at all...
             pass
+    def runAProgramWithInput(self, args, data):
+        """Run a program with the given input. Leaves stdout/stderr alone.
+
+        This should be run when the prompt is inactive."""
+        res=[]
+        def finish(proc,status,signal):
+            proc.close()
+            proc.loop.stop()
+            res.append(status)
+        com = pyuv.Pipe(self.ptkevloop.realloop, True)
+        stdio = [
+                pyuv.StdIO(stream=com, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_READABLE_PIPE),
+                pyuv.StdIO(fd=sys.stdout.fileno(), flags=pyuv.UV_INHERIT_FD),
+                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                ]
+        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        com.write(data)
+        com.close()
+        self.ptkevloop.realloop.run()
+        return res[0]
+    def runAProgramStraight(self, args):
+        """Run a program without anything special. Leaves stdin/stdout/stderr alone.
+
+        This should be run when the prompt is inactive."""
+        res=[]
+        def finish(proc,status,signal):
+            proc.close()
+            proc.loop.stop()
+            res.append(status)
+        stdio = [
+                pyuv.StdIO(fd=sys.stdin.fileno(), flags=pyuv.UV_INHERIT_FD),
+                pyuv.StdIO(fd=sys.stdout.fileno(), flags=pyuv.UV_INHERIT_FD),
+                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                ]
+        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        self.ptkevloop.realloop.run()
+        return res[0]
