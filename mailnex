@@ -760,6 +760,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     connections.  if 'cri' is empty, reuse last search.
 
         (cri) is a complicated beasty, see the full documentation for details (from mailx until we have our own).
+        As a simplification, we might just pass these literally to the IMAP server.
 
         Some commands don't take a list, but set the list. For example, the
         implicit command only prints one message (usually the next message).
@@ -886,6 +887,13 @@ class Cmd(cmdprompt.CmdPrompt):
             return map(int, data)
         if args == ":f":
             data = self.C.connection.search("UTF-8", "flagged")
+            if self.C.settings.debug.general:
+                print(data)
+            return map(int, data)
+        if args.startswith("(") and args.endswith(")"):
+            # Support IMAP search by being a passthrough for IMAP SEARCH
+            # command.
+            data = self.C.connection.search("UTF-8", args)
             if self.C.settings.debug.general:
                 print(data)
             return map(int, data)
