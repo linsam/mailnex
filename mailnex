@@ -1649,24 +1649,25 @@ class Cmd(cmdprompt.CmdPrompt):
             print("No view command found for part.")
             return
         #print("Would run",cmds[1]['view'])
-        print("Fetching attachment")
+        #print("Fetching attachment")
         data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
-        print("processing data")
+        #print("processing data")
         # TODO: This part is *very* slow
         parts = processAtoms(data[0][1], self.C.settings)
-        print("getting part")
+        #print("getting part")
         data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
         #print(data)
         #print(part.encoding)
         if part.encoding.lower() == 'base64':
-            print("Decoding attachment")
+            #print("Decoding attachment")
             data = data.decode('base64')
-        print("Saving attachment to temporary file")
+        #print("Saving attachment to temporary file")
         with tempfile.NamedTemporaryFile() as outfile:
             outfile.write(data)
             outfile.flush()
-            print("Launching viewer")
-            os.system(cmds[1]['view'] % outfile.name)
+            fullcmd = cmds[1]['view'] % outfile.name
+            print("Launching viewer:", fullcmd)
+            os.system(fullcmd)
 
 
 
