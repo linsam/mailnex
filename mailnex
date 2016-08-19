@@ -537,13 +537,14 @@ def processAtoms(text, options):
     inquote = False
     inspace = True
     inbrace = False
-    inliteral = False
     literalRemain = 0
     literalSizeString = ""
     skipCrLf = False
     pos = -1
-    for c in text:
+    last = len(text) - 1
+    while pos < last:
         pos += 1
+        c = text[pos]
         if options.debug.parse:
             print(" Processing %s" % repr(c))
         if skipCrLf:
@@ -563,18 +564,6 @@ def processAtoms(text, options):
                 skipCrLf = False
             else:
                 skipCrLf = 2
-            continue
-        if inliteral:
-            curtext.append(c)
-            literalRemain -= 1
-            if options.debug.parse:
-                print("literal append %s, remaining %i" % (repr(c), literalRemain))
-            if literalRemain == 0:
-                inliteral = False
-                # TODO: Should we assume this completes the token and go back
-                # to inspace?
-                if options.debug.parse:
-                    print("  Literal complete. Resume normal parsing")
             continue
         if options.debug.parse:
             print("Processing char", repr(c))
@@ -596,22 +585,13 @@ def processAtoms(text, options):
             if options.debug.parse:
                 print("Literal size find:",literalSizeString)
             inbrace = False
-            inliteral = True
-            skipCrLf = True
             if literalSizeString.isdigit():
                 literalRemain = int(literalSizeString)
                 if options.debug.parse:
                     print("Start literal. %i remain" % literalRemain)
-                if literalRemain == 0:
-                    # Still, skip the CrLf, but don't bother entering the
-                    # literal state. Alternative would be to check remail
-                    # before appending literal chars above. Neither feels very
-                    # clean.
-                    inliteral = False
-                    # Also, since this is explicitly an empty string (not NIL
-                    # for example), go ahead and push it out
-                    curlist.append(b"")
-                    curtext=[]
+                pos += 2
+                curtext.append(text[pos+1:pos+literalRemain])
+                pos += literalRemain
                 continue
             raise Exception("Invalid literal size %s" % repr(literalSizeString))
         if inspace and c == '{':
