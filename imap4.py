@@ -132,7 +132,7 @@ class imap4ClientConnection(object):
         self.state = STATE_NOCON
         self.socket = None
         self.caps = None
-        self.maxlinelen = 1024 * 512
+        self.maxlinelen = 50 * 1024 * 1024
         self.cb_fetch = None
         self.cb_search = None
         self.debug = False
