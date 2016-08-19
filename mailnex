@@ -1830,7 +1830,7 @@ class Cmd(cmdprompt.CmdPrompt):
             headers = parts[0][1]
             body = parts[0][3]
             #content = headers.encode('utf-8') + body.encode('utf-8')
-            content += "Message {}:\n".format(index) + str(headers) + str(body)
+            content += b"Message {}:\n".format(index) + str(headers) + str(body)
         # TODO: Process content for control chars?
         res = self.runAProgramWithInput(["less"], content)
 
