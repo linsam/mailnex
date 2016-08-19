@@ -233,16 +233,19 @@ class imap4ClientConnection(object):
         tagstr = "T%i" % self.tag
         self.socket.send("%s %s\r\n" % (tagstr, cmd))
         line = ""
+        linelen = 0
         while True:
             data = self.socket.recv(1)
-            if len(data) == 0:
+            thislen = len(data)
+            if thislen == 0:
                 self.close()
                 raise Exception("Server connection lost? 0 length read occured")
             line += data
+            linelen += thislen
             # TODO: Timeout if X seconds have passed and yet we don't have a
             # completed request.
             # Probably requires a select or better yet, eventloop integration.
-            if self.maxlinelen and len(line) > self.maxlinelen:
+            if self.maxlinelen and linelen > self.maxlinelen:
                 # TODO: Try to cleanup by flushing? Let something higher take
                 # care of it?
                 raise Exception("Server response too long (at %i, which exceeds maxlinelen %i)" % (len(line), self.maxlinelen))
