@@ -75,6 +75,8 @@ import cmdprompt
 import dateutil.parser
 # Color and other terminal stuffs
 import blessings
+# Ability to launch external viewers
+import mailcap
 # Other
 import tempfile
 import pyuv
@@ -432,6 +434,60 @@ def unpackStruct(data, options, depth=1, tag="", predesc=""):
             if options.debug.struct:
                 print("%s   %s%s/%s%s" % (tag, predesc, data[0], data[1], extra))
     return this
+
+def flattenStruct(struct):
+    """Return a dictionry whose keys are the sub-part numbers and values are structure parts.
+
+    E.g. a key might be ".1.2"
+    """
+    parts = {}
+    def pickparts(struct, allParts=True):
+        # TODO: unify the code with do_structure? Make its own function?
+        # We probably want that anyway since other parts would utilize
+        # this, such as message reply/forwarding
+        extra = ""
+        skip = False
+        if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+            extra += " (%s)" % struct.disposition[0]
+            if not allParts and struct.disposition[0].lower() == "attachment":
+                skip = True
+            dispattrs = dictifyList(struct.disposition[1])
+            if 'filename' in dispattrs:
+                extra += " (name: %s)" % dispattrs['filename']
+        # TODO XXX: Preprocess control chars out of all strings before
+        # display to terminal!
+        parts[struct.tag] = struct
+        #structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
+        innerTag = ".".join(struct.tag.split('.')[1:])
+        # First pass, we'll just grab all text/plain parts. Later we'll
+        # want to check disposition, and later we'll want to deal with
+        # multipart/alternative better (and multipart/related)
+        if not allParts and struct.type_ == "text" and struct.subtype == "plain":
+            # TODO: write the following a bit more efficiently. Like,
+            # split only once, use second part of return only, perhaps?
+            if not skip:
+                #fetchParts.append((innerTag, struct))
+                pass
+        if allParts and not isinstance(struct, structureMessage) and not hasattr(struct, "subs"):
+            # Probably useful to display, not a multipart itself, or a
+            # message (which *should* have subparts itself?)
+            # TODO: Properly handle attached messages
+            #fetchParts.append((innerTag, struct))
+            pass
+        if isinstance(struct, structureMessage):
+            extra = ""
+            # Switch to the inner for further processing
+            struct = struct.subs[0]
+            if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
+                extra += " (%s)" % struct.disposition[0]
+
+            #structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
+            #fetchParts.append(("%s.HEADER" % innerTag, struct))
+        if hasattr(struct, "subs"):
+            for i in struct.subs:
+                pickparts(i, allParts)
+    pickparts(struct)
+    return parts
 
 def dictifyList(lst):
     # convert to list of key,val pairs, then to dictionary
@@ -1574,6 +1630,65 @@ class Cmd(cmdprompt.CmdPrompt):
                 body += "struct: " + repr(part[1].__dict__) + "\r\n"
             body += part[2]
         return body
+
+    @showExceptions
+    @needsConnection
+    def do_open(self, args):
+        args=args.split()
+        if len(args) > 1:
+            print("open takes single argument")
+            return
+        msgpart = args[0].split('.',1)
+        if len(msgpart) == 1:
+            # Use the first part if none given
+            msgpart = (msgpart[0], 1)
+        data = self.C.connection.fetch(msgpart[0], '(BODYSTRUCTURE)')
+        parts = processAtoms(data[0][1], self.C.settings)
+        struct = getResultPart('BODYSTRUCTURE', parts[0])
+        m = mailcap.getcaps()
+        #print()
+        #print(struct)
+        struct = unpackStruct(struct, self.C.settings)
+        #print()
+        #print(struct)
+        struct = flattenStruct(struct)
+        #print()
+        #print(struct)
+        #print()
+        key = '.' + msgpart[1]
+        if not key in struct:
+            print("Subpart not found in message. Try the 'structure' command.")
+            return
+        part = struct[key]
+        #print(part)
+        cmds = mailcap.findmatch(m, "{}/{}".format(part.type_, part.subtype))
+        if not cmds[1]:
+            print("Don't know how to display part. Maybe update your mailcap file?")
+            return
+        if not 'view' in cmds[1]:
+            print("No view command found for part.")
+            return
+        #print("Would run",cmds[1]['view'])
+        print("Fetching attachment")
+        data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
+        print("processing data")
+        # TODO: This part is *very* slow
+        parts = processAtoms(data[0][1], self.C.settings)
+        print("getting part")
+        data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
+        #print(data)
+        #print(part.encoding)
+        if part.encoding.lower() == 'base64':
+            print("Decoding attachment")
+            data = data.decode('base64')
+        print("Saving attachment to temporary file")
+        with tempfile.NamedTemporaryFile() as outfile:
+            outfile.write(data)
+            outfile.flush()
+            print("Launching viewer")
+            os.system(cmds[1]['view'] % outfile.name)
+
+
 
     @shortcut("p")
     @showExceptions
