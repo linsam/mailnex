@@ -168,7 +168,7 @@ def needsConnection(func):
     @wraps(func)
     def needsConnectionWrapper(self, *args, **kwargs):
         if not self.C.connection:
-            print("no connection")
+            print("no connection. Try the 'folder' command.")
         else:
             return func(self, *args, **kwargs)
     return needsConnectionWrapper
