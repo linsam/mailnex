@@ -542,11 +542,13 @@ def processAtoms(text, options):
     skipCrLf = False
     pos = -1
     last = len(text) - 1
+    if options.debug.parse:
+        print(" length:", last)
     while pos < last:
         pos += 1
         c = text[pos]
         if options.debug.parse:
-            print(" Processing %s" % repr(c))
+            print(" Processing {} @ {}".format(repr(c), pos))
         if skipCrLf:
             # True or 1 means check the CR of CRLF, then expect the LF of CRLF
             # 2 means expect the LF of CRLF
@@ -589,9 +591,12 @@ def processAtoms(text, options):
                 literalRemain = int(literalSizeString)
                 if options.debug.parse:
                     print("Start literal. %i remain" % literalRemain)
+                    print("skipping", repr(text[pos:pos+3]))
                 pos += 2
-                curtext.append(text[pos+1:pos+literalRemain])
+                curtext.append(text[pos+1:pos+literalRemain+1])
                 pos += literalRemain
+                if options.debug.parse:
+                    print("Finished literal remain:", curtext)
                 continue
             raise Exception("Invalid literal size %s" % repr(literalSizeString))
         if inspace and c == '{':
