@@ -538,9 +538,9 @@ def processImapData(text, options):
     inquote = False
     inspace = True
     inbrace = False
+    wasquoted = False
     literalRemain = 0
     literalSizeString = ""
-    skipCrLf = False
     pos = -1
     last = len(text) - 1
     if options.debug.parse:
@@ -550,26 +550,6 @@ def processImapData(text, options):
         c = text[pos]
         if options.debug.parse:
             print(" Processing {} @ {}".format(repr(c), pos))
-        if skipCrLf:
-            # True or 1 means check the CR of CRLF, then expect the LF of CRLF
-            # 2 means expect the LF of CRLF
-            if skipCrLf != 2:
-                check = '\r'
-            else:
-                check = '\n'
-            if c != check:
-                if options.debug.parse:
-                    print("before", repr(text[:pos]))
-                    print("at", repr(text[pos]))
-                    print("after", repr(text[pos+1:]))
-                raise Exception("No crlf where expected (next char was %s)" % repr(c))
-            if skipCrLf == 2:
-                skipCrLf = False
-            else:
-                skipCrLf = 2
-            continue
-        if options.debug.parse:
-            print("Processing char", repr(c))
         if c == ' ' or c == '\t':
             if inquote:
                 if options.debug.parse:
@@ -580,11 +560,20 @@ def processImapData(text, options):
                 if options.debug.parse:
                     print(" End of token. Append completed word to list:", curtext)
                 inspace = True
-                curlist.append(b"".join(curtext))
+                thisStr = b"".join(curtext)
+                if not wasquoted and thisStr.lower() == b'nil':
+                    curlist.append(None)
+                else:
+                    curlist.append(thisStr)
+                wasquoted = False
                 curtext=[]
                 continue
             continue
-        if inbrace and c == '}':
+        if inbrace:
+            if c != '}':
+                literalSizeString += c
+                continue
+            # Got close curly brace; process the literal
             if options.debug.parse:
                 print("Literal size find:",literalSizeString)
             inbrace = False
@@ -605,16 +594,14 @@ def processImapData(text, options):
             inbrace = True
             literalSizeString = ""
             continue
-        if inbrace:
-            literalSizeString += c
-            continue
         inspace = False
-        if c == '"': #TODO single quote too? -- no.
+        if c == '"':
             if inquote:
                 # TODO: Does ending a quote terminate an atom?
                 if options.debug.parse:
                     print(" Leaving quote")
                 inquote = False
+                wasquoted = True
             else:
                 # TODO: Are we allowed to start a quote mid-atom?
                 if options.debug.parse:
@@ -644,7 +631,12 @@ def processImapData(text, options):
             if len(curtext):
                 if options.debug.parse:
                     print(" finish atom before finishing list", curtext)
-                curlist.append(b"".join(curtext))
+                thisStr = b"".join(curtext)
+                if not wasquoted and thisStr.lower() == b'nil':
+                    curlist.append(None)
+                else:
+                    curlist.append(thisStr)
+                wasquoted = False
                 curtext=[]
             t = curlist
             lset.pop()
@@ -663,7 +655,11 @@ def processImapData(text, options):
         raise Exception("Malformed input. Reached end without a closing quote")
     if len(curtext):
         print("EOF, flush leftover text", curtext)
-        curlist.append("".join(curtext))
+        thisStr = b"".join(curtext)
+        if not wasquoted and thisStr.lower() == b'nil':
+            curlist.append(None)
+        else:
+            curlist.append(thisStr)
     if len(lset) > 1:
         raise Exception("Malformed input. Unbalanced parentheses: Not enough close parenthesis")
     if options.debug.parse:
