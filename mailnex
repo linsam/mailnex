@@ -275,6 +275,8 @@ def showExceptions(func):
                 # "exceptions.KeyError" instead of just "KeyError", since some
                 # modules may define same-named exceptions with different
                 # meanings.
+                # TODO: Fix lstrip, it converts 'do_open' to 'pen' because it
+                # is a set of characters to strip, not a string to strip.
                 print("Error occurred in command '{}': {}".format(func.__name__.lstrip('do_'), traceback.format_exception_only(type(ev), ev)[-1]))
             else:
                 traceback.print_exc()
@@ -498,11 +500,11 @@ def dictifyList(lst):
     # the original case of the key and value.
     return dict(zip(*(iter(map(lambda x: x.lower(),lst)),)*2))
 
-def processAtoms(text, options):
-    """Process a set of IMAP ATOMs
+def processImapData(text, options):
+    """Process a set of IMAP data items
 
-    ATOMs are roughly space separated text that can be quoted and can contain
-    lists of other atoms by wrapping in parenthses
+    The items are roughly space separated text that can be quoted and can contain
+    lists of other items by wrapping in parenthses
 
     According to the RFC:
         Data can be an atom, number, string, parenthesized list, or NIL.
@@ -525,8 +527,7 @@ def processAtoms(text, options):
         a string whose value is a double quote.
 
     This implementation is currently incomplete. It doesn't handle the \ escape
-    in quoted strings, it doesn't interpret literal strings at all, and
-    accepts quotes anywhere.
+    in quoted strings and accepts quotes anywhere.
     """
 
 
@@ -1076,7 +1077,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     def do_testq(self, text):
-        print(processAtoms(text), self.C.settings)
+        print(processImapData(text), self.C.settings)
 
     @showExceptions
     def do_maildir(self, args):
@@ -1372,7 +1373,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 #print("------------ Message %i -----------" % i)
                 #print(data[1][1])
 
-                data = processAtoms(data[0][1], self.C.settings)
+                data = processImapData(data[0][1], self.C.settings)
 
                 headers = data[0][1]
                 headers = processHeaders(headers)
@@ -1429,7 +1430,7 @@ class Cmd(cmdprompt.CmdPrompt):
         """
         resparts = []
         data = self.C.connection.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
-        parts = processAtoms(data[0][1], self.C.settings)
+        parts = processImapData(data[0][1], self.C.settings)
         headers = getResultPart('BODY[HEADER]', parts[0])
         # TODO: Headers are required to be ASCII or encoded using a header
         # encoding that results in ASCII (lists charset and encodes as
@@ -1518,7 +1519,7 @@ class Cmd(cmdprompt.CmdPrompt):
             parts = ["BODY[%s]" % s[0] for s in fetchParts]
         data = self.C.connection.fetch(index, '(%s)' % " ".join(fparts))
         resparts.append((None, None, structureString + '\r\n\r\n'))
-        dpart = processAtoms(data[0][1], self.C.settings)
+        dpart = processImapData(data[0][1], self.C.settings)
         for p,o in zip(parts,fetchParts):
             dstr = getResultPart(p, dpart[0])
             if isinstance(o[1], structureMultipart):
@@ -1648,7 +1649,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # Use the first part if none given
             msgpart = (msgpart[0], "1")
         data = self.C.connection.fetch(msgpart[0], '(BODYSTRUCTURE)')
-        parts = processAtoms(data[0][1], self.C.settings)
+        parts = processImapData(data[0][1], self.C.settings)
         struct = getResultPart('BODYSTRUCTURE', parts[0])
         m = mailcap.getcaps()
         #print()
@@ -1680,7 +1681,7 @@ class Cmd(cmdprompt.CmdPrompt):
         data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
         #print("processing data")
         # TODO: This part is *very* slow
-        parts = processAtoms(data[0][1], self.C.settings)
+        parts = processImapData(data[0][1], self.C.settings)
         #print("getting part")
         data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
         #print(data)
@@ -1889,7 +1890,7 @@ class Cmd(cmdprompt.CmdPrompt):
         M = self.C.connection
         index = int(args)
         data = M.fetch(index, '(BODY.PEEK[HEADER])')
-        data = processAtoms(data[0][1], self.C.settings)
+        data = processImapData(data[0][1], self.C.settings)
         headers = processHeaders(data[0][1])
         term = None
         if 'thread-index' in headers:
@@ -1956,7 +1957,7 @@ class Cmd(cmdprompt.CmdPrompt):
         content = b""
         for index in msgs:
             data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-            parts = processAtoms(data[0][1], self.C.settings)
+            parts = processImapData(data[0][1], self.C.settings)
             headers = parts[0][1]
             body = parts[0][3]
             #content = headers.encode('utf-8') + body.encode('utf-8')
@@ -2408,7 +2409,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # debugging command for now anyhow.
             index = msglist[0]
         data = M.fetch(args, '(BODY.PEEK[HEADER])')
-        headers = processHeaders(processAtoms(data[0][1])[0][1], self.C.settings)
+        headers = processHeaders(processImapData(data[0][1])[0][1], self.C.settings)
         if "subject" in headers:
             print("Subject:", headers["subject"][-1])
         if "date" in headers:
@@ -2447,7 +2448,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # We should get a list of the form (ID, DATA)
                 # where DATA is a list of the form ("BODYSTRUCTURE", struct)
                 # and where struct is the actual structure
-                d = processAtoms(entry[1], self.C.settings)
+                d = processImapData(entry[1], self.C.settings)
                 val = str(entry[0])
                 d = d[0]
             except Exception as ev:
@@ -2547,7 +2548,7 @@ class Cmd(cmdprompt.CmdPrompt):
         #data = normalizeFetch(data)
         for d in data:
             try:
-                d = (d[0], processAtoms(d[1], self.C.settings))
+                d = (d[0], processImapData(d[1], self.C.settings))
             except Exception as ev:
                 print("  %s  (error parsing envelope!)" % d[0], ev)
                 continue
@@ -2811,7 +2812,7 @@ class Cmd(cmdprompt.CmdPrompt):
         res,data = M.namespace()
         #print(res)
         try:
-            data = processAtoms(data[0], self.C.settings)
+            data = processImapData(data[0], self.C.settings)
         except Exception as ev:
             print(ev)
             return
