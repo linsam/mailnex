@@ -401,11 +401,11 @@ class imap4ClientConnection(object):
                                 elif typ.upper() == "FLAGS":
                                     self.flags = data.split() #TODO should this be parsed for literals or quoted strings?
                                 elif typ.upper() == "LIST":
-                                    # TODO: callback
-                                    pass
+                                    if "list" in self.cbs:
+                                        self.cbs["list"](line)
                                 elif typ.upper() == "LSUB":
-                                    # TODO: callback
-                                    pass
+                                    if "lsub" in self.cbs:
+                                        self.cbs["lsub"](line)
                                 elif typ.upper() == "SEARCH":
                                     if self.cb_search:
                                         self.cb_search(typ, data)

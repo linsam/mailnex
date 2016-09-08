@@ -1291,6 +1291,67 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.settings.headers_folder if self.C.settings.headers_folder.value is not None else self.C.settings.headers:
             self.do_headers("")
 
+    @showExceptions
+    @needsConnection
+    def do_folders(self, args):
+        """List mailboxes in the default namespace.
+
+        usage:
+            folders
+            folders base/path
+
+        Doesn't currently support much for listing, but is hopefully somewhat
+        helpful for the folder command.
+
+        NOTE: Some older servers (e.g. uwimapd) will do a full recursive
+        descent even when we only ask for one level of hierarchy. If you have
+        a deep folder set on the remote side (e.g. a full unix home
+        directory), this command can take a lot of time. Worse, if you have
+        any symbolic loops, it can take a VERY long time (either forever or
+        until the server gets some errors about exceeding path limits)
+
+        See also lsub.
+        """
+        oldcb = None
+        if "list" in self.C.connection.cbs:
+            oldcb = self.C.connection.cbs["list"]
+        folders = []
+        def mycb(line):
+            # TODO: More of this ought to be handled by the connection instead
+            # fo us.
+            if not line.startswith("* LIST "):
+                raise Exception("Bad format from server")
+            flags, delim, path =  processImapData(line[7:] + ' ', self.C.settings)
+            # TODO: Is this supposed to be case insensitive?
+            # TODO: How to handle servers without the CHILDREN extension? We
+            # could probe or just never give hints about subfolders
+            if 'CHILDREN' in self.C.connection.caps and '\\HasChildren' in flags:
+                # NOTE: According to RFC3348, a server MAY have both
+                # HasChildren and HasNoChildren if it isn't sure, and then we
+                # shouldn't make assumptions, but on the next line says it is
+                # an error if the server does this. I think we'll err on the
+                # side of having children, and if the user cannot select it,
+                # they'll get an error.
+                print("{}{}".format(path,delim))
+            else:
+                print("{}".format(path))
+        self.C.connection.cbs["list"] = mycb
+        try:
+            if len(args) == 0:
+                self.C.connection.doSimpleCommand("LIST \"\" %")
+            else:
+                # TODO: Horrible. Should check formatting, and probably need to
+                # handle escaping the string properly
+                # TODO: obtain the 'correct' final separator somehow instead
+                # of assuming slash
+                self.C.connection.doSimpleCommand("LIST \"\" {}/%".format(args))
+        except:
+            if oldcb:
+                self.C.connection.cbs["list"] = oldcb
+            else:
+                del self.C.connection.cbs["list"]
+            raise
+
     def newExist(self, value):
         delta = value - self.C.lastMessage
         self.C.lastMessage = value
@@ -1341,6 +1402,54 @@ class Cmd(cmdprompt.CmdPrompt):
             except:
                 self.C.connection = None
                 raise
+
+    @showExceptions
+    @needsConnection
+    def do_lsub(self, args):
+        """List mailbox subscriptions
+
+        usage:
+            lsub
+            lsub base/path
+
+        Doesn't currently support much for listing, but is hopefully somewhat
+        helpful for the folder command.
+
+        Entries that contain subscriptions but aren't subscribed are shown in parenthesis
+
+        See also folders.
+        """
+        oldcb = None
+        if "lsub" in self.C.connection.cbs:
+            oldcb = self.C.connection.cbs["lsub"]
+        folders = []
+        def mycb(line):
+            # TODO: More of this ought to be handled by the connection instead
+            # fo us.
+            if not line.startswith("* LSUB "):
+                raise Exception("Bad format from server")
+            flags, delim, path =  processImapData(line[7:] + ' ', self.C.settings)
+            # TODO: Is this supposed to be case insensitive?
+            if '\\Noselect' in flags:
+                print("({}{})".format(path,delim))
+            else:
+                print("{}".format(path))
+        self.C.connection.cbs["lsub"] = mycb
+        try:
+            if len(args) == 0:
+                self.C.connection.doSimpleCommand("LSUB \"\" %")
+            else:
+                # TODO: Horrible. Should check formatting, and probably need to
+                # handle escaping the string properly
+                # TODO: obtain the 'correct' final separator somehow instead
+                # of assuming slash
+                self.C.connection.doSimpleCommand("LSUB \"\" {}/%".format(args))
+        except:
+            if oldcb:
+                self.C.connection.cbs["lsub"] = oldcb
+            else:
+                del self.C.connection.cbs["lsub"]
+            raise
 
     @showExceptions
     @needsConnection
