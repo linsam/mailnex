@@ -2329,7 +2329,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 newto = self.singleprompt("To: ", default=message['To'] or '', completer=self.getAddressCompleter())
                 newcc = self.singleprompt("Cc: ", default=message['Cc'] or '', completer=self.getAddressCompleter())
                 newbcc = self.singleprompt("Bcc: ", default=message['Bcc'] or '', completer=self.getAddressCompleter())
-                newsubject = self.singleprompt("Subject: ", default=message['Subject'])
+                newsubject = self.singleprompt("Subject: ", default=message['Subject'] or '')
                 if newto == "":
                     del message['To']
                 elif 'To' in message:
