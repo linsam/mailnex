@@ -2269,6 +2269,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     ~.         Send message
                     ~h         Edit message headers (To, Cc, Bcc, Subject)
                     ~p         Print current message.
+                    ~px        Print raw message escaping non-printing and line feed characters.
                     ~q         Quit composing. Don't send. Append message to ~/dead.letter if save is set, unless 'drafts' is set.
                     ~v         Edit message in external (visual) editor
                     ~x         Quit composing. Don't send. Discard current progress.
