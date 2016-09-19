@@ -2249,6 +2249,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
 
     def editMessage(self, message):
+        attachlist = []
         while True:
             try:
                 # TODO: allow tabs in the input
@@ -2267,6 +2268,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     ~~ Text -> ~ Text   (enter a line starting with a single '~' into the message)
                     .          Send message
                     ~.         Send message
+                    #@ file    Add file to the attachment list
                     ~h         Edit message headers (To, Cc, Bcc, Subject)
                     ~p         Print current message.
                     ~px        Print raw message escaping non-printing and line feed characters.
@@ -2398,6 +2400,23 @@ class Cmd(cmdprompt.CmdPrompt):
                     del fil
                     os.unlink(f[1])
                     #TODO: If editHeaders is set, retrieve those headers
+            elif line.startswith("~@ "):
+                filename = line[3:]
+                # Can't read it. Is it because it doesn't exist?
+                try:
+                    st = os.stat(filename)
+                except OSError as err:
+                    if err.errno == errno.ENOENT:
+                        print("WARNING: Given file doesn't currently exist. Adding to list anyway. We'll try reading it again when completing the message")
+                    else:
+                        print("WARNING: Couldn't get information about the file: %s" % err.strerror)
+                        print("Adding to list anyway. We'll try reading it again when completing the message.")
+                else:
+                    if not os.access(filename, os.R_OK):
+                        print("WARNING: Can't read existing file. Adding to list anyway. We'll try again when completing the message.")
+                    else:
+                        print("Attachment added to list. Raw size is currently %i bytes. Note: we'll actually read the data when completing the message" % st.st_size)
+                attachlist.append(filename)
             # TODO: The other ~* functions from mailx.
             # TODO: Extension commands. E.g. we might want "~save <path>" to
             # save a copy of the message to the given path, but keep editing.
@@ -2442,6 +2461,62 @@ class Cmd(cmdprompt.CmdPrompt):
 
         def addrs(data):
             return [a[1] for a in email.utils.getaddresses(data)]
+        for attach in attachlist:
+            try:
+                with open(attach, "rb") as f:
+                    data = f.read()
+            except KeyboardInterrupt:
+                print("Aborting read of %s" % attach)
+                # TODO: What do we do now? Ideall we'd go back to editing, but
+                # we aren't achitected well for that. We'll dead letter it, I
+                # guess
+                ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+                ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
+                print("Message saved to dead.letter")
+                return False
+            except Exception as err:
+                print("Error reading file %s for attachment" % attach)
+                # TODO: What do we do now? Ideall we'd go back to editing, but
+                # we aren't achitected well for that. We'll dead letter it, I
+                # guess
+                ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+                ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
+                print("Message saved to dead.letter")
+                return False
+            # TODO: Ascertain a reasonable MIME type and/or get it from the
+            # user
+            # For now, we'll use the generic application/octetstream
+            entity = email.mime.Base.MIMEBase("application", "octet-stream")
+            entity.set_payload(data)
+            email.encoders.encode_base64(entity)
+            entity.add_header('Content-Disposition', 'attachment', filename=attach.split(os.sep)[-1])
+            if not isinstance(m, email.mime.Multipart.MIMEMultipart):
+                n = email.mime.Multipart.MIMEMultipart()
+                o = email.mime.Text.MIMEText("")
+                o.set_payload(m.get_payload())
+                for key in m.keys():
+                    vals = m.get_all(key)
+                    if key in ['Content-Type','Content-Transfer-Encoding']:
+                        #print(" Migrating '%s' to new inner text part" % key)
+                        if key in o:
+                            o.replace_header(key, vals[0])
+                            vals = vals[1:]
+                        for val in vals:
+                            o[key] = val
+                    elif key in ['MIME-Version']:
+                        #print(" Skipping '%s'" % key)
+                        pass
+                    else:
+                        #print(" Migrating '%s' to new outer message" % key)
+                        if key in n:
+                            o.replace_header(key, vals[0])
+                            vals = vals[1:]
+                        for val in vals:
+                            n[key] = val
+                n.attach(o)
+                m = n
+            m.attach(entity)
+
         tos = addrs(m.get_all('To',[]))
         ccs = addrs(m.get_all('cc',[]))
         bccs = addrs(m.get_all('bcc',[]))
@@ -2449,7 +2524,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(recipients) == 0:
             ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
             # This is probably not the right format for dead.letter
-            ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
+            ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
             print("Coudln't send message; no recipients were specified")
             print("Message saved to dead.letter")
             return False
@@ -2472,6 +2547,9 @@ class Cmd(cmdprompt.CmdPrompt):
         if 'bcc' in m:
             del m['bcc']
 
+        #print("Debug: Your message is:")
+        #print(m.as_string())
+        #return False
 
         s = subprocess.Popen([
             # TODO: Allow the user to override this somehow
