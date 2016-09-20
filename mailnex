@@ -2567,7 +2567,10 @@ class Cmd(cmdprompt.CmdPrompt):
             keys = []
             # TODO: What about sender vs from, etc.
             # TODO: Allow configuration to pick specific key
-            keysearch = m['from']
+            if self.C.settings.pgpkey.value:
+                keysearch = self.C.settings.pgpkey.value
+            else:
+                keysearch = m['from']
             for k in ctx.keylist(keysearch, True):
                 keys.append(k)
             if len(keys) == 0:
@@ -3719,6 +3722,7 @@ def getOptionsSet():
         ], doc="Setting form of the ignore command"))
 
     options.addOption(settings.StringOption("PAGER", "internal"))
+    options.addOption(settings.StringOption("pgpkey", None, doc="PGP key search string. Can be an email address, UID, or fingerprint as recognized by gnupg. When unset, try to use the from field."))
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
     return options
 
