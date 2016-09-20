@@ -2583,7 +2583,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 index = 0
                 for key in keys:
                     index += 1
-                    print("{}: {}{}{}{}{}{}{}{}{} {} {}".format(
+                    print("{}: {}{}{}{}{}{}{}{}{} {} {}_{} {}".format(
                         index,
                         "C" if key.can_certify else " ",
                         "S" if key.can_sign else " ",
@@ -2595,6 +2595,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         "!" if key.invalid else " ",
                         "s" if key.secret else " ",
                         key.subkeys[0].length,
+                        key.subkeys[0].fpr[-16:-8],
+                        key.subkeys[0].fpr[-8:],
                         key.uids[0].uid,
                         ))
                 keysel = self.singleprompt("Select key number (default 1): ", default="")
