@@ -83,6 +83,7 @@ import pyuv
 import time
 import settings
 import subprocess
+import gpgme
 from prompt_toolkit.completion import Completer, Completion
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
@@ -2250,6 +2251,8 @@ class Cmd(cmdprompt.CmdPrompt):
 
     def editMessage(self, message):
         attachlist = []
+        # TODO: Allow a default setting for signing
+        pgpsign = False
         while True:
             try:
                 # TODO: allow tabs in the input
@@ -2275,6 +2278,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     ~q         Quit composing. Don't send. Append message to ~/dead.letter if save is set, unless 'drafts' is set.
                     ~v         Edit message in external (visual) editor
                     ~x         Quit composing. Don't send. Discard current progress.
+                    ~pgpsign   Sign the message with a PGP key (toggle)
                     """)
                 # ~!command    = execute shell command
                 # ~.           = same as end-of-file indicator (according to mailx)
@@ -2360,6 +2364,13 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     message.add_header('Subject', newsubject)
 
+            elif line == "~pgpsign":
+                # Invert sign. Python doesn't like "sign = !sign"
+                pgpsign = pgpsign == False
+                if pgpsign:
+                    print("Will sign the whole message with OpenPGP/MIME")
+                else:
+                    print("Will NOT sign the whole message with OpenPGP/MIME")
             elif line.startswith("~px"):
                 print(repr(message.get_payload()))
             elif line.startswith("~p"):
@@ -2491,6 +2502,7 @@ class Cmd(cmdprompt.CmdPrompt):
             email.encoders.encode_base64(entity)
             entity.add_header('Content-Disposition', 'attachment', filename=attach.split(os.sep)[-1])
             if not isinstance(m, email.mime.Multipart.MIMEMultipart):
+                # Convert into multipart/mixed
                 n = email.mime.Multipart.MIMEMultipart()
                 o = email.mime.Text.MIMEText("")
                 o.set_payload(m.get_payload())
@@ -2546,6 +2558,116 @@ class Cmd(cmdprompt.CmdPrompt):
         # and the second fails?)
         if 'bcc' in m:
             del m['bcc']
+
+        # Now that we have a recipient list and final on-the-wire headers, we
+        # can deal with encryption.
+        # We'll handle Signature and Encryption at the same point
+        if pgpsign:
+            ctx = gpgme.Context()
+            keys = []
+            # TODO: What about sender vs from, etc.
+            # TODO: Allow configuration to pick specific key
+            keysearch = m['from']
+            for k in ctx.keylist(keysearch, True):
+                keys.append(k)
+            if len(keys) == 0:
+                ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+                # This is probably not the right format for dead.letter
+                ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
+                print("Coudln't send message; No keys found for %s" % keysearch)
+                print("Message saved to dead.letter")
+                return False
+            elif len(keys) > 1:
+                # TODO: Better key selection interface. E.g. should have a
+                # header line, allow showing more details for a key
+                index = 0
+                for key in keys:
+                    index += 1
+                    print("{}: {}{}{}{}{}{}{}{}{} {} {}".format(
+                        index,
+                        "C" if key.can_certify else " ",
+                        "S" if key.can_sign else " ",
+                        "E" if key.can_encrypt else " ",
+                        "A" if key.can_authenticate else " ",
+                        "D" if key.disabled else " ",
+                        "X" if key.expired else " ",
+                        "R" if key.revoked else " ",
+                        "!" if key.invalid else " ",
+                        "s" if key.secret else " ",
+                        key.subkeys[0].length,
+                        key.uids[0].uid,
+                        ))
+                keysel = self.singleprompt("Select key number (default 1): ", default="")
+                if keysel == "":
+                    keysel = '1'
+                keys = [keys[int(keysel) - 1]]
+            key = keys[0]
+            ctx.signers = (key,)
+            ctx.armor = True
+            import io
+            # Convert all lines to have the same line ending, else signing
+            # will be bad. At the moment, on Ubuntu 16.04, the message will
+            # consist of headers with unix (\n) line endings and a payload with
+            # Windows/network line endings (\r\n).
+            convlines = []
+            # TODO: don't use as_string, use a flattener so we don't get
+            # escaped 'From' lines
+            for line in m.as_string().split(b'\n'):
+                # So, RFC822 dictates that the lines should be network
+                # terminated (\r\n), but doing so would result in quite a mix
+                # here, since the rest of python's email package use native
+                # line endings. As near as I can tell, these get converted
+                # back and forth over the course of transmission and delivery,
+                # with different levels of normalization. When I was debugging
+                # signing issues, I couldn't tell what was wrong becase
+                # everthing showed up as native in Thunderbird, for example
+                #
+                # We could do native to be consistent, but the PGPMime spec
+                # requires that the hash be done with the network endings, and
+                # while gpg2 can handle trying both, Thunderbird/Enigmail
+                # doesn't (which is proper anyway)
+                if line.endswith(b'\r'):
+                    convlines.append(line[:-1])
+                else:
+                    convlines.append(line)
+            indat = b"\r\n".join(convlines)
+            indat = io.BytesIO(indat)
+            outdat = io.BytesIO()
+            # TODO: Handle case where signing fails (bad passphrase, cancelled
+            # operation, etc).
+            sigs = ctx.sign(indat, outdat, gpgme.SIG_MODE_DETACH)
+            outdat = outdat.getvalue()
+            if len(sigs) != 1:
+                raise Exception("More than one sig found when only one requested!")
+            sig = sigs[0]
+            digests = {}
+            for sym in dir(gpgme):
+                if sym.startswith('MD_'):
+                    digests[getattr(gpgme,sym)] = sym[3:]
+
+            if not sig.hash_algo in digests:
+                raise Exception("Unknown hashing algorithm used!")
+            sigstr = "pgp-" + digests[sig.hash_algo].lower()
+
+            # Create the signing wrapper
+            newmsg = email.mime.Multipart.MIMEMultipart("signed", micalg=sigstr, protocol="application/pgp-signature")
+            newmsg.attach(m)
+            sigpart = email.mime.Base.MIMEBase("application","pgp-signature")
+            sigpart.set_payload(outdat)
+            newmsg.attach(sigpart)
+            # Copy some headers from the signed message to the outer. We'll do
+            # to, from, cc, bcc, and subject and a few others for now. Should
+            # probably do others. We aren't going to move these; the receiver
+            # should be able to use the ones in the signed version as the
+            # official "untambered" version; these copies are just for clients
+            # that display the outer headers in summaries (like this one right
+            # now, or as IMAP servers do searches, etc)
+            for key in m.keys():
+                if key.lower() in ['to','from','cc','bcc','subject','date','message-id','user-agent']:
+                    newmsg[key] = m[key]
+            m = newmsg
+
+
 
         #print("Debug: Your message is:")
         #print(m.as_string())
