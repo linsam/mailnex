@@ -41,13 +41,12 @@ least the heirloom mailx variant):
 
   * No message forwarding support
   * many variant commands are missing (e.g. Reply (not reply))
-  * incomplete message list support (for example, no IMAP search
-    commands)
+  * incomplete message list support
   * difficult to install due to non-distro package requirements
   * No support for local spool/mbox/maildir nor pop3.
-  * no message signing/encryption support
+  * no encryption support; poor signing support
   * no content-type helper support
-  * no attachment saving/viewing support
+  * no attachment saving support
 
 
 Goals:
@@ -126,8 +125,8 @@ Other projects (or, why another mail client):
     It also borrows from mutt, emacs, and vi for efficiency of console use.
 
     Used to support remote mail, but now delegates that. Delegation is a good
-    unix move, but I haven't enjoyed delegators. In particular, they suggest
-    offlineimap to synchronize local maildi with a remote imap host. However,
+    unix move, but I haven't enjoyed imap delegators. In particular, they suggest
+    offlineimap to synchronize local maildir with a remote imap host. However,
     maildir doesn't have a good way to show which side has the more recent
     data (in particular, flags) for a given message, making synchronization
     when both sides change something impossible to get right. While I applaud
