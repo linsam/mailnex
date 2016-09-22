@@ -58,7 +58,7 @@ from . decorators import *
 # xapian search engine
 import xapian
 # various email helpers
-import imap4
+from . import imap4
 import email
 import email.utils
 import email.mime.text
@@ -71,7 +71,7 @@ import keyring
 # Configuration and other directory management
 import xdg.BaseDirectory
 # shell helper
-import cmdprompt
+from . import cmdprompt
 # Date handler
 import dateutil.parser
 # Color and other terminal stuffs
@@ -82,7 +82,7 @@ import mailcap
 import tempfile
 import pyuv
 import time
-import settings
+from . import settings
 import subprocess
 import gpgme
 from prompt_toolkit.completion import Completer, Completion
