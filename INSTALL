@@ -36,3 +36,11 @@ Method 2: (for when the above method results in problems with function calls)
     to do 'pip install keyring.alt' and configure plain-text password storage.
 
     run directly: mailnex
+
+
+Running without installation
+
+    e.g. when doing development:
+
+    Setup a virtualenv or otherwise get the dependencies installed, then run
+    python -m mailnex
