@@ -2566,7 +2566,6 @@ class Cmd(cmdprompt.CmdPrompt):
             ctx = gpgme.Context()
             keys = []
             # TODO: What about sender vs from, etc.
-            # TODO: Allow configuration to pick specific key
             if self.C.settings.pgpkey.value:
                 keysearch = self.C.settings.pgpkey.value
             else:
