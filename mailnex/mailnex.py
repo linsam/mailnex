@@ -3782,10 +3782,13 @@ def interact(invokeOpts):
         else:
             print("Bailing on exception",ev)
 
-if __name__ == "__main__":
+def main():
     import sys
     import argparse
     parser = argparse.ArgumentParser(description="command line mail user agent")
     parser.add_argument('--config', help='custom configuration file')
     args = parser.parse_args()
     interact(args)
+
+if __name__ == "__main__":
+    main()
