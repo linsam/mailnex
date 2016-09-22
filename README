@@ -2,6 +2,11 @@ Welcome to MailNex.
 
 This is a console/terminal email client (Mail User Agent) in the style of mailx.
 
+For installation instructions, see the file INSTALL.
+
+For usage instructions, see the file USER.README.
+
+
 Current Status: Still pretty Alpha
 
 There is a minimal set of functionality for reading *most* mail with a plain

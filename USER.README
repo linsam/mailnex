@@ -2,6 +2,185 @@ This document covers some common user use-cases and how to deal with them.
 
 Sometimes, it is a rant.
 
+
+Quick Start
+===========
+
+run mailnex; it doesn't require any arguments.
+
+On first run, you won't be connected to any mailbox. Use the folder command to
+connect, giving your username and IMAP server (sometimes the same as your
+email address, but not always) like so:
+
+  folder imap://me@mailhost.example.com/
+
+This opens your INBOX. After you log in, enter the number of a message to
+view. e.g.
+
+  5
+
+to view the fifth message. After viewing it, you can delete it with "delete",
+reply with "reply", or move on to the next message by just pressing enter
+at the prompt (no command is shorthand for reading the next message).
+
+To quit, use the "quit" command (or "q" for short, or end the input stream
+with ctrl+d).
+
+
+Common Tasks
+============
+
+Most things are similar to the mailx program (e.g. heirloom-mailx).
+
+To view a list of headlines around the current message, use the "headers"
+command ("h" for short). You can give "headers" an argument a message in a
+page of headlines to show.
+
+Moving between headline pages can be done with the "z" command. "z" or "z+"
+moves ahead one page, "z-" moves back a page. Giving "z" a numerical argument
+goes to the given page number.
+
+A list of commands can be viewed with the "help" command. The "help" command
+can be given another command as an argument, and will show information about
+that command if available (e.g. "help z" shows usage for the z command).
+
+Most commands take a message number as an argument and show or modify the
+given message in some way. When no argument is given, they typically operate
+on the current message. Some examples are "read" and "unread" to change the
+read state of a message, "flag" and "unflag" to mark the message as
+interesting (flagged messages can be specifically searched for), etc.
+
+Attachments can be opened by using the "open" command. It takes a message part
+as an argument. Message parts can be seen using the "structure" command. The
+given part will be opened with an external viewer in accordance with your
+mailcap configuration, which usually does the right thing, but can be
+customized (see "man mailcap" for details)
+
+A list of subscriptions or other folders can be shown using the "lsub" and
+"folders" command. (lsub is not in mailx)
+
+Choosing a different mailbox can be done by appending the mailbox name to the
+connection . For example, to view your folder named "sent-mail":
+
+  folder imap://me@mailhost.example.com/sent-mail
+
+Since typing all of that is a pain, especially if you switch mail boxes often,
+you can set a base location, and then select mailboxes relative to the base.
+For example:
+
+  set folder=imap://me@mailhost.example.com/
+  folder +sent-mail
+
+With that set, you can get back to the main inbox either with
+
+  folder +INBOX
+
+or even simply
+
+  folder +
+
+Settings such as the base folder can be saved in a per-user configuration file
+which is opened at startup. If a folder command is placed in that file,
+mailnex will attempt to open that mailbox at startup automatically (rather
+than starting in a disconnected state). The configuration file is looked for
+under the XDG directory structure, which normally means the following
+locations are checked, in the following order:
+
+  ~/.config/linsam.homelinux.com/mailnex/mailnex.conf
+  /etc/xdg/linsam.homelinux.com/mailnex/mailnex.conf
+
+The format of the file is the same as the command line, though only a few
+commands are supported (at least folder and set are supported). (mailx
+supports all commands, and reads from ~/.nailrc and ~/.mailrc. Mailnex is
+different enough from mailx that we don't share config files)
+
+Settings in Mailnex are handled more like Vim than mailx.
+
+To see the list of settings that can be set, try running "set all". To see
+additional information about a particular setting, like 'attrlist', append two
+question marks, like so:
+
+  set attrlist??
+
+A single question mark shows the current setting. Double shows the current
+and default settings, along with a description if available. An ampersand
+resets a setting to the default. This should be very familiar to Vim users
+(though the double questionmark is a mailnex addon).
+
+
+Less common tasks (aka advanced features)
+=========================================
+
+Index searching
+---------------
+
+In addition to mailx like listing of files (for example, unread messages by "f
+:u" or IMAP style searches like "f (from bob after 22-Sep-2016 subject "pizza
+day")", you can also do index searching akin to free-form search engine
+strings. At this time, indexing is not automatic. To build the index for the
+current mailbox, run "index". Once the index is built, you cna search it with
+the "search" command. For example:
+
+  search python email sam
+
+which will return a list of messages with those terms in relevant headers or
+message body, sorted by relevance of the term in the message.
+
+
+Virtual Folders
+---------------
+
+
+One issue with mailx is that, when operating on a list of messages within a
+mailbox, any deviation from the list (even within the list) will lose the
+list.
+
+For example, I can run "f (from bob after 22-Sep-2016 subject pizza)" to see a
+list of messages starting on September 22nd, from my friend bob (or anyone
+named bob) with "pizza" somewhere in the subject line. I can then use '`' (the
+backtick) to reference that list, and using '`' as a command, see the messages
+in that list one at a time. However, if I view a specific number out of or in
+the list, or even just use the print command, the list that the backtick knows
+about gets replaced with the one new message. This makes it difficult to
+review the list, observer present status of the messages on the list, change
+messages in the list, and then continue.
+
+With the "virtfolder" command ('vf' for short), you can specify the same
+message selections you do to the "f" command, but instead of showing that
+list, mailnex will enter virtual folder mode, where it presents the selected
+messages as if they were the only ones in the folder (it kind of acts more like
+a filter that way, but the list doesn't dynamically update as you make
+changes).
+
+Running "virtfolder" without any message selector returns to the whole-view of
+the current mailbox.
+
+
+Gotchas for Mailx users
+=======================
+
+Unlike mailx, messages are immediately marked as read (or "seen" in IMAP
+parlance) once successfully viewed (message retrieved and sent to an external
+viewer that exited successfully). This provides better synchronization of your
+mailbox state between multiple connected clients (and, you don't lose that
+information if you lose the connection to the IMAP server). As such, there is
+currently no difference between exiting and quiting mailnex. This is a bit of
+a bug, the expectation would be that messages marked for deletion would get
+expunged on a quit, but not on an exit.
+
+If you make a typo on the command interface, you can edit it! Left and right
+arrow keys let you edit from anywhere in the current line, and Up and Down
+arrow keys let you scroll through your previous commands (e.g. to correct a
+typo in a long search string, or simply to re-run a previous command).
+
+We currently don't have feature parity. You cannot setup multiple pre-defined
+accounts (without using multiple config files), there isn't S/MIME support,
+etc. This should get better as time goes on.
+
+
+Specific Cases
+==============
+
 Using client with gmail and multifactor authentication
 ------------------------------------------------------
 
@@ -23,7 +202,7 @@ backend PAM based auth for other servers like Dovecot).
 The way Google wants you to handle this is by using OAUTH2 to get a token to
 connect to their client APIs. There are pros and cons to this. On the pro
 side, you get a nice screen showing you what a given program wants access to
-within your google account(s), and you can accept or deny. Additinally, apps
+within your google account(s), and you can accept or deny. Additionally, apps
 are supposed to ask for minimum sets ongoing, such that you could grant some
 access now and deny more access later. All well and good.
 
