@@ -470,6 +470,7 @@ class imap4ClientConnection(object):
                 # TODO: Log the response?
                 raise Exception("Unexpected response from server")
             self.socket = s
+            self.hostname = host
         except KeyboardInterrupt:
             print("Aborting connection")
             del s
@@ -500,8 +501,34 @@ class imap4ClientConnection(object):
             raise Exception("No TLS on server")
         # TODO: Support client certificate
         self.origsocket = self.socket
-        self.socket = ssl.wrap_socket(self.socket, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
-        # TODO: Server Certificate checks and whatnot.
+        # So, the best practice here is to use an SSLContext to wrap the
+        # connection, and then to use the default context which does nice
+        # things like enabling host name checking, disabling questional
+        # features (like compression and low-strength hashes).
+        # Unfortunately, the version of python in Ubuntu 14.04 doesn't include
+        # these wonderful things, leaving people to try to do their own
+        # implementation of the same or not support it at all. Since writing
+        # one's own security code is risky, we'll warn if we cannot use the
+        # new stuff, but use the new stuff if it is available.
+        if not hasattr(ssl, "create_default_context"):
+            if not hasattr(ssl, "SSLContext"):
+                # TODO: We should probably fail here unless the user really wants us
+                # to go on.
+                print("WARNING: old python SSL detected. Host checking is *NOT* occuring, and some best practices aren't followed!")
+                self.socket = ssl.wrap_socket(self.socket, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
+            else:
+                raise Exception("TBD: SSLContext-able without default context")
+        else:
+            # Based on information from https://mail.python.org/pipermail/python-dev/2013-November/130649.html
+            if (self.ca_certs):
+                # TODO: This appears to *add* the given certs file to the
+                # default set instead of replacing it. What if the user wants
+                # *only* the given ca? How do we have the user convey that to
+                # us? How do we convey that to the ssl library?
+                context = ssl.create_default_context(cafile=self.ca_certs)
+            else:
+                context = ssl.create_default_context()
+            self.socket = context.wrap_socket(self.socket, server_hostname=self.hostname)
     def login(self, username, password):
         #self.socket.send("T%i LOGIN \"%s\" \"%s\"\r\n" % (self.tag, username, password))
         #self.tag += 1

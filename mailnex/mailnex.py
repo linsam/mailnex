@@ -1078,7 +1078,6 @@ class Cmd(cmdprompt.CmdPrompt):
             c.mailnexHost = host
             c.mailnexPort = port
             c.mailnexBox = box
-            print("WARNING: Certificates are only partially checked. Remote host may be spoofed!")
             try:
                 c.connect(host, port=port)
                 if c.isTls():
