@@ -20,6 +20,7 @@ setup(
             "six==1.10.0",
             "wcwidth==0.1.6",
             "wsgiref==0.1.2",
+            "python-magic==0.4.12",
             ],
         entry_points = {
                 'console_scripts': [ 'mailnex = mailnex.mailnex:main' ],

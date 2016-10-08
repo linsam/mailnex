@@ -85,6 +85,7 @@ import time
 from . import settings
 import subprocess
 import gpgme
+import magic
 from prompt_toolkit.completion import Completer, Completion
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
@@ -2306,6 +2307,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         print("WARNING: Can't read existing file. Adding to list anyway. We'll try again when completing the message.")
                     else:
                         print("Attachment added to list. Raw size is currently %i bytes. Note: we'll actually read the data when completing the message" % st.st_size)
+                        mtype = magic.from_file(filename, mime=True)
+                        print("Mime type appears to be %s" % mtype)
                 attachlist.append(filename)
             # TODO: The other ~* functions from mailx.
             # TODO: Extension commands. E.g. we might want "~save <path>" to
@@ -2355,6 +2358,7 @@ class Cmd(cmdprompt.CmdPrompt):
             try:
                 with open(attach, "rb") as f:
                     data = f.read()
+                    mtype = magic.from_buffer(data, mime=True)
             except KeyboardInterrupt:
                 print("Aborting read of %s" % attach)
                 # TODO: What do we do now? Ideall we'd go back to editing, but
@@ -2373,11 +2377,13 @@ class Cmd(cmdprompt.CmdPrompt):
                 ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
                 print("Message saved to dead.letter")
                 return False
-            # TODO: Ascertain a reasonable MIME type and/or get it from the
-            # user
-            # For now, we'll use the generic application/octetstream
-            entity = email.mime.Base.MIMEBase("application", "octet-stream")
+            # TODO: Allow the user to override the detected mime type
+            entity = email.mime.Base.MIMEBase(*mtype.split("/"))
             entity.set_payload(data)
+            # TODO: Only use base64 if we have to. E.g. scan the file for bad
+            # bytes. Alternatively, check if it is a type of text (e.g.
+            # text/plain, text/html) and only do quoting if not.
+            # TODO: Allow user to override this (e.g. force base64 or quopri)
             email.encoders.encode_base64(entity)
             entity.add_header('Content-Disposition', 'attachment', filename=attach.split(os.sep)[-1])
             if not isinstance(m, email.mime.Multipart.MIMEMultipart):
