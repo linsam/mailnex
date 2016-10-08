@@ -42,5 +42,12 @@ Running without installation
 
     e.g. when doing development:
 
-    Setup a virtualenv or otherwise get the dependencies installed, then run
-    python -m mailnex
+    Setup a virtualenv as above, then run:
+
+        python setup.py develop
+
+    That adds a mailnex script to the virtualenv or system path that calls the
+    code in the project directory and installs all dependencies. Then you can
+    simply run it directly:
+
+        mailnex
