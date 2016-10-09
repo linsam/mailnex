@@ -56,7 +56,11 @@ import re
 import threading
 from . decorators import *
 # xapian search engine
-import xapian
+try:
+    import xapian
+    haveXapian = True
+except ImportError:
+    haveXapian = False
 # various email helpers
 from . import imap4
 import email
@@ -84,7 +88,11 @@ import pyuv
 import time
 from . import settings
 import subprocess
-import gpgme
+try:
+    import gpgme
+    haveGpgme = True
+except ImportError:
+    haveGpgme = False
 import magic
 from prompt_toolkit.completion import Completer, Completion
 
@@ -1333,6 +1341,7 @@ class Cmd(cmdprompt.CmdPrompt):
             raise
 
     @showExceptions
+    @optionalNeeds(haveXapian, "Needs python-xapian package installed")
     @needsConnection
     def do_index(self, args):
         C = self.C
@@ -1861,6 +1870,7 @@ class Cmd(cmdprompt.CmdPrompt):
             C.nextMessage = C.currentMessage + 1
 
     @showExceptions
+    @optionalNeeds(haveXapian, "Needs python-xapian package installed")
     @needsConnection
     def do_latest_threads(self, args):
         """Show the latest 10 threads. If given a number, show the thread containing *that* message.
@@ -2245,12 +2255,15 @@ class Cmd(cmdprompt.CmdPrompt):
                     message.add_header('Subject', newsubject)
 
             elif line == "~pgpsign":
-                # Invert sign. Python doesn't like "sign = !sign"
-                pgpsign = pgpsign == False
-                if pgpsign:
-                    print("Will sign the whole message with OpenPGP/MIME")
+                if not haveGpgme:
+                    print("Cannot sign; python-gpgme package missing")
                 else:
-                    print("Will NOT sign the whole message with OpenPGP/MIME")
+                    # Invert sign. Python doesn't like "sign = !sign"
+                    pgpsign = pgpsign == False
+                    if pgpsign:
+                        print("Will sign the whole message with OpenPGP/MIME")
+                    else:
+                        print("Will NOT sign the whole message with OpenPGP/MIME")
             elif line.startswith("~px"):
                 print(repr(message.get_payload()))
             elif line.startswith("~p"):
@@ -3053,6 +3066,7 @@ class Cmd(cmdprompt.CmdPrompt):
         return data, matches
 
     @showExceptions
+    @optionalNeeds(haveXapian, "Needs python-xapian package installed")
     def do_search(self, args, offset=0, pagesize=10):
         C = self.C
         C.lastsearch = args

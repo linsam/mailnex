@@ -23,6 +23,22 @@ def shortcut(name):
         return shortcutWrapper
     return wrap1
 
+def optionalNeeds(var, message=None):
+    """Marks a command as being optional, needing the given variable to be true to be active.
+
+    If a message is specified, it will be displayed when the command is attempted."""
+    def wrap1(func):
+        @wraps(func)
+        def optionalNeedsWrapper(self, *args, **kwargs):
+            if not var:
+                print("command '%s' is unavailable" % func.__name__[3:])
+                if message:
+                    print(message)
+            else:
+                return func(self, *args, **kwargs)
+        return optionalNeedsWrapper
+    return wrap1
+
 def argsToMessageList(func):
     """This decorator causes a call to self.parseMessageList on the single (non-self) argument, then calls the real function with the list as a single array parameter or None.
 
