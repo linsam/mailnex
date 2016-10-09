@@ -1,41 +1,49 @@
+There are, unfurtunately, multiple ways to install and run this program. The
+following are givin in order of recommendation. 
+
+In general, we follow normal setuptools installation, but we do rely on some
+packages unavailable via pip but often provided by your OS distributor.
+
 Installing from package
     run:
         virtualenv --system-site-packages env
         source env/bin/activate
         pip install mailnex-0.0.tar.gz
-    You'll additionally need python-xapian from your system package manager
-    (e.g. apt-get install python-zapian)
+    You'll additionally want python-xapian and python-gpgme from your system
+    package manager to enable those features
+    (e.g. apt-get install python-xapian python-gpgme)
 
     Then, you can run directly: mailnex
 
 
 Installing from source
 
-Method 1:
-    run:
-        virtualenv --system-site-packages env
-        source env/bin/activate
-        python setup.py install
+    Method 1:
+        run:
+            virtualenv --system-site-packages env
+            source env/bin/activate
+            python setup.py install
 
-    Install python-xapian using your system package manager (e.g. apt-get install python-xapian)
-    If you want it to remember passwords, install appropriate keyring managers (TODO: name the packages)
+        Install python-xapian using your system package manager (e.g. apt-get install python-xapian)
+        If you want it to remember passwords, install appropriate keyring managers (TODO: name the packages)
 
-    run directly: mailnex
+        run directly: mailnex
 
-Method 2: (for when the above method results in problems with function calls)
-    run:
-        virtualenv env
-        source env/bin/activate
-        python setup.py install
+    Method 2: (for when the above method results in problems with function calls)
+        run:
+            virtualenv env
+            source env/bin/activate
+            python setup.py install
 
-    Follow instructions at https://gist.github.com/josezambrana/920909. We use
-    version 1.2.23 instead of 1.2.18. We didn't bother installing the haystack
-    packages (django-haystack, xapian-haystack)
+        To enable indexed searching features, follow instructions at
+        https://gist.github.com/josezambrana/920909. We use version 1.2.23 instead
+        of 1.2.18. We didn't bother installing the haystack packages
+        (django-haystack, xapian-haystack)
 
-    If you want it to remember passwords, good luck. Probably your best bet is
-    to do 'pip install keyring.alt' and configure plain-text password storage.
+        If you want it to remember passwords, good luck. Probably your best bet is
+        to do 'pip install keyring.alt' and configure plain-text password storage.
 
-    run directly: mailnex
+        run directly: mailnex
 
 
 Running without installation
@@ -49,5 +57,15 @@ Running without installation
     That adds a mailnex script to the virtualenv or system path that calls the
     code in the project directory and installs all dependencies. Then you can
     simply run it directly:
+
+        mailnex
+
+System installation
+
+    This is not recommended, because it ignores your system package manager
+
+        python setup.py install
+
+    Then, run directly:
 
         mailnex

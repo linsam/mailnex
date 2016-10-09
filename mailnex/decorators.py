@@ -34,6 +34,7 @@ def optionalNeeds(var, message=None):
                 print("command '%s' is unavailable" % func.__name__[3:])
                 if message:
                     print(message)
+                print("See 'help optional_packages' for more information")
             else:
                 return func(self, *args, **kwargs)
         return optionalNeedsWrapper

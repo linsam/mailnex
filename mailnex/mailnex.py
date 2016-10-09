@@ -614,6 +614,19 @@ class Cmd(cmdprompt.CmdPrompt):
         print("  p   -> print")
         print("  q   -> quit")
         print("  x   -> exit")
+    def help_optional_packages(self):
+        # TODO: format to the user's terminal
+        print("Some commands require optional packages to be installed to enable")
+        print("functionality. For example, indexing and searching the index require")
+        print("that Xapian be installed with python bindings. Similarly,")
+        print("cryptographically signing email requires python bindings for gpgme.")
+        print()
+        print("These are often unavailable via pip install, and must therefore either")
+        print("be installed by hand or come from your system's package manager. As")
+        print("such, if running mailnex from a virtual-env, the virtual-env needs")
+        print("to be set to have access to the system packages (using the")
+        print("'--system-site-packages' flag of the virtualenv tool). See the file")
+        print("'INSTALL' that came with this program for more details.")
     def parseMessageList(self, args):
         """Parse a message list specification string into a list of matching message IDs.
 
