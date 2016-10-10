@@ -115,9 +115,50 @@ ATTR_THREAD = 12
 ATTR_JUNK = 13
 
 class Context(object):
+    """Holding place for runtime data.
+
+    This is sort-of a drop place for things that could possibly be globals.
+    Opens the possibility that we might support multiple sessions in a single
+    run at some point."""
     def __init__(self):
         object.__init__(self)
+        # The IMAP (or whatever) connection instance. Should be the
+        # abstraction for the message store
         self.connection = None
+        # list of messages from the last command
+        self.lastList = None
+        # list of messages making up the current virtual folder, if any
+        self.virtfolder = None
+        # Currently selected message. Should (must?) be in lastList
+        self.currentMessage = None
+        # lastMessage is the highest numbered message in the folder
+        self.lastMessage = None
+        # nextMessage is the message to be opened when no command is given. It
+        # is usually the message following the current message, unless the
+        # current message wasn't directly selected for viewing (e.g. freshly
+        # opening a mailbox or using the 'h' command results in currentMessage
+        # and nextMessage being the same).
+        self.nextMessage = None
+        # The message which was most recently the currentMessage. Is is used
+        # by the previous message selector ';'
+        self.prevMessage = None
+        # The previously issued command that is repeatable. When None, the
+        # default (print next) command is used when an empty prompt is
+        # submitted. Used, for example, to retrieve more searh results by
+        # pressing enter multiple times after a search command
+        self.lastcommand = None
+        # Instance of settings that tweak the behavior of mailnex, or store
+        # user strings
+        self.settings = None
+        # Current path for DB index(es). Currently the path of the active
+        # database.
+        self.dbpath = None
+        # Instance of blessings.Terminal or equivalent terminal formatting
+        # package.
+        self.t = None
+
+        # Some parts of the program might put other stuff in here. For
+        # example, the exception trace wrapper.
 
 class nodate(object):
     """Stand-in for date objects that aren't dates"""
