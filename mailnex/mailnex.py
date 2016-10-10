@@ -3347,6 +3347,9 @@ class Cmd(cmdprompt.CmdPrompt):
             lastMessage = len(self.C.virtfolder)
         else:
             lastMessage = self.C.lastMessage
+        if lastMessage == 0:
+            print("No applicable messages")
+            return
         start = (self.C.currentMessage - 1) // rows * rows
         # ^- alternatively, start = self.C.currentMessage - (self.C.currentMessage % rows)
         # Next, figure out where we are going
@@ -3417,6 +3420,9 @@ class Cmd(cmdprompt.CmdPrompt):
             lastMessage = len(self.C.virtfolder)
         else:
             lastMessage = self.C.lastMessage
+        if lastMessage == 0:
+            print("No applicable messages")
+            return
         #TODO: Make 'interesting' criteria a user setting
         msgs = map(int,self.C.connection.search('utf-8', '(or FLAGGED NEW)'))
         if self.C.virtfolder:
