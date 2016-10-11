@@ -190,6 +190,67 @@ def getResultPart(part, data):
     # weird like returning a class or something.
     raise Exception("Part %s not found" % part)
 
+class MessageList(object):
+    """Acts like a set, but automatically collapses ranges.
+
+    A message list is a sorted list of non-overlaping ranges of message IDs.
+    Message IDs can be added to the message list or removed from it. Removing
+    will split or remove the range containing the ID. Adding will create, extend,
+    or join a range to include the ID."""
+    def __init__(self, iterable=None):
+        object.__init__(self)
+        # First pass, we'll do linear searches for our operations
+        self.ranges = []
+        if iterable:
+            for i in iterable:
+                self.add(i)
+    def add(self, i):
+        """Add a message ID to the message list"""
+        # First, first pass, we won't collapse the ranges and we'll post-sort.
+        # This is a terrible implementation
+        # TODO: fix this to be more efficient and actually collapse ranges
+        if (i, i) in self.ranges:
+            return
+        self.ranges.append((i,i))
+        self.ranges.sort()
+    def addRange(self, start, end):
+        """Convenience function to add an inclusive range of messages in one go."""
+        #TODO: We should be able to do similar to add but with ranges for faster operation.
+        # First-pass, just loop on calling add.
+        for i in range(start, end + 1):
+            self.add(i)
+    def remove(self, i):
+        raise Exception("Not yet implemented")
+    def imapListStr(self):
+        """Return a string representation of the message list in IMAP format
+
+        Eg, a range of 4 through 8 and 10 through 12 (4 through 12 excluding 9) would yield:
+
+            4:8,10:12
+
+        A range or 4 through 8 and 10 would yield:
+
+            4:8,10
+
+        A list with only 10 in it would yield:
+
+            10
+        """
+        res = []
+        for i in self.ranges:
+            if i[0] == i[1]:
+                res.append(str(i[0]))
+            else:
+                res.append(':'.join(map(str, i)))
+        return ",".join(res)
+    def iterate(self):
+        """Returns an iterator that yeilds each message ID in turn"""
+        for r in self.ranges:
+            for i in range(r[0], r[1] + 1):
+                yield i
+        raise StopIteration()
+
+
 class Envelope(object):
     # Envelope fields:
     #   0 - date
@@ -1311,10 +1372,9 @@ class Cmd(cmdprompt.CmdPrompt):
         else:
             l()
         if self.C.settings.headers_newmsg if self.C.settings.headers_newmsg.value is not None else self.C.settings.headers:
-            if delta == 1:
-                l = lambda: self.showHeadersNonVF("%i" % value)
-            else:
-                l = lambda: self.showHeadersNonVF("%i:%i" % (value - delta, value))
+            ml = MessageList()
+            ml.addRange(value - delta + 1, value)
+            l = lambda: self.showHeadersNonVF(ml)
             def tcb(handle):
                 if self.cli._is_running:
                     self.cli.run_in_terminal(l)
@@ -2792,17 +2852,20 @@ class Cmd(cmdprompt.CmdPrompt):
                 last = (lastMessage - 1) // rows,
                 rows = rows,
                 ))
-        self.showHeaders("%i:%i" % (start, last))
+        ml = MessageList()
+        ml.addRange(start, last)
+        self.showHeaders(ml)
 
     def showHeaders(self, messageList):
         """Show headers. Takes virtual folders into consideration."""
         if self.C.virtfolder:
-            start,end = map(int,messageList.split(':'))
-            messageList=','.join(map(str,[self.C.virtfolder[x-1] for x in range(start,end+1)]))
+            # Map the message list onto the virtualFolder namespace
+            messageList = MessageList([self.C.virtfolder[x-1] for x in messageList.iterate()])
         self.showHeadersNonVF(messageList)
+
     def showHeadersNonVF(self, messageList):
         """Show headers, given a global message list only"""
-        msgset = "%s" % messageList
+        msgset = messageList.imapListStr()
         args = "(ENVELOPE INTERNALDATE FLAGS)"
         if self.C.settings.debug.general:
             print("executing IMAP command FETCH {} {}".format(msgset, args))
@@ -2921,7 +2984,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("No matches")
             return
 
-        self.showHeaders("%s" % ",".join(map(str,msglist)))
+        self.showHeaders(MessageList(msglist))
         C.nextMessage = C.currentMessage
 
     @showExceptions
@@ -3399,7 +3462,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 last = (lastMessage - 1) // rows,
                 rows = rows,
                 ))
-        self.showHeaders("%i:%i" % (start, last))
+        ml = MessageList()
+        ml.addRange(start, last)
+        self.showHeaders(ml)
 
     @showExceptions
     @needsConnection
@@ -3507,7 +3572,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 ilast = len(interestingPages) - 1 - int(addedPage),
                 rows = rows,
                 ))
-        self.showHeaders("{}:{}".format(start, end))
+        ml = MessageList()
+        ml.addRange(start, end)
+        self.showHeaders(ml)
 
     @showExceptions
     def do_quit(self, args):
