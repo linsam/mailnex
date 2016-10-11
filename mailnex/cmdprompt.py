@@ -313,8 +313,10 @@ class CmdPrompt(cmd.Cmd):
                 ]
         self.ttyBusy = True
         s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
-        com.write(data)
-        com.close()
+        def closeWhenDone(handle, error):
+            # TODO: Maybe report error?
+            handle.close()
+        com.write(data, closeWhenDone)
         self.ptkevloop.realloop.run()
         self.ttyBusy = False
         return res[0]
