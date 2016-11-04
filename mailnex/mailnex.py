@@ -1811,7 +1811,11 @@ class Cmd(cmdprompt.CmdPrompt):
             outfile.flush()
             fullcmd = cmds[1]['view'] % outfile.name
             print("Launching viewer:", fullcmd)
-            os.system(fullcmd)
+            # TODO: Support opening in the background (should check cap for
+            # non-terminal status of program first)
+            # TODO: Mimick shell quoting for the command instead of just
+            # splitting? What are the rules for mailcap here?
+            self.runAProgramStraight(fullcmd.split())
 
 
 
