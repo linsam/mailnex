@@ -1728,6 +1728,74 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     @needsConnection
+    def do_write(self, args):
+        """Write a message part (e.g. attachment) to a file.
+
+        e.g.:
+            write 6531.2 /tmp/attach1.txt
+
+        Takes a message sub-part notation. E.g. 670.1.2 is part 2 of part 1 of
+        message 670.
+
+        Doesn't update current message location or seen status.
+
+        If the first character of the file name is a pipe ("|"), then instead of
+        saving a file, the contents of the message part are given as standard
+        input to the named program.
+
+        See also the 'structure' command."""
+        args=args.split(' ', 1)
+        if len(args) != 2:
+            print("Need a message part and a filename")
+            return
+        filename=args[1]
+        msgpart = args[0].split('.',1)
+        if len(msgpart) == 1:
+            # Use the first part if none given
+            msgpart = (msgpart[0], "1")
+        data = self.C.connection.fetch(msgpart[0], '(BODYSTRUCTURE)')
+        parts = processImapData(data[0][1], self.C.settings)
+        struct = getResultPart('BODYSTRUCTURE', parts[0])
+        struct = unpackStruct(struct, self.C.settings)
+        struct = flattenStruct(struct)
+        key = '.' + msgpart[1]
+        if not key in struct:
+            print("Subpart not found in message. Try the 'structure' command.")
+            return
+        part = struct[key]
+        #print(part)
+        #print("Would run",cmds[1]['view'])
+        #print("Fetching attachment")
+        data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
+        #print("processing data")
+        # TODO: This part is *very* slow
+        parts = processImapData(data[0][1], self.C.settings)
+        #print("getting part")
+        data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
+        #print(data)
+        #print(part.encoding)
+        if part.encoding in [None, "", "NIL", '7bit', '8bit']:
+            # Don't need to do anything
+            pass
+        elif part.encoding == "quoted-printable":
+            data = data.decode("quopri")
+        elif part.encoding == "base64":
+            data = data.decode("base64")
+        else:
+            print("unknown encoding %s; can't decode for display\r\n" % (encoding))
+            return
+        #print("Saving attachment to temporary file")
+        if filename[0] == '|':
+            # TODO: Support opening in the background (maybe by checking for
+            # an ampersand at the end of the program?)
+            res = self.runAProgramWithInput([filename[1:]], data)
+            return
+        with open(filename, "w")  as outfile:
+            outfile.write(data)
+            outfile.flush()
+
+    @showExceptions
+    @needsConnection
     def do_open(self, args):
         """Open a message part (e.g. attachment) in an external viewer.
 
