@@ -1878,6 +1878,7 @@ class Cmd(cmdprompt.CmdPrompt):
             outfile.write(data)
             outfile.flush()
             fullcmd = cmds[1]['view'] % outfile.name
+            # TODO: Either ask before opening always, or make it a parameter.
             print("Launching viewer:", fullcmd)
             # TODO: Support opening in the background (should check cap for
             # non-terminal status of program first)
