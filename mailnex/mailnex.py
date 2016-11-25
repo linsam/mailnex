@@ -190,6 +190,40 @@ def getResultPart(part, data):
     # weird like returning a class or something.
     raise Exception("Part %s not found" % part)
 
+def attachFile(attachList, filename, pos=None, replace=False):
+    """Check a path and add it to the attachment list
+    If pos is given and replace is False, insert attachment at given position.
+    If pos is given and replace is True, replace the attachment at the given position.
+    """
+    if pos is not None:
+        if pos < 1 or pos > len(attachList):
+            print("Bad position. {} not between 1 and {}".format(pos, len(attachList)))
+            return
+        # Adjust from human position to index
+        pos -= 1
+    try:
+        st = os.stat(filename)
+    except OSError as err:
+        # Can't read it. Is it because it doesn't exist?
+        if err.errno == errno.ENOENT:
+            print("WARNING: Given file doesn't currently exist. Adding to list anyway. We'll try reading it again when completing the message")
+        else:
+            print("WARNING: Couldn't get information about the file: %s" % err.strerror)
+            print("Adding to list anyway. We'll try reading it again when completing the message.")
+    else:
+        if not os.access(filename, os.R_OK):
+            print("WARNING: Can't read existing file. Adding to list anyway. We'll try again when completing the message.")
+        else:
+            print("Attachment added to list. Raw size is currently %i bytes. Note: we'll actually read the data when completing the message" % st.st_size)
+            mtype = magic.from_file(filename, mime=True)
+            print("Mime type appears to be %s" % mtype)
+    if pos is None:
+        attachList.append(filename)
+    elif replace == False:
+        attachList.insert(pos, filename)
+    else:
+        attachList[pos] = filename
+
 class MessageList(object):
     """Acts like a set, but automatically collapses ranges.
 
@@ -2365,6 +2399,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # ~<!command   = run command in shell, insert output into message
                 # ~@           = edit attachment list
                 # ~@ filename  = add filename to attachment list. Space separated list (according to mailx)
+                # ~@ #msgnum   = add message msgnum to the attachment list.
                 # ~A           = insert string of the Sign variable (like '~i Sign)
                 # ~a           = insert string of the sign variable (like '~i sign)
                 # ~bname       = add names to bcc list (space separated)
@@ -2491,25 +2526,75 @@ class Cmd(cmdprompt.CmdPrompt):
                     del fil
                     os.unlink(f[1])
                     #TODO: If editHeaders is set, retrieve those headers
+            elif line.strip() == "~@":
+                print("Current attachments:")
+                for att in range(len(attachlist)):
+                    print("%i: %s" % (att + 1, attachlist[att]))
+                while True:
+                    try:
+                        line = self.singleprompt("attachment> ")
+                    except EOFError:
+                        line = 'q'
+                    if line.strip() == '':
+                        # Do nothing
+                        continue
+                    elif line.strip() == 'q':
+                        print("Resume composing your message")
+                        break
+                    elif line.strip() == 'help' or line.strip() == 'h':
+                        print("q                leave attachment edit mode")
+                        print("add FILE         add an attachment")
+                        print("insert POS FILE  Insert an attachment at position POS, pushing other attachments back")
+                        print("remove POS       remove attachment at position POS")
+                        print("list             list attachments")
+                        #print("edit POS         edit attachment (TBD)")
+                        print("file POS FILE    change file to attach")
+                    elif line.strip() == "list":
+                        print("Current attachments:")
+                        for att in range(len(attachlist)):
+                            print("%i: %s" % (att + 1, attachlist[att]))
+                    elif line.startswith("add "):
+                        attachFile(attachlist, line[4:])
+                    elif line.startswith("insert"):
+                        try:
+                            cmd, pos, filename = line.split(None, 3)
+                        except ValueError:
+                            print("Need position and filename")
+                            continue
+                        try:
+                            pos = int(pos)
+                        except ValueError:
+                            print("Position should be an integer")
+                            continue
+                        attachFile(attachlist, filename, pos)
+                    elif line.startswith("remove "):
+                        try:
+                            pos = int(line[7:])
+                        except ValueError:
+                            print("Position should be an integer")
+                            continue
+                        try:
+                            del attachlist[pos - 1]
+                        except IndexError:
+                            print("No attachment at that position")
+                    elif line.startswith("file "):
+                        try:
+                            cmd, pos, filename = line.split(None, 3)
+                        except ValueError:
+                            print("Need position and filename")
+                            continue
+                        try:
+                            pos = int(pos)
+                        except ValueError:
+                            print("Position should be an integer")
+                            continue
+                        attachFile(attachlist, filename, pos, replace=True)
+                    else:
+                        print("unknown command")
+
             elif line.startswith("~@ "):
                 filename = line[3:]
-                # Can't read it. Is it because it doesn't exist?
-                try:
-                    st = os.stat(filename)
-                except OSError as err:
-                    if err.errno == errno.ENOENT:
-                        print("WARNING: Given file doesn't currently exist. Adding to list anyway. We'll try reading it again when completing the message")
-                    else:
-                        print("WARNING: Couldn't get information about the file: %s" % err.strerror)
-                        print("Adding to list anyway. We'll try reading it again when completing the message.")
-                else:
-                    if not os.access(filename, os.R_OK):
-                        print("WARNING: Can't read existing file. Adding to list anyway. We'll try again when completing the message.")
-                    else:
-                        print("Attachment added to list. Raw size is currently %i bytes. Note: we'll actually read the data when completing the message" % st.st_size)
-                        mtype = magic.from_file(filename, mime=True)
-                        print("Mime type appears to be %s" % mtype)
-                attachlist.append(filename)
+                attachFile(attachlist, filename)
             # TODO: The other ~* functions from mailx.
             # TODO: Extension commands. E.g. we might want "~save <path>" to
             # save a copy of the message to the given path, but keep editing.
