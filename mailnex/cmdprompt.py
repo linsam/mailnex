@@ -195,8 +195,11 @@ class CmdPrompt(cmd.Cmd):
     (that is, you want to readline once, and process the command).
     """
 
+    def get_title(self):
+        return self.title
     def __init__(self, prompt=None, histfile=None, eventloop=None):
         cmd.Cmd.__init__(self)
+        self.title = u"mailnex"
         self.completer = Completer(self)
         # ttyBusy tracks times when printing is a Bad Idea
         self.ttyBusy = False
@@ -221,6 +224,7 @@ class CmdPrompt(cmd.Cmd):
                     completer = self.completer,
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
+                    get_title = self.get_title,
                     ),
                 eventloop = self.ptkevloop,
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
