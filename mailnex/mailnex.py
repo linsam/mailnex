@@ -1800,12 +1800,9 @@ class Cmd(cmdprompt.CmdPrompt):
             print("Subpart not found in message. Try the 'structure' command.")
             return
         part = struct[key]
-        #print(part)
-        #print("Would run",cmds[1]['view'])
         #print("Fetching attachment")
         data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
         #print("processing data")
-        # TODO: This part is *very* slow
         parts = processImapData(data[0][1], self.C.settings)
         #print("getting part")
         data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
@@ -1821,7 +1818,6 @@ class Cmd(cmdprompt.CmdPrompt):
         else:
             print("unknown encoding %s; can't decode for display\r\n" % (encoding))
             return
-        #print("Saving attachment to temporary file")
         if filename[0] == '|':
             # TODO: Support opening in the background (maybe by checking for
             # an ampersand at the end of the program?)
@@ -1866,86 +1862,74 @@ class Cmd(cmdprompt.CmdPrompt):
         parts = processImapData(data[0][1], self.C.settings)
         struct = getResultPart('BODYSTRUCTURE', parts[0])
         m = mailcap.getcaps()
-        #print()
-        #print(struct)
         struct = unpackStruct(struct, self.C.settings)
-        #print()
-        #print(struct)
         struct = flattenStruct(struct)
-        #print()
-        #print(struct)
-        #print()
         key = '.' + msgpart[1]
         if not key in struct:
             print("Subpart not found in message. Try the 'structure' command.")
             return
         part = struct[key]
-        #print(part)
-        cmds = mailcap.findmatch(m, "{}/{}".format(part.type_, part.subtype))
-        if not cmds[1]:
-            print("Don't know how to display part. Maybe update your mailcap file,\n"
-            "or specify a different message part? (use the 'structure' command\n"
-            "to see a parts list)")
-            return
-        if not 'view' in cmds[1]:
-            print("No view command found for part.")
-            return
-        #print("Would run",cmds[1]['view'])
-        #print("Fetching attachment")
-        data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
-        #print("processing data")
-        # TODO: This part is *very* slow
-        parts = processImapData(data[0][1], self.C.settings)
-        #print("getting part")
-        data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
-        #print(data)
-        #print(part.encoding)
-        if part.encoding in [None, "", "NIL", '7bit', '8bit']:
-            # Don't need to do anything
-            pass
-        elif part.encoding == "quoted-printable":
-            data = data.decode("quopri")
-        elif part.encoding == "base64":
-            data = data.decode("base64")
-        else:
-            print("unknown encoding %s; can't decode for display\r\n" % (encoding))
-            return
-        #print("Saving attachment to temporary file")
+        # This part is kindof tough, trade-off wise.
+        # One the one hand, we don't want to bother downloading the whole file
+        # if we have no way to view it (since that would just output that we
+        # don't support it after a possibly long file transfer, then delete
+        # the data we just transferred).
+        #
+        # On the other hand, mailcap is setup such that the handlers can
+        # perform tests on the actual data to see if they apply. While I'm not
+        # aware of any that actually do in distribution mailcap files, custom
+        # user files may certainly make use of this feature.
+        #
+        # Maybe download always, then offer to save the file if we cannot view
+        # it?
+        #
+        # Or, make it an option, so the user can decide if they need
+        # content-testable mailcap entries.
+        #
+        # Or, we can get a list of matching untested entries from mailcap,
+        # look if any entries actually need this (by looking for '%s' in the
+        # test fields), and then only download the file early if so. Perhaps a
+        # user option would be on/off/auto for testable attachment rules,
+        # where auto does the two-step matching.
+        #
+        # Since doing such tests seems uncommon, we can default to 'off' or
+        # 'auto'
         with tempfile.NamedTemporaryFile() as outfile:
-            # Mutt comments that RFC1524 defines mailcap, but RFC1524 does not
-            # define the semantics of where mailcap is stored, nor how
-            # commands are interpreted, though it does give an example for
-            # Unix based systems.
+            # Mailcap does replacements for us in cmd, if given a filename.
+            # Unfortunately, it doesn't support filetemplate, so hopefully no
+            # commands actually need that. It also doesn't let us filter on
+            # anything (can't request copiousoutput entries, for example)
             #
-            # The rules for processing mailcap view commands are as follows
-            # (based on the man page):
-            #  * Replace '%s' with a file name containing the message to view
-            #  * Replace '%t' with the content type/subtype of the message
-            #  * Replace '%{...}' with the value of the parameter named
-            #    between the braces
-            #  * Replace \N with a literal character N (for any character N)
-            #  * If the command lacks '%s', set up the data to the command's
-            #    standard input
-            #  * If the message type is multipart, replace '%n' with the
-            #    number of parts in the multipart
-            #  * If the message type is multipart, replace '%F' with a series
-            #    of content-type and temporary file names, one for each part,
-            #    containing that part's data, and create a same-named
-            #    temporary ending in 'H'. The 'H' files are not indicated in
-            #    the RFC, but are in the metamail manual for mailcap from 1991
-            #    (predating the RFC). Same author for both, so I guess he
-            #    later abandoned the H file idea. Can't hurt to support it,
-            #    but nothing should rely on it.
-            #    containing the part's headers.
-            #  * Pass the string to the shell via the system(3) call.
-            #    'system' runs '/bin/sh -c command', blocks SIGCHLD and
-            #    ignores SIGINT and SIGQUIT until done. It appears to expect
-            #    to fork,exec and call wait on the forked process.
-            #
-            #  TODO: we should also process test directives, if present, the
-            #  same way as above
-            #  TODO: Handle 'textualnewlines' if specified
-            #  TODO: Some commands also have a nametemplate field.
+            # TODO: Commands might want the parameter list ('plist=' arg to findmatch)
+            fullcmd, entry = mailcap.findmatch(m, "{}/{}".format(part.type_, part.subtype), filename=outfile.name)
+            if not fullcmd:
+                print("Don't know how to display part. Maybe update your mailcap file,\n"
+                "or specify a different message part? (use the 'structure' command\n"
+                "to see a parts list)")
+                return
+            #print("Would run", fullcmd)
+            #print("Fetching attachment")
+            data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
+            #print("processing data")
+            parts = processImapData(data[0][1], self.C.settings)
+            #print("getting part")
+            data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
+            #print(data)
+            #print(part.encoding)
+            if part.encoding in [None, "", "NIL", '7bit', '8bit']:
+                # Don't need to do anything
+                pass
+            elif part.encoding == "quoted-printable":
+                data = data.decode("quopri")
+            elif part.encoding == "base64":
+                data = data.decode("base64")
+            else:
+                print("unknown encoding %s; can't decode for display\r\n" % (encoding))
+                return
+            #print("Saving attachment to temporary file")
+            #  TODO: Handle 'textualnewlines' if specified?
+            #  TODO: handle nametemplate field? Probably requires replacing
+            #  parts of python mailcap lib functions
             #  TODO: Check 'needsterminal'. Means interactive program that
             #  needs a terminal (e.g. not an X program)
             #  TODO: Check 'copiousoutput'. Means non-interactive and probably
@@ -1954,18 +1938,24 @@ class Cmd(cmdprompt.CmdPrompt):
             #  viewing of an attachment with Mutt's pager/viewer/whatever.
             outfile.write(data)
             outfile.flush()
-            # TODO: Should probably do better processing than just relying on
-            # python's string replace.
-            fullcmd = cmds[1]['view'] % outfile.name
             # TODO: Either ask before opening always, or make it a parameter.
             print("Launching viewer:", fullcmd)
             # TODO: Support opening in the background (should check cap for
-            # non-terminal status of program first)
-            # TODO: What are the rules for mailcap with regards to quoting? Is
-            # shlex sufficient? - no it isn't. It really needs shell
-            # interpretation. Some viewing commands are formed by a pipeline,
-            # for example
-            self.runAProgramStraight(shlex.split(fullcmd))
+            # non-terminal status of program first). Note that background
+            # launching complicates automatic removal of the temporary file.
+
+            # Pass the string to the shell as via the system(3) call. Note
+            # 'system' runs '/bin/sh -c command', blocks SIGCHLD and ignores
+            # SIGINT and SIGQUIT until done. It appears to expect to fork,exec
+            # and call wait on the forked process.
+            #
+            # Hopefully this is close enough
+            #
+            # Note that we must use a shell. The Unix semantics as per RFC1524
+            # allow things like shell pipelines and dictate bourne shell
+            # compatible processing, and we really don't want to implement
+            # that much of a shell.
+            self.runAProgramStraight(['/bin/sh', '-c', fullcmd])
 
 
 
