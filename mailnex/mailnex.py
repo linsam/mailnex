@@ -1673,14 +1673,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 o[1].attrs = None
             encoding = o[1].encoding
             # First, check for transfer encoding
-            if encoding in [None, "", "NIL", '7bit', '8bit']:
-                # Don't need to do anything
-                pass
-            elif encoding == "quoted-printable":
-                dstr = dstr.decode("quopri")
-            elif encoding == "base64":
-                dstr = dstr.decode("base64")
-            else:
+            dstr = self.transferDecode(dstr, encoding)
+            if dstr == None:
                 resparts.append((o[0],o[1],"Part %s: unknown encoding %s\r\n" % (o[0], encoding)))
                 continue
             # Finally, check for character set encoding
@@ -1763,6 +1757,37 @@ class Cmd(cmdprompt.CmdPrompt):
             body += part[2]
         return body
 
+    def transferDecode(self, data, encoding):
+        if encoding in [None, "", "NIL", '7bit', '8bit']:
+            # Don't need to do anything
+            return data
+        elif encoding == "quoted-printable":
+            return data.decode("quopri")
+        elif encoding == "base64":
+            return data.decode("base64")
+        print("unknown encoding %s; can't decode for display\r\n" % (encoding))
+        # TODO: raise an exception instead?
+        return None
+
+    def fetchAndDecode(self, msgpart, part):
+        """Fetch a message part and decode the contents.
+
+        Takes a message number and part as a list (e.g. [1234,1,3] for part "1234.1.3")
+
+        Returns transfer decoded subpart data, or None if it couldn't decode
+
+        Note: doesn't decode characterset data into unicode"""
+        #print("Fetching attachment")
+        data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
+        #print("processing data")
+        parts = processImapData(data[0][1], self.C.settings)
+        #print("getting part")
+        data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
+        #print(data)
+        #print(part.encoding)
+        data = self.transferDecode(data, part.encoding)
+        return data
+
     @showExceptions
     @needsConnection
     def do_write(self, args):
@@ -1800,23 +1825,9 @@ class Cmd(cmdprompt.CmdPrompt):
             print("Subpart not found in message. Try the 'structure' command.")
             return
         part = struct[key]
-        #print("Fetching attachment")
-        data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
-        #print("processing data")
-        parts = processImapData(data[0][1], self.C.settings)
-        #print("getting part")
-        data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
-        #print(data)
-        #print(part.encoding)
-        if part.encoding in [None, "", "NIL", '7bit', '8bit']:
-            # Don't need to do anything
-            pass
-        elif part.encoding == "quoted-printable":
-            data = data.decode("quopri")
-        elif part.encoding == "base64":
-            data = data.decode("base64")
-        else:
-            print("unknown encoding %s; can't decode for display\r\n" % (encoding))
+        data = self.fetchAndDecode(msgpart, part)
+        if data is None:
+            # Already displayed error message in fetchAndDecode
             return
         if filename[0] == '|':
             # TODO: Support opening in the background (maybe by checking for
@@ -1908,23 +1919,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 "to see a parts list)")
                 return
             #print("Would run", fullcmd)
-            #print("Fetching attachment")
-            data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
-            #print("processing data")
-            parts = processImapData(data[0][1], self.C.settings)
-            #print("getting part")
-            data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
-            #print(data)
-            #print(part.encoding)
-            if part.encoding in [None, "", "NIL", '7bit', '8bit']:
-                # Don't need to do anything
-                pass
-            elif part.encoding == "quoted-printable":
-                data = data.decode("quopri")
-            elif part.encoding == "base64":
-                data = data.decode("base64")
-            else:
-                print("unknown encoding %s; can't decode for display\r\n" % (encoding))
+            data = self.fetchAndDecode(msgpart, part)
+            if data is None:
+                # Already displayed error message in fetchAndDecode
                 return
             #print("Saving attachment to temporary file")
             #  TODO: Handle 'textualnewlines' if specified?
