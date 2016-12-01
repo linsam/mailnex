@@ -1912,6 +1912,46 @@ class Cmd(cmdprompt.CmdPrompt):
             return
         #print("Saving attachment to temporary file")
         with tempfile.NamedTemporaryFile() as outfile:
+            # Mutt comments that RFC1524 defines mailcap, but RFC1524 does not
+            # define the semantics of where mailcap is stored, nor how
+            # commands are interpreted, though it does give an example for
+            # Unix based systems.
+            #
+            # The rules for processing mailcap view commands are as follows
+            # (based on the man page):
+            #  * Replace '%s' with a file name containing the message to view
+            #  * Replace '%t' with the content type/subtype of the message
+            #  * Replace '%{...}' with the value of the parameter named
+            #    between the braces
+            #  * Replace \N with a literal character N (for any character N)
+            #  * If the command lacks '%s', set up the data to the command's
+            #    standard input
+            #  * If the message type is multipart, replace '%n' with the
+            #    number of parts in the multipart
+            #  * If the message type is multipart, replace '%F' with a series
+            #    of content-type and temporary file names, one for each part,
+            #    containing that part's data, and create a same-named
+            #    temporary ending in 'H'. The 'H' files are not indicated in
+            #    the RFC, but are in the metamail manual for mailcap from 1991
+            #    (predating the RFC). Same author for both, so I guess he
+            #    later abandoned the H file idea. Can't hurt to support it,
+            #    but nothing should rely on it.
+            #    containing the part's headers.
+            #  * Pass the string to the shell via the system(3) call.
+            #    'system' runs '/bin/sh -c command', blocks SIGCHLD and
+            #    ignores SIGINT and SIGQUIT until done. It appears to expect
+            #    to fork,exec and call wait on the forked process.
+            #
+            #  TODO: we should also process test directives, if present, the
+            #  same way as above
+            #  TODO: Handle 'textualnewlines' if specified
+            #  TODO: Some commands also have a nametemplate field.
+            #  TODO: Check 'needsterminal'. Means interactive program that
+            #  needs a terminal (e.g. not an X program)
+            #  TODO: Check 'copiousoutput'. Means non-interactive and probably
+            #  requires a pager. Mutt uses this solely to mean that it is a
+            #  non-interactive program and can thus be used for in-line
+            #  viewing of an attachment with Mutt's pager/viewer/whatever.
             outfile.write(data)
             outfile.flush()
             # TODO: Should probably do better processing than just relying on
@@ -1922,7 +1962,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: Support opening in the background (should check cap for
             # non-terminal status of program first)
             # TODO: What are the rules for mailcap with regards to quoting? Is
-            # shlex sufficient?
+            # shlex sufficient? - no it isn't. It really needs shell
+            # interpretation. Some viewing commands are formed by a pipeline,
+            # for example
             self.runAProgramStraight(shlex.split(fullcmd))
 
 
