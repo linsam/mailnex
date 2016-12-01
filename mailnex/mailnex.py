@@ -82,6 +82,9 @@ import dateutil.parser
 import blessings
 # Ability to launch external viewers
 import mailcap
+# Interpret mailcap command strings and other similar lines as shells do
+# (quoting arguments and such)
+import shlex
 # Other
 import tempfile
 import pyuv
@@ -1911,14 +1914,16 @@ class Cmd(cmdprompt.CmdPrompt):
         with tempfile.NamedTemporaryFile() as outfile:
             outfile.write(data)
             outfile.flush()
+            # TODO: Should probably do better processing than just relying on
+            # python's string replace.
             fullcmd = cmds[1]['view'] % outfile.name
             # TODO: Either ask before opening always, or make it a parameter.
             print("Launching viewer:", fullcmd)
             # TODO: Support opening in the background (should check cap for
             # non-terminal status of program first)
-            # TODO: Mimick shell quoting for the command instead of just
-            # splitting? What are the rules for mailcap here?
-            self.runAProgramStraight(fullcmd.split())
+            # TODO: What are the rules for mailcap with regards to quoting? Is
+            # shlex sufficient?
+            self.runAProgramStraight(shlex.split(fullcmd))
 
 
 
