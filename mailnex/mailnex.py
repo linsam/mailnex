@@ -2406,6 +2406,8 @@ class Cmd(cmdprompt.CmdPrompt):
         attachlist = []
         # TODO: Allow a default setting for signing
         pgpsign = False
+
+        self.C.printInfo("Type your message. End with single '.' on a line, or EOF.\nUse '~?' on a line for help.")
         while True:
             try:
                 # TODO: allow tabs in the input
@@ -2416,23 +2418,35 @@ class Cmd(cmdprompt.CmdPrompt):
                 # mailnex)
             except EOFError:
                 line = '.'
+            # NOTE: mailx only looks to see if most commands are at the start
+            # of the line. E.G. a line like '~vwhatever I want' launches an
+            # editor just like '~v' does. I'm breaking compatibility here,
+            # because being compatible prevents more expressive commands,
+            # though it does mean some of the old commands now require a space
+            # (e.g. ~@)
             if line.startswith("~~"):
                 # User wants to start the line with a tidle
                 message.set_payload(message.get_payload() + line[1:] + '\r\n')
             elif line.startswith("~?") or line == '~help':
-                print("""  Help:
-                    ~~ Text -> ~ Text   (enter a line starting with a single '~' into the message)
-                    .          Send message
-                    ~.         Send message
-                    #@ file    Add file to the attachment list
-                    ~h         Edit message headers (To, Cc, Bcc, Subject)
-                    ~p         Print current message.
-                    ~px        Print raw message escaping non-printing and line feed characters.
-                    ~q         Quit composing. Don't send. Append message to ~/dead.letter if save is set, unless 'drafts' is set.
-                    ~v         Edit message in external (visual) editor
-                    ~x         Quit composing. Don't send. Discard current progress.
-                    ~pgpsign   Sign the message with a PGP key (toggle)
-                    """)
+                self.C.printInfo("Help:\n"
+                    #1       10        20        30        40        50       60       70        80
+                    #|       |         |         |         |         |        |        |         |
+                    "  ~~ Text -> ~ Text   (enter a line starting with a single '~' into the\n"
+                    "                       message)\n"
+                    "  .          Send message\n"
+                    "  ~.         Send message\n"
+                    "  ~@ file    Add file to the attachment list\n"
+                    "  ~@         Edit attachment list\n"
+                    "  ~h         Edit message headers (To, Cc, Bcc, Subject)\n"
+                    "  ~p         Print current message.\n"
+                    "  ~px        Print raw message, escaping non-printing and lf characters.\n"
+                    "  ~q         Quit composing. Don't send. Append message to ~/dead.letter if\n"
+                    "              save is set, unless 'drafts' is set.\n"
+                    "  ~v         Edit message in external (visual) editor\n"
+                    "  ~x         Quit composing. Don't send. Discard current progress.\n"
+                    "  ~pgpsign   Sign the message with a PGP key (toggle)"
+                    )
+                #     Commands from heirloom-mailx:
                 # ~!command    = execute shell command
                 # ~.           = same as end-of-file indicator (according to mailx)
                 #                I feel like it ought to be to insert a literal dot. I can't find a way
@@ -2469,12 +2483,12 @@ class Cmd(cmdprompt.CmdPrompt):
                 # ~~string     = insert string prefixed by one '~'
                 #
                 #
-            elif line == "." or line.startswith("~."):
+            elif line == "." or line == "~.":
                 # Send message
                 break
-            elif line.startswith("~q"):
+            elif line.rstrip() == "~q":
                 if 'drafts' in self.C.settings:
-                    print("Sorry, drafts setting is TBD")
+                    self.C.printError("Sorry, drafts setting is TBD")
                 if 'save' in self.C.settings:
                     # TODO: Handle errors here. We want to try hard to not lose
                     # the user's message if at all possible.
@@ -2482,10 +2496,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     # This is probably not the right format for dead.letter
                     ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
                 return False
-            elif line.startswith("~x"):
-                print("Message abandoned")
+            elif line.rstrip() == "~x":
+                self.C.printInfo("Message abandoned")
                 return False
-            elif line.startswith("~h"):
+            elif line.rstrip() == "~h":
                 newto = self.singleprompt("To: ", default=message['To'] or '', completer=self.getAddressCompleter())
                 newcc = self.singleprompt("Cc: ", default=message['Cc'] or '', completer=self.getAddressCompleter())
                 newbcc = self.singleprompt("Bcc: ", default=message['Bcc'] or '', completer=self.getAddressCompleter())
@@ -2518,19 +2532,19 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     message.add_header('Subject', newsubject)
 
-            elif line == "~pgpsign":
+            elif line.rstrip() == "~pgpsign":
                 if not haveGpgme:
-                    print("Cannot sign; python-gpgme package missing")
+                    self.C.printError("Cannot sign; python-gpgme package missing")
                 else:
                     # Invert sign. Python doesn't like "sign = !sign"
                     pgpsign = pgpsign == False
                     if pgpsign:
-                        print("Will sign the whole message with OpenPGP/MIME")
+                        self.C.printInfo("Will sign the whole message with OpenPGP/MIME")
                     else:
-                        print("Will NOT sign the whole message with OpenPGP/MIME")
-            elif line.startswith("~px"):
+                        self.C.printInfo("Will NOT sign the whole message with OpenPGP/MIME")
+            elif line.rstrip() == "~px":
                 print(repr(message.get_payload()))
-            elif line.startswith("~p"):
+            elif line.rstrip() == "~p":
                 # Well, we have to dance here to get the payload. Pretty sure
                 # we must be doing this wrong.
                 orig = message.get_payload()
@@ -2538,7 +2552,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 print(message.as_string())
                 message.set_payload(orig)
                 #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
-            elif line.startswith("~v"):
+            elif line.rstrip() == "~v":
                 f=tempfile.mkstemp()
                 #TODO: If editHeaders is set, also save the headers
                 os.write(f[0], message.get_payload().encode('utf-8'))
@@ -2559,7 +2573,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # guessing prompt_toolkit changed python's stdin somehow
                     res = self.runAProgramStraight(["vim", f[1]])
                 if res != 0:
-                    print("Edit aborted; message unchanged")
+                    self.C.printWarning("Edit aborted; message unchanged")
                 else:
                     os.lseek(f[0], 0, os.SEEK_SET)
                     fil = os.fdopen(f[0])
@@ -2568,10 +2582,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     del fil
                     os.unlink(f[1])
                     #TODO: If editHeaders is set, retrieve those headers
-            elif line.strip() == "~@":
-                print("Current attachments:")
+            elif line.rstrip() == "~@":
+                self.C.printInfo("Current attachments:")
                 for att in range(len(attachlist)):
-                    print("%i: %s" % (att + 1, attachlist[att]))
+                    self.C.printInfo("%i: %s" % (att + 1, attachlist[att]))
                 while True:
                     try:
                         line = self.singleprompt("attachment> ")
@@ -2581,62 +2595,64 @@ class Cmd(cmdprompt.CmdPrompt):
                         # Do nothing
                         continue
                     elif line.strip() == 'q':
-                        print("Resume composing your message")
+                        self.C.printInfo("Resume composing your message")
                         break
                     elif line.strip() == 'help' or line.strip() == 'h':
-                        print("q                leave attachment edit mode")
-                        print("add FILE         add an attachment")
-                        print("insert POS FILE  Insert an attachment at position POS, pushing other attachments back")
-                        print("remove POS       remove attachment at position POS")
-                        print("list             list attachments")
-                        #print("edit POS         edit attachment (TBD)")
-                        print("file POS FILE    change file to attach")
+                        self.C.printInfo("q                leave attachment edit mode")
+                        self.C.printInfo("add FILE         add an attachment")
+                        self.C.printInfo("insert POS FILE  Insert an attachment at position POS, pushing other attachments back")
+                        self.C.printInfo("remove POS       remove attachment at position POS")
+                        self.C.printInfo("list             list attachments")
+                        #self.C.printInfo("edit POS         edit attachment (TBD)")
+                        self.C.printInfo("file POS FILE    change file to attach")
                     elif line.strip() == "list":
-                        print("Current attachments:")
+                        self.C.printInfo("Current attachments:")
                         for att in range(len(attachlist)):
-                            print("%i: %s" % (att + 1, attachlist[att]))
+                            self.C.printInfo("%i: %s" % (att + 1, attachlist[att]))
                     elif line.startswith("add "):
                         attachFile(attachlist, line[4:])
                     elif line.startswith("insert"):
                         try:
                             cmd, pos, filename = line.split(None, 3)
                         except ValueError:
-                            print("Need position and filename")
+                            self.C.printError("Need position and filename")
                             continue
                         try:
                             pos = int(pos)
                         except ValueError:
-                            print("Position should be an integer")
+                            self.C.printError("Position should be an integer")
                             continue
                         attachFile(attachlist, filename, pos)
                     elif line.startswith("remove "):
                         try:
                             pos = int(line[7:])
                         except ValueError:
-                            print("Position should be an integer")
+                            self.C.printError("Position should be an integer")
                             continue
                         try:
                             del attachlist[pos - 1]
                         except IndexError:
-                            print("No attachment at that position")
+                            self.C.printError("No attachment at that position")
                     elif line.startswith("file "):
                         try:
                             cmd, pos, filename = line.split(None, 3)
                         except ValueError:
-                            print("Need position and filename")
+                            self.C.printError("Need position and filename")
                             continue
                         try:
                             pos = int(pos)
                         except ValueError:
-                            print("Position should be an integer")
+                            self.C.printError("Position should be an integer")
                             continue
                         attachFile(attachlist, filename, pos, replace=True)
                     else:
-                        print("unknown command")
+                        self.C.printError("unknown command")
 
             elif line.startswith("~@ "):
                 filename = line[3:]
                 attachFile(attachlist, filename)
+            elif line.startswith("~"):
+                self.C.printError("Unrecognized operation. Try '~?' for help")
             # TODO: The other ~* functions from mailx.
             # TODO: Extension commands. E.g. we might want "~save <path>" to
             # save a copy of the message to the given path, but keep editing.
@@ -3951,11 +3967,36 @@ def getOptionsSet():
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
     return options
 
+def instancemethod(func, obj, cls):
+    """Make function an instance method bound to an object.
+
+    This is the complement to the builtin staticmethod and classmethod.
+
+    This is somewhat black magic.
+    See http://users.rcn.com/python/download/Descriptor.htm
+    See https://stackoverflow.com/a/1015405/4504704  (from https://stackoverflow.com/questions/1015307/python-bind-an-unbound-method)
+    """
+    return func.__get__(obj, cls)
+
 def interact(invokeOpts):
     cmd = Cmd(prompt="mailnex> ", histfile="mailnex_history")
     C = Context()
     C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
     C.lastcommand=""
+    # Setup some functions for outputting info. Ideally these would be
+    # configurable by our settings; e.g. should usage/error messages from
+    # mailnex have color? What color does the user want to use?
+    # These could also write to a log or something...
+    # Currently, these assume we have a blessings instance in C.t
+    def printInfo(self, string):
+        print(self.t.cyan(string))
+    def printWarning(self, string):
+        print(self.t.yellow(string))
+    def printError(self, string):
+        print(self.t.red(string))
+    C.printInfo = instancemethod(printInfo, C, Context)
+    C.printWarning = instancemethod(printWarning, C, Context)
+    C.printError = instancemethod(printError, C, Context)
     cmd.C = C
     options = getOptionsSet()
     C.settings = options
