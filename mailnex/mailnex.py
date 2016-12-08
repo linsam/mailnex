@@ -2303,9 +2303,17 @@ class Cmd(cmdprompt.CmdPrompt):
             from_ = "unkown"
         # Prepend the sender to the to list
         if 'reply-to' in hdrs:
+            # RFC2822 only allows 0 or 1 'reply-to' header in a message. If
+            # there are actually more than 1 present, we have to decide which
+            # to pick. Viable options are to pick the first, or pick the last,
+            # or merge them all together. For now, we'll pick the first as a
+            # probably reasonable interpretation of the spec.
             to[0:0] = [hdrs['reply-to'][0]]
         else:
             to[0:0] = [from_]
+        # TODO: Notify the user if something looks a tad fishy here. For
+        # example, if there was a Reply-to that wasn't a subset of the From
+        # header, the user might be in for a surprise.
         body = ""
         for part in parts[2:]:
             # TODO: really need a better quoting algorithm here
