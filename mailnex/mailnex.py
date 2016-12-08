@@ -2303,7 +2303,7 @@ class Cmd(cmdprompt.CmdPrompt):
             from_ = "unkown"
         # Prepend the sender to the to list
         if 'reply-to' in hdrs:
-            to[0:0] = hdrs['reply-to'][0]
+            to[0:0] = [hdrs['reply-to'][0]]
         else:
             to[0:0] = [from_]
         body = ""
