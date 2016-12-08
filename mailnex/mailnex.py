@@ -2438,6 +2438,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     "  ~@ file    Add file to the attachment list\n"
                     "  ~@         Edit attachment list\n"
                     "  ~h         Edit message headers (To, Cc, Bcc, Subject)\n"
+                    "  ~i var     Insert the value of variable 'var' into message\n"
                     "  ~p         Print current message.\n"
                     "  ~px        Print raw message, escaping non-printing and lf characters.\n"
                     "  ~q         Quit composing. Don't send. Append message to ~/dead.letter if\n"
@@ -2531,6 +2532,25 @@ class Cmd(cmdprompt.CmdPrompt):
                     message.replace_header('Subject', newsubject)
                 else:
                     message.add_header('Subject', newsubject)
+            elif line.startswith("~i "):
+                var = line[3:]
+                if not var in self.C.settings:
+                    self.C.printError("Var {} is not set, message unchanged".format(var))
+                else:
+                    # TODO: Better processing of the text
+                    value = self.C.settings[var].strValue()
+                    if value == "":
+                        self.C.printWarning("Var {} was empty; message unchanged.".format(var))
+                    else:
+                        # For now, interpret a literal '\' followd by 'n' in the
+                        # setting as a newline in our message. This allows for the
+                        # primary use-case of including a signature. Mailx also
+                        # interprets \t, which seems bad, since tab-stops
+                        # aren't universal. Perhaps we could expand \t into
+                        # some appropriate number of spaces, but that would
+                        # require better parsing.
+                        value = '\r\n'.join(value.split('\\n'))
+                        message.set_payload(message.get_payload() + value + '\r\n')
 
             elif line.rstrip() == "~pgpsign":
                 if not haveGpgme:
