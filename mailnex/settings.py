@@ -54,7 +54,26 @@ class Options(object):
 
 
 class Option(object):
-    """Root class for all options."""
+    """Root class for all options.
+
+    Subclasses must implement the following:
+
+     * __str__ (or __unicode__): printable representation for the option.
+       Should include the name of the option. This is primarily used for
+       displaying in a list.
+     * strValue: printable representation for the value of the option. This is
+       primarily used for including the value of an option in an email as with
+       the '~i' command.
+
+    Subclasses should implement the following if applicable:
+
+     * setValue: assign a value. If not defined, this class will do direct
+       assignment (typically of a string). Subclasses are urged to do value
+       checking.
+
+    Subclasses may implement any other function to aid in the use of a setting
+    by the software.
+    """
     def __init__(self, name, default, doc=None):
         object.__init__(self)
         assert not name.startswith("no"), "Options must not start with 'no' or 'inv' to prevent clashes with set command syntax/semantics"
@@ -73,6 +92,8 @@ class BoolOption(Option):
             return "  %s" % (self.name,)
         else:
             return "no%s" % (self.name,)
+    def strValue(self):
+        return str(self).strip()
     def setValue(self, value):
         if isinstance(value, (str,unicode)):
             if value.lower() in ["1", "true", self.name]:
@@ -94,6 +115,8 @@ class BoolOption(Option):
 class NumericOption(Option):
     def __str__(self):
         return "%s=%i" % (self.name, self.value)
+    def strValue(self):
+        return str(self.value)
     def setValue(self, value):
         # Ensure value is an integer
         if not isinstance(value, (int, long)):
@@ -105,6 +128,8 @@ class NumericOption(Option):
 class StringOption(Option):
     def __unicode__(self):
         return u"%s=%s" % (self.name, self.value)
+    def strValue(self):
+        return self.value
 #    def __str__(self):
 #        """Attempt to make a str from unicode by using utf-8. This is not a great way to do it, because it assumes a utf-8 capable system for display, and worse, will break when we move to python3
 #
@@ -117,6 +142,8 @@ class FlagsOption(Option):
     # TODO: Should have a list of valid flags with descriptions?
     def __str__(self):
         return "%s=%s" % (self.name, ",".join(self.value))
+    def strValue(self):
+        return ",".join(self.value)
     def setValue(self, value):
         # Special case, if given an empty string, make an empty list
         if value == "" or value == None:
@@ -134,4 +161,7 @@ class UserOption(StringOption):
     """User option is a catch-all for when someone sets something we don't recognize.
     We'll treat it as a string. The reason we keep the type different is for sorting purposes
     (so that we can list "unknowns" separate from booleans, strings, numerics, and flag lists"""
-    pass
+    def __str__(self):
+        return "%s=%s" % (self.name, repr(self.value))
+    def strValue(self):
+        return self.value
