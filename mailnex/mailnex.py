@@ -2403,31 +2403,90 @@ class Cmd(cmdprompt.CmdPrompt):
 
 
     def editMessage(self, message):
-        attachlist = []
-        # TODO: Allow a default setting for signing
-        pgpsign = False
 
         self.C.printInfo("Type your message. End with single '.' on a line, or EOF.\nUse '~?' on a line for help.")
-        while True:
-            try:
-                # TODO: allow tabs in the input
-                line = self.singleprompt("")
-                # TODO: Allow ctrl+c to abort the message, but not mailnex
-                # (e.g. at this stage, two ctrl+c would be needed to exit
-                # mailnex. The first to abort the message, the second to exit
-                # mailnex)
-            except EOFError:
-                line = '.'
-            # NOTE: mailx only looks to see if most commands are at the start
-            # of the line. E.G. a line like '~vwhatever I want' launches an
-            # editor just like '~v' does. I'm breaking compatibility here,
-            # because being compatible prevents more expressive commands,
-            # though it does mean some of the old commands now require a space
-            # (e.g. ~@)
-            if line.startswith("~~"):
-                # User wants to start the line with a tidle
-                message.set_payload(message.get_payload() + line[1:] + '\r\n')
-            elif line.startswith("~?") or line == '~help':
+        def noarg(func):
+            """Marks a function as needing 0 arguments
+
+            Actually, we'll just passthrough right now. This will just document intent for now.
+
+            Eventually, we can add implementation without going through all the functions again to add it."""
+            return func
+        def needarg(func):
+            """Marks a function as needing 1 argument
+
+            Actually, we'll just passthrough right now. This will just document intent for now.
+
+            Eventually, we can add implementation without going through all the functions again to add it."""
+            return func
+        class editorCmds(object):
+            def __init__(self, context, message, prompt, cli, addrCmpl, runner):
+                object.__init__(self)
+                self.attachlist = []
+                # TODO: Allow a default setting for signing
+                self.pgpsign = False
+                self.C = context
+                self.message = message
+                self.singleprompt = prompt
+                self.getAddressCompleter = addrCmpl
+                self.cli = cli
+                self.runAProgramStraight = runner
+            def _run(self):
+                while True:
+                    try:
+                        # TODO: allow tabs in the input
+                        line = self.singleprompt("")
+                        # TODO: Allow ctrl+c to abort the message, but not mailnex
+                        # (e.g. at this stage, two ctrl+c would be needed to exit
+                        # mailnex. The first to abort the message, the second to exit
+                        # mailnex)
+                    except EOFError:
+                        line = '.'
+
+                    if line == "." or line == "~.":
+                        # Send message
+                        break
+                    # NOTE: mailx only looks to see if most commands are at the start
+                    # of the line. E.G. a line like '~vwhatever I want' launches an
+                    # editor just like '~v' does. I'm breaking compatibility here,
+                    # because being compatible prevents more expressive commands,
+                    # though it does mean some of the old commands now require a space
+                    # (e.g. ~@)
+                    elif line.startswith('~'):
+                        # Look for command to call in editorCmds. If none obviously
+                        # found, try the _default cmd. If the called command returns
+                        # 'False', then return False as well (message is over, do not
+                        # send)
+                        if ' ' in line:
+                            func, args = line[1:].split(None, 1)
+                        else:
+                            func = line[1:]
+                            args = None
+
+                        if func in dir(editor):
+                            res = getattr(editor, func)(line)
+                            # TODO: Check if the function is supposed to allow args
+                        else:
+                            res = editor._default(line)
+                        if res == False:
+                            return False
+                    else:
+                        self.message.set_payload(self.message.get_payload() + line + '\r\n')
+            def _default(self, line):
+                print("Processing line out of phase", repr(line))
+                if line.startswith("~~"):
+                    # User wants to start the line with a tidle
+                    self.message.set_payload(self.message.get_payload() + line[1:] + '\r\n')
+                elif line.rstrip() == "~?":
+                    self.help()
+                elif line.rstrip() == "~@":
+                    self._at(line)
+                elif line.startswith("~@ "):
+                    self._at_arg(line)
+                else:
+                    self.C.printError("Unrecognized operation. Try '~?' for help")
+            @noarg # TODO: Might take arguments in the future...
+            def help(self, line=None):
                 self.C.printInfo("Help:\n"
                     #1       10        20        30        40        50       60       70        80
                     #|       |         |         |         |         |        |        |         |
@@ -2484,10 +2543,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 # ~~string     = insert string prefixed by one '~'
                 #
                 #
-            elif line == "." or line == "~.":
-                # Send message
-                break
-            elif line.rstrip() == "~q":
+            @noarg
+            def q(self, line):
                 if 'drafts' in self.C.settings:
                     self.C.printError("Sorry, drafts setting is TBD")
                 if 'save' in self.C.settings:
@@ -2495,44 +2552,51 @@ class Cmd(cmdprompt.CmdPrompt):
                     # the user's message if at all possible.
                     ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
                     # This is probably not the right format for dead.letter
-                    ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
+                    ofile.write("From user@localhost\r\n%s\r\n" % (self.message.as_string()))
                 return False
-            elif line.rstrip() == "~x":
+            @noarg
+            def x(self, line):
                 self.C.printInfo("Message abandoned")
                 return False
-            elif line.rstrip() == "~h":
-                newto = self.singleprompt("To: ", default=message['To'] or '', completer=self.getAddressCompleter())
-                newcc = self.singleprompt("Cc: ", default=message['Cc'] or '', completer=self.getAddressCompleter())
-                newbcc = self.singleprompt("Bcc: ", default=message['Bcc'] or '', completer=self.getAddressCompleter())
-                newsubject = self.singleprompt("Subject: ", default=message['Subject'] or '')
+            @noarg
+            def h(self, line):
+                newto = self.singleprompt("To: ", default=self.message['To'] or '', completer=self.getAddressCompleter())
+                newcc = self.singleprompt("Cc: ", default=self.message['Cc'] or '', completer=self.getAddressCompleter())
+                newbcc = self.singleprompt("Bcc: ", default=self.message['Bcc'] or '', completer=self.getAddressCompleter())
+                newsubject = self.singleprompt("Subject: ", default=self.message['Subject'] or '')
                 if newto == "":
-                    del message['To']
-                elif 'To' in message:
-                    message.replace_header('To', newto)
+                    del self.message['To']
+                elif 'To' in self.message:
+                    self.message.replace_header('To', newto)
                 else:
-                    message.add_header('To', newto)
+                    self.message.add_header('To', newto)
 
                 if newcc == "":
-                    del message['Cc']
-                elif 'Cc' in message:
-                    message.replace_header('Cc', newcc)
+                    del self.message['Cc']
+                elif 'Cc' in self.message:
+                    self.message.replace_header('Cc', newcc)
                 else:
-                    message.add_header('Cc', newcc)
+                    self.message.add_header('Cc', newcc)
 
                 if newbcc == "":
-                    del message['Bcc']
-                elif 'Bcc' in message:
-                    message.replace_header('Bcc', newbcc)
+                    del self.message['Bcc']
+                elif 'Bcc' in self.message:
+                    self.message.replace_header('Bcc', newbcc)
                 else:
-                    message.add_header('Bcc', newbcc)
+                    self.message.add_header('Bcc', newbcc)
 
                 if newsubject == "":
-                    del message['Subject']
-                elif 'Subject' in message:
-                    message.replace_header('Subject', newsubject)
+                    del self.message['Subject']
+                elif 'Subject' in self.message:
+                    self.message.replace_header('Subject', newsubject)
                 else:
-                    message.add_header('Subject', newsubject)
-            elif line.startswith("~i "):
+                    self.message.add_header('Subject', newsubject)
+            @needarg
+            def i(self, line):
+                # NOTE: shouldn't match unless line starts with '~i ', that
+                # is, it needs the 'i' command AND a space. Maybe we can
+                # decorate
+                assert len(line) > 3
                 var = line[3:]
                 if not var in self.C.settings:
                     self.C.printError("Var {} is not set, message unchanged".format(var))
@@ -2550,9 +2614,10 @@ class Cmd(cmdprompt.CmdPrompt):
                         # some appropriate number of spaces, but that would
                         # require better parsing.
                         value = '\r\n'.join(value.split('\\n'))
-                        message.set_payload(message.get_payload() + value + '\r\n')
+                        self.message.set_payload(self.message.get_payload() + value + '\r\n')
 
-            elif line.rstrip() == "~pgpsign":
+            @noarg
+            def pgpsign(self, line):
                 if not haveGpgme:
                     self.C.printError("Cannot sign; python-gpgme package missing")
                 else:
@@ -2562,20 +2627,23 @@ class Cmd(cmdprompt.CmdPrompt):
                         self.C.printInfo("Will sign the whole message with OpenPGP/MIME")
                     else:
                         self.C.printInfo("Will NOT sign the whole message with OpenPGP/MIME")
-            elif line.rstrip() == "~px":
-                print(repr(message.get_payload()))
-            elif line.rstrip() == "~p":
+            @noarg
+            def px(self, line):
+                print(repr(self.message.get_payload()))
+            @noarg
+            def p(self, line):
                 # Well, we have to dance here to get the payload. Pretty sure
                 # we must be doing this wrong.
-                orig = message.get_payload()
-                message.set_payload(orig.encode('utf-8'))
-                print(message.as_string())
-                message.set_payload(orig)
-                #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, messageText))
-            elif line.rstrip() == "~v":
+                orig = self.message.get_payload()
+                self.message.set_payload(orig.encode('utf-8'))
+                print(self.message.as_string())
+                self.message.set_payload(orig)
+                #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, self.messageText))
+            @noarg
+            def v(self, line):
                 f=tempfile.mkstemp()
                 #TODO: If editHeaders is set, also save the headers
-                os.write(f[0], message.get_payload().encode('utf-8'))
+                os.write(f[0], self.message.get_payload().encode('utf-8'))
 
                 # Would normally do cli.run_in_terminal, but that tries to
                 # obtain the cursor position when done by asking the terminal
@@ -2597,15 +2665,17 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     os.lseek(f[0], 0, os.SEEK_SET)
                     fil = os.fdopen(f[0])
-                    message.set_payload(fil.read().decode('utf-8'))
+                    self.message.set_payload(fil.read().decode('utf-8'))
                     fil.close()
                     del fil
                     os.unlink(f[1])
                     #TODO: If editHeaders is set, retrieve those headers
-            elif line.rstrip() == "~@":
+            @noarg
+            def _at(self, line):
+                # Called with ~@
                 self.C.printInfo("Current attachments:")
-                for att in range(len(attachlist)):
-                    self.C.printInfo("%i: %s" % (att + 1, attachlist[att]))
+                for att in range(len(self.attachlist)):
+                    self.C.printInfo("%i: %s" % (att + 1, self.attachlist[att]))
                 while True:
                     try:
                         line = self.singleprompt("attachment> ")
@@ -2627,10 +2697,10 @@ class Cmd(cmdprompt.CmdPrompt):
                         self.C.printInfo("file POS FILE    change file to attach")
                     elif line.strip() == "list":
                         self.C.printInfo("Current attachments:")
-                        for att in range(len(attachlist)):
-                            self.C.printInfo("%i: %s" % (att + 1, attachlist[att]))
+                        for att in range(len(self.attachlist)):
+                            self.C.printInfo("%i: %s" % (att + 1, self.attachlist[att]))
                     elif line.startswith("add "):
-                        attachFile(attachlist, line[4:])
+                        attachFile(self.attachlist, line[4:])
                     elif line.startswith("insert"):
                         try:
                             cmd, pos, filename = line.split(None, 3)
@@ -2642,7 +2712,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         except ValueError:
                             self.C.printError("Position should be an integer")
                             continue
-                        attachFile(attachlist, filename, pos)
+                        attachFile(self.attachlist, filename, pos)
                     elif line.startswith("remove "):
                         try:
                             pos = int(line[7:])
@@ -2650,7 +2720,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             self.C.printError("Position should be an integer")
                             continue
                         try:
-                            del attachlist[pos - 1]
+                            del self.attachlist[pos - 1]
                         except IndexError:
                             self.C.printError("No attachment at that position")
                     elif line.startswith("file "):
@@ -2664,23 +2734,24 @@ class Cmd(cmdprompt.CmdPrompt):
                         except ValueError:
                             self.C.printError("Position should be an integer")
                             continue
-                        attachFile(attachlist, filename, pos, replace=True)
+                        attachFile(self.attachlist, filename, pos, replace=True)
                     else:
                         self.C.printError("unknown command")
 
-            elif line.startswith("~@ "):
+            @needarg
+            def _at_arg(self, line):
+                # TODO Should actually be merged with the _at function
                 filename = line[3:]
-                attachFile(attachlist, filename)
-            elif line.startswith("~"):
-                self.C.printError("Unrecognized operation. Try '~?' for help")
+                attachFile(self.attachlist, filename)
             # TODO: The other ~* functions from mailx.
             # TODO: Extension commands. E.g. we might want "~save <path>" to
             # save a copy of the message to the given path, but keep editing.
             # We definitely want a way to edit an attachment (properties and
             # contents), and to add/edit arbitrary message parts. Should be
             # able to mark parts for signing, encryption, compression, etc.
-            else:
-                message.set_payload(message.get_payload() + line + '\r\n')
+        editor = editorCmds(self.C, message, self.singleprompt, self.cli, self.getAddressCompleter, self.runAProgramStraight)
+        if editor._run() == False:
+            return False
 
         message.set_payload(quopri.encodestring(message.get_payload().encode('utf-8')))
         message.set_charset("utf-8")
@@ -2717,7 +2788,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
         def addrs(data):
             return [a[1] for a in email.utils.getaddresses(data)]
-        for attach in attachlist:
+        for attach in editor.attachlist:
             try:
                 with open(attach, "rb") as f:
                     data = f.read()
@@ -2810,7 +2881,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # Now that we have a recipient list and final on-the-wire headers, we
         # can deal with encryption.
         # We'll handle Signature and Encryption at the same point
-        if pgpsign:
+        if editor.pgpsign:
             ctx = gpgme.Context()
             keys = []
             # TODO: What about sender vs from, etc.
