@@ -51,7 +51,6 @@ least the heirloom mailx variant):
   * No support for local spool/mbox/maildir nor pop3.
   * no encryption support; poor signing support
   * no content-type helper support
-  * no attachment saving support
 
 
 Goals:
