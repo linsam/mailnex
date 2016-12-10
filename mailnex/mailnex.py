@@ -2622,8 +2622,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     self.C.printError("Cannot sign; python-gpgme package missing")
                 else:
                     # Invert sign. Python doesn't like "sign = !sign"
-                    pgpsign = pgpsign == False
-                    if pgpsign:
+                    self.pgpsign = self.pgpsign == False
+                    if self.pgpsign:
                         self.C.printInfo("Will sign the whole message with OpenPGP/MIME")
                     else:
                         self.C.printInfo("Will NOT sign the whole message with OpenPGP/MIME")
