@@ -2495,6 +2495,20 @@ class Cmd(cmdprompt.CmdPrompt):
                     self.at_arg(line)
                 else:
                     self.C.printError("Unrecognized operation. Try '~?' for help")
+            @noarg
+            def do_a(self, line):
+                """Insert the 'sign' variable (as if '~i sign')"""
+                if not 'sign' in self.C.settings:
+                    self.C.printError("No signature set. Try setting 'sign'")
+                    return
+                return self.do_i('~i sign')
+            @noarg
+            def do_A(self, line):
+                """Insert the 'Sign' variable (alternate signature) (as if '~i Sign')"""
+                if not 'Sign' in self.C.settings:
+                    self.C.printError("No alternate signature set. Try setting 'Sign'")
+                    return
+                return self.do_i('~i Sign')
             def do_help(self, line=None):
                 if line:
                     parts = line.split(None,1)
