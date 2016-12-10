@@ -2431,7 +2431,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.getAddressCompleter = addrCmpl
                 self.cli = cli
                 self.runAProgramStraight = runner
-            def _run(self):
+            def run(self):
                 while True:
                     try:
                         # TODO: allow tabs in the input
@@ -2454,7 +2454,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # (e.g. ~@)
                     elif line.startswith('~'):
                         # Look for command to call in editorCmds. If none obviously
-                        # found, try the _default cmd. If the called command returns
+                        # found, try the default cmd. If the called command returns
                         # 'False', then return False as well (message is over, do not
                         # send)
                         if ' ' in line:
@@ -2463,30 +2463,30 @@ class Cmd(cmdprompt.CmdPrompt):
                             func = line[1:]
                             args = None
 
-                        if func in dir(editor):
-                            res = getattr(editor, func)(line)
+                        func = 'do_{}'.format(func)
+                        if func in dir(self):
+                            res = getattr(self, func)(line)
                             # TODO: Check if the function is supposed to allow args
                         else:
-                            res = editor._default(line)
+                            res = editor.default(line)
                         if res == False:
                             return False
                     else:
                         self.message.set_payload(self.message.get_payload() + line + '\r\n')
-            def _default(self, line):
-                print("Processing line out of phase", repr(line))
+            def default(self, line):
                 if line.startswith("~~"):
                     # User wants to start the line with a tidle
                     self.message.set_payload(self.message.get_payload() + line[1:] + '\r\n')
                 elif line.rstrip() == "~?":
-                    self.help()
+                    self.do_help(line)
                 elif line.rstrip() == "~@":
-                    self._at(line)
+                    self.at(line)
                 elif line.startswith("~@ "):
-                    self._at_arg(line)
+                    self.at_arg(line)
                 else:
                     self.C.printError("Unrecognized operation. Try '~?' for help")
             @noarg # TODO: Might take arguments in the future...
-            def help(self, line=None):
+            def do_help(self, line=None):
                 self.C.printInfo("Help:\n"
                     #1       10        20        30        40        50       60       70        80
                     #|       |         |         |         |         |        |        |         |
@@ -2544,7 +2544,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 #
                 #
             @noarg
-            def q(self, line):
+            def do_q(self, line):
                 if 'drafts' in self.C.settings:
                     self.C.printError("Sorry, drafts setting is TBD")
                 if 'save' in self.C.settings:
@@ -2555,11 +2555,11 @@ class Cmd(cmdprompt.CmdPrompt):
                     ofile.write("From user@localhost\r\n%s\r\n" % (self.message.as_string()))
                 return False
             @noarg
-            def x(self, line):
+            def do_x(self, line):
                 self.C.printInfo("Message abandoned")
                 return False
             @noarg
-            def h(self, line):
+            def do_h(self, line):
                 newto = self.singleprompt("To: ", default=self.message['To'] or '', completer=self.getAddressCompleter())
                 newcc = self.singleprompt("Cc: ", default=self.message['Cc'] or '', completer=self.getAddressCompleter())
                 newbcc = self.singleprompt("Bcc: ", default=self.message['Bcc'] or '', completer=self.getAddressCompleter())
@@ -2592,7 +2592,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     self.message.add_header('Subject', newsubject)
             @needarg
-            def i(self, line):
+            def do_i(self, line):
                 # NOTE: shouldn't match unless line starts with '~i ', that
                 # is, it needs the 'i' command AND a space. Maybe we can
                 # decorate
@@ -2617,7 +2617,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         self.message.set_payload(self.message.get_payload() + value + '\r\n')
 
             @noarg
-            def pgpsign(self, line):
+            def do_pgpsign(self, line):
                 if not haveGpgme:
                     self.C.printError("Cannot sign; python-gpgme package missing")
                 else:
@@ -2628,10 +2628,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     else:
                         self.C.printInfo("Will NOT sign the whole message with OpenPGP/MIME")
             @noarg
-            def px(self, line):
+            def do_px(self, line):
                 print(repr(self.message.get_payload()))
             @noarg
-            def p(self, line):
+            def do_p(self, line):
                 # Well, we have to dance here to get the payload. Pretty sure
                 # we must be doing this wrong.
                 orig = self.message.get_payload()
@@ -2640,7 +2640,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.message.set_payload(orig)
                 #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, self.messageText))
             @noarg
-            def v(self, line):
+            def do_v(self, line):
                 f=tempfile.mkstemp()
                 #TODO: If editHeaders is set, also save the headers
                 os.write(f[0], self.message.get_payload().encode('utf-8'))
@@ -2671,7 +2671,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     os.unlink(f[1])
                     #TODO: If editHeaders is set, retrieve those headers
             @noarg
-            def _at(self, line):
+            def at(self, line):
                 # Called with ~@
                 self.C.printInfo("Current attachments:")
                 for att in range(len(self.attachlist)):
@@ -2739,7 +2739,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         self.C.printError("unknown command")
 
             @needarg
-            def _at_arg(self, line):
+            def at_arg(self, line):
                 # TODO Should actually be merged with the _at function
                 filename = line[3:]
                 attachFile(self.attachlist, filename)
@@ -2750,7 +2750,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # contents), and to add/edit arbitrary message parts. Should be
             # able to mark parts for signing, encryption, compression, etc.
         editor = editorCmds(self.C, message, self.singleprompt, self.cli, self.getAddressCompleter, self.runAProgramStraight)
-        if editor._run() == False:
+        if editor.run() == False:
             return False
 
         message.set_payload(quopri.encodestring(message.get_payload().encode('utf-8')))
