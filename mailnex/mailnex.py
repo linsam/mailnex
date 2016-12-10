@@ -2434,13 +2434,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.runAProgramStraight = runner
                 # Python doesn't allow certain symbols in function names that
                 # we intend to use as commands. Since we lookup the functions
-                # anyhow, we can just dump them into our dictionary (in
+                # ourselves anyhow, we can just dump them into our dictionary (in
                 # theory)
                 self.__dict__['do_~'] = self.tilde
+                self.__dict__['do_@'] = self.at
+                self.__dict__['do_?'] = self.do_help
             def tilde(self, line):
                 """Add a line that starts with a '~' character"""
-                # TODO: Currently handled by self.default()
-                pass
+                # User wants to start the line with a tidle
+                self.message.set_payload(self.message.get_payload() + line[1:] + '\r\n')
             def run(self):
                 while True:
                     try:
@@ -2484,17 +2486,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     else:
                         self.message.set_payload(self.message.get_payload() + line + '\r\n')
             def default(self, line):
-                if line.startswith("~~"):
-                    # User wants to start the line with a tidle
-                    self.message.set_payload(self.message.get_payload() + line[1:] + '\r\n')
-                elif line.startswith("~? ") or line == '~?':
-                    self.do_help(line)
-                elif line.rstrip() == "~@":
-                    self.at(line)
-                elif line.startswith("~@ "):
-                    self.at_arg(line)
-                else:
-                    self.C.printError("Unrecognized operation. Try '~?' for help")
+                self.C.printError("Unrecognized operation. Try '~?' for help")
             @noarg
             def do_a(self, line):
                 """Insert the 'sign' variable (as if '~i sign')"""
@@ -2510,6 +2502,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     return
                 return self.do_i('~i Sign')
             def do_help(self, line=None):
+                """Display summary help, list of commands, or help on a specific command"""
                 if line:
                     parts = line.split(None,1)
                     if len(parts) != 1:
@@ -2730,9 +2723,14 @@ class Cmd(cmdprompt.CmdPrompt):
                     del fil
                     os.unlink(f[1])
                     #TODO: If editHeaders is set, retrieve those headers
-            @noarg
+
             def at(self, line):
                 # Called with ~@
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    filename = parts[1]
+                    attachFile(self.attachlist, filename)
+                    return
                 self.C.printInfo("Current attachments:")
                 for att in range(len(self.attachlist)):
                     self.C.printInfo("%i: %s" % (att + 1, self.attachlist[att]))
@@ -2798,11 +2796,6 @@ class Cmd(cmdprompt.CmdPrompt):
                     else:
                         self.C.printError("unknown command")
 
-            @needarg
-            def at_arg(self, line):
-                # TODO Should actually be merged with the _at function
-                filename = line[3:]
-                attachFile(self.attachlist, filename)
             # TODO: The other ~* functions from mailx.
             # TODO: Extension commands. E.g. we might want "~save <path>" to
             # save a copy of the message to the given path, but keep editing.
