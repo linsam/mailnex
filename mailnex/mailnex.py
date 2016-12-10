@@ -2420,6 +2420,7 @@ class Cmd(cmdprompt.CmdPrompt):
             Eventually, we can add implementation without going through all the functions again to add it."""
             return func
         class editorCmds(object):
+            """Similar to the regular command class, but we only run commands if the line starts with a '~'"""
             def __init__(self, context, message, prompt, cli, addrCmpl, runner):
                 object.__init__(self)
                 self.attachlist = []
@@ -2431,6 +2432,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.getAddressCompleter = addrCmpl
                 self.cli = cli
                 self.runAProgramStraight = runner
+                # Python doesn't allow certain symbols in function names that
+                # we intend to use as commands. Since we lookup the functions
+                # anyhow, we can just dump them into our dictionary (in
+                # theory)
+                self.__dict__['do_~'] = self.tilde
+            def tilde(self, line):
+                """Add a line that starts with a '~' character"""
+                # TODO: Currently handled by self.default()
+                pass
             def run(self):
                 while True:
                     try:
@@ -2477,7 +2487,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 if line.startswith("~~"):
                     # User wants to start the line with a tidle
                     self.message.set_payload(self.message.get_payload() + line[1:] + '\r\n')
-                elif line.rstrip() == "~?":
+                elif line.startswith("~? ") or line == '~?':
                     self.do_help(line)
                 elif line.rstrip() == "~@":
                     self.at(line)
@@ -2485,21 +2495,56 @@ class Cmd(cmdprompt.CmdPrompt):
                     self.at_arg(line)
                 else:
                     self.C.printError("Unrecognized operation. Try '~?' for help")
-            @noarg # TODO: Might take arguments in the future...
             def do_help(self, line=None):
-                self.C.printInfo("Help:\n"
+                if line:
+                    parts = line.split(None,1)
+                    if len(parts) != 1:
+                        topic = parts[1]
+                        if topic == 'all':
+                            funcs = filter(lambda x: x.startswith('do_'), dir(self))
+                            maxlen = max(map(lambda x: len(x), funcs))
+                            i = 0
+                            outstr=['Commands:']
+                            linestr=""
+                            for funcname in sorted(funcs):
+                                cmdname = '~{}'.format(funcname[3:])
+                                # TODO: Use screen width instead of 80?
+                                if len(linestr) + len(cmdname) > 80:
+                                    outstr.append(linestr)
+                                    linestr=""
+                                linestr += cmdname
+                                #TODO only append space if a command would follow (cleaner terminal output)
+                                linestr += " " * (maxlen - len(cmdname))
+                            if linestr:
+                                outstr.append(linestr)
+                            self.C.printInfo("\n".join(outstr))
+                        else:
+                            if topic.startswith("~") and not topic == '~':
+                                topic = topic[1:]
+                            func = 'do_{}'.format(topic)
+                            if not func in dir(self):
+                                self.C.printError("No command ~{}".format(topic))
+                            else:
+                                func = getattr(self,func)
+                                if hasattr(func, '__doc__') and func.__doc__:
+                                    self.C.printInfo(func.__doc__)
+                                else:
+                                    self.C.printInfo("No help for command ~{}".format(topic))
+                        return
+                self.C.printInfo("Summary of commands (not all shown; use '~? all' to list all):\n"
                     #1       10        20        30        40        50       60       70        80
                     #|       |         |         |         |         |        |        |         |
                     "  ~~ Text -> ~ Text   (enter a line starting with a single '~' into the\n"
                     "                       message)\n"
                     "  .          Send message\n"
                     "  ~.         Send message\n"
-                    "  ~@ file    Add file to the attachment list\n"
+                    "  ~?         Summary help\n"
+                    "  ~? NAME    show help for NAME. Use 'all' to list all commands\n"
+                    "  ~@ FILE    Add FILE to the attachment list\n"
                     "  ~@         Edit attachment list\n"
                     "  ~h         Edit message headers (To, Cc, Bcc, Subject)\n"
-                    "  ~i var     Insert the value of variable 'var' into message\n"
+                    "  ~i VAR     Insert the value of variable 'var' into message\n"
                     "  ~p         Print current message.\n"
-                    "  ~px        Print raw message, escaping non-printing and lf characters.\n"
                     "  ~q         Quit composing. Don't send. Append message to ~/dead.letter if\n"
                     "              save is set, unless 'drafts' is set.\n"
                     "  ~v         Edit message in external (visual) editor\n"
@@ -2629,6 +2674,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         self.C.printInfo("Will NOT sign the whole message with OpenPGP/MIME")
             @noarg
             def do_px(self, line):
+                """Print raw message, escaping non-printing and lf characters."""
                 print(repr(self.message.get_payload()))
             @noarg
             def do_p(self, line):
