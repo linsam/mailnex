@@ -1565,7 +1565,7 @@ class Cmd(cmdprompt.CmdPrompt):
         print("Done!")
 
     def getTextPlainParts(self, index, allParts=False):
-        """Get the plain text parts of a message.
+        """Get the plain text parts of a message and all headers.
 
         Returns a list of tuples. Each list entry represents one part.
         Each tuple consists of the part number and unicode version of the text, already converted from specified or guessed charsets.
@@ -1617,8 +1617,10 @@ class Cmd(cmdprompt.CmdPrompt):
             skip = False
             if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                 extra += " (%s)" % struct.disposition[0]
-                if not allParts and struct.disposition[0].lower() == "attachment":
-                    skip = True
+# mailx shows attachments inline if they are text or message type. We
+# shouldn't ignore attachments unless a user set option says to.
+#                if not allParts and struct.disposition[0].lower() == "attachment":
+#                    skip = True
                 dispattrs = dictifyList(struct.disposition[1])
                 if 'filename' in dispattrs:
                     extra += " (name: %s)" % dispattrs['filename']
@@ -1629,16 +1631,18 @@ class Cmd(cmdprompt.CmdPrompt):
             # First pass, we'll just grab all text/plain parts. Later we'll
             # want to check disposition, and later we'll want to deal with
             # multipart/alternative better (and multipart/related)
-            if not allParts and struct.type_ == "text" and struct.subtype == "plain":
+            if (allParts and struct.type_ == "text") or (not allParts and struct.type_ == "text" and struct.subtype == "plain"):
                 # TODO: write the following a bit more efficiently. Like,
                 # split only once, use second part of return only, perhaps?
                 if not skip:
+                    # Default: Show each section's headers too
+                    fetchParts.append(("%s.MIME" % innerTag, None))
                     fetchParts.append((innerTag, struct))
-            if allParts and not isinstance(struct, structureMessage) and not hasattr(struct, "subs"):
-                # Probably useful to display, not a multipart itself, or a
-                # message (which *should* have subparts itself?)
-                # TODO: Properly handle attached messages
-                fetchParts.append((innerTag, struct))
+#            if allParts and not isinstance(struct, structureMessage) and not hasattr(struct, "subs"):
+#                # Probably useful to display, not a multipart itself, or a
+#                # message (which *should* have subparts itself?)
+#                # TODO: Properly handle attached messages
+#                fetchParts.append((innerTag, struct))
             if isinstance(struct, structureMessage):
                 extra = ""
                 # Switch to the inner for further processing
@@ -1668,10 +1672,13 @@ class Cmd(cmdprompt.CmdPrompt):
         dpart = processImapData(data[0][1], self.C.settings)
         for p,o in zip(parts,fetchParts):
             dstr = getResultPart(p, dpart[0])
-            if isinstance(o[1], structureMultipart):
+            if o[1] is None and isinstance(o[1], structureMultipart):
                 o[1].encoding = None
                 o[1].attrs = None
-            encoding = o[1].encoding
+            if o[1]:
+                encoding = o[1].encoding
+            else:
+                encoding = None
             # First, check for transfer encoding
             dstr = self.transferDecode(dstr, encoding)
             if dstr == None:
@@ -1679,7 +1686,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 continue
             # Finally, check for character set encoding
             # and other layers, like format flowed
-            if o[1].attrs and 'charset' in o[1].attrs:
+            if o[1] and o[1].attrs and 'charset' in o[1].attrs:
                 charset = o[1].attrs['charset']
                 try:
                     # TODO: Is this possibly a security risk? Is there any
@@ -1691,7 +1698,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     for c in map(unichr, range(0x80,0xa0)):
                         if c in d:
                             raise UnicodeDecodeError(str(charset), b"", 0, 1, b"control character detected")
-                except UnicodeDecodeError:
+                except UnicodeDecodeError as err:
                     if charset == 'iso-8859-1':
                         # MS Outlook lies about its charset, so we'll try what
                         # they mean instead of what they say. TODO: Should we
@@ -1702,39 +1709,60 @@ class Cmd(cmdprompt.CmdPrompt):
                         except:
                             d = "Part %s: failed to decode as %s or windows-1252\r\n" % (o[0], charset)
                     else:
-                        d = "Part %s: failed to decode as %s\r\n" % (o[0], charset)
+                        if self.C.settings.debug.general:
+                            d = "Part %s: failed to decode as %s (%s)\r\n%s" % (o[0], charset, err, repr(dstr))
+                        else:
+                            d = "Part %s: failed to decode as %s" % (o[0], charset)
             else:
                 d = dstr
-            if o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
+            if o[1] and o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
                 #TODO: Flowed format handling
                 pass
+            if o[1] is None:
+                # MIME header
+                o = (None, 'mime')
             resparts.append((o[0], o[1], d))
         return resparts
 
-    def partsToString(self, parts):
+    def filterHeaders(self, headers, ignore, headerOrder, allHeaders):
+        headerstr = u''
+        if allHeaders:
+            # First pass, dump them directly and move on.
+            # TODO: Perhaps apply the headerorder setting even to
+            # Print command?
+            headerstr += headers
+            return headerstr
+        msg = email.message_from_string(headers)
+        for header in ignore:
+            if header in msg:
+                del msg[header]
+        prefheaders = ""
+        for header in headerOrder:
+            if header in msg:
+                for val in msg.get_all(header):
+                    prefheaders += "{}: {}\n".format(header, val)
+                del msg[header]
+        #TODO: Should headerorderend apply to both mime and message headers?
+        if self.C.settings.headerorderend:
+            headerstr += msg.as_string().rstrip('\r\n')
+            headerstr += '\r\n'
+            headerstr += prefheaders
+            headerstr += '\r\n'
+        else:
+            headerstr += prefheaders
+            headerstr += msg.as_string()
+        return headerstr
+
+    def partsToString(self, parts, allHeaders=False):
         body = u''
+        headerstr = u''
         for part in parts:
             if part[0] is None:
                 # Headers or structure
                 if part[1] == 'header':
-                    msg = email.message_from_string(part[2])
-                    for header in self.C.settings.ignoredheaders.value:
-                        if header in msg:
-                            del msg[header]
-                    prefheaders = ""
-                    for header in self.C.settings.headerorder.value:
-                        if header in msg:
-                            for val in msg.get_all(header):
-                                prefheaders += "{}: {}\n".format(header, val)
-                            del msg[header]
-                    if self.C.settings.headerorderend:
-                        body += msg.as_string().rstrip('\r\n')
-                        body += '\r\n'
-                        body += prefheaders
-                        body += '\r\n'
-                    else:
-                        body += prefheaders
-                        body += msg.as_string()
+                    body += self.filterHeaders(part[2], self.C.settings.ignoredheaders.value, self.C.settings.headerorder.value, allHeaders)
+                elif part[1] == 'mime':
+                    headerstr += self.filterHeaders(part[2], self.C.settings.ignoredmimeheaders.value, self.C.settings.mimeheaderorder.value, allHeaders)
                 else:
                     # must be structure
                     if not self.C.settings.showstructure:
@@ -1754,7 +1782,12 @@ class Cmd(cmdprompt.CmdPrompt):
             if self.C.settings.debug.general:
                 body += "encoding: " + part[1].encoding + "\r\n"
                 body += "struct: " + repr(part[1].__dict__) + "\r\n"
+            if headerstr != "":
+                body += headerstr
+                headerstr = u''
             body += part[2]
+            if not part[2].endswith('\r\n\r\n'):
+                body += "\r\n"
         return body
 
     def transferDecode(self, data, encoding):
@@ -2086,7 +2119,11 @@ class Cmd(cmdprompt.CmdPrompt):
     @argsToMessageList
     @updateMessageSelectionAtEnd
     def do_Print(self, msglist):
-        """Print all parts of a message."""
+        """Print all text parts of a message.
+
+        This differs from 'print' in that ignored headers and all parts of
+        multipart/alternative messages are displayed.
+        """
         C = self.C
         M = C.connection
         lastMessage = len(self.C.virtfolder) if self.C.virtfolder else self.C.lastMessage
@@ -2110,7 +2147,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(parts) < 2:
             print("Message has no displayable parts")
             return
-        body = self.partsToString(parts)
+        body = self.partsToString(parts, True)
 
         # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
         # for styling
@@ -4105,6 +4142,13 @@ def getOptionsSet():
         'references',
         'content-type',
         ], doc="Setting form of the ignore command"))
+    options.addOption(settings.FlagsOption("ignoredmimeheaders", [
+        'content-transfer-encoding',
+        'mime-version',
+        ], doc="Mime Headers to ignore (as opposed to message headers). See also 'ignoredheaders'."))
+    options.addOption(settings.FlagsOption("mimeheaderorder", [
+        #TODO: a default ordering?
+        ], doc="Prefered order of MIME headers. See also 'headerorder'."))
 
     options.addOption(settings.StringOption("PAGER", "internal"))
     options.addOption(settings.StringOption("pgpkey", None, doc="PGP key search string. Can be an email address, UID, or fingerprint as recognized by gnupg. When unset, try to use the from field."))
