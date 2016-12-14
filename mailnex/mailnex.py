@@ -3997,13 +3997,13 @@ class Cmd(cmdprompt.CmdPrompt):
 
 def getOptionsSet():
     options = settings.Options()
-    options.addOption(settings.StringOption("addresssearchcmd", "khard email -s", doc="""Command to use for searching addresses
+    options.addOption(settings.StringOption("addresssearchcmd", "khard email", doc="""Command to use for searching addresses
     Used for address completion (e.g. in the ~h command when editing a message).
     Command output is expected to be the address, a tab, the name, and then
     optionally another tab and an identifier (e.g. name of address book or
     resource).
     
-    Should work with at least khard and abook (khard email -s) (abook --mutt-query).
+    Should work with at least khard and abook (khard email) (abook --mutt-query).
     abook currently doesn't work for unknown reasons."""))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.FlagsOption("altfrom", [], doc="""Alternative Addresses for user.
