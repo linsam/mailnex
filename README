@@ -243,6 +243,11 @@ Other projects (or, why another mail client):
     searches slow and content searches very slow, though still not as bad as
     some other clients.
 
+    Update - while heirloom-mailx seems no longer maintained, there is a
+    (fork?) called s-nail under development. It adds command line history and
+    some other nice features. Still doesn't support OpenPGP, though it seems
+    they might have plans for it.
+
   * kmail - Very featureful client. Supports (or supported) OpenPGP, S/MIME,
     multiple identites, multiple accounts, filtering, addressbook and calendar
     integration (with KDEPIM, not 'generic').

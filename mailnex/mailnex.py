@@ -1252,14 +1252,49 @@ class Cmd(cmdprompt.CmdPrompt):
                     if c.isTls():
                         print("Info: Connection now secure")
                     else:
+                        #TODO: Allow user to override (at their own peril) should be per-host. Should possibly not be global.
                         raise Exception("Failed to secure connection!")
                 if not user:
                     user = getpass.getuser()
-                try:
-                    pass_ =  keyring.get_password("imap://%s" % host, user)
-                except RuntimeError:
-                    pass_ = None
-                    print("Info: no password managers found; cannot save your password for automatic login")
+                agentCmd = None
+                lookups = [
+                        "agent-shell-lookup-{}/{}@{}:{}".format(proto, user, host, port),
+                        "agent-shell-lookup-{}/{}@{}".format(proto, user, host),
+                        "agent-shell-lookup-{}@{}".format(user, host),
+                        "agent-shell-lookup-{}".format(host),
+                        "agent-shell-lookup",
+                        ]
+                for l in lookups:
+                    print("Checking for", l)
+                    if l in self.C.settings:
+                        agentCmd = getattr(self.C.settings, l).value
+                        print(" Found it", agentCmd)
+                        break
+                if agentCmd and agentCmd != "":
+                    cmdarr = ["/bin/sh", "-c", agentCmd]
+                    print(" Running", cmdarr)
+                    s = subprocess.Popen(cmdarr, stdout=subprocess.PIPE)
+                    pass_ = s.stdout.read(4096)
+                    s.stdout.close()
+                    res = s.wait()
+                    if res != 0:
+                        print(" agent-shell-lookup for this account did not succeed.")
+                    elif len(pass_) > 4095:
+                        print(" Password command gave back 4k or more characters; assuming not valid and moving on")
+                    else:
+                        if pass_.endswith('\n'):
+                            # Strip off EOL, it isn't part of the password
+                            # itself. Should tell users if their passsword
+                            # actually ends with LF, to put an extra LF in the
+                            # output.
+                            pass_ = pass_[:-1]
+                        print("Password",pass_)
+                else:
+                    try:
+                        pass_ =  keyring.get_password("imap://%s" % host, user)
+                    except RuntimeError:
+                        pass_ = None
+                        print("Info: no password managers found; cannot save your password for automatic login")
                 if not pass_:
                     pass_ = getpass.getpass()
                 print("Info: Logging in")
@@ -4005,6 +4040,18 @@ def getOptionsSet():
     
     Should work with at least khard and abook (khard email) (abook --mutt-query).
     abook currently doesn't work for unknown reasons."""))
+    options.addOption(settings.StringOption("agent-shell-lookup", None, doc="""Command to use for obtaining an account password.
+    If set, will be used when searching for account password credentials.
+    Useful for rolling your own method, such as decrypting a credential using GPG to decrypt a file.
+    You may also set 'agent-shell-lookup-HOST' for any acount on host HOST,
+    'agent-shell-lookup-USER@HOST' for account USER on host HOST
+    'agent-shell-lookup-PROTO/USER@HOST' for account USER on host HOST using
+    protocol PROTO (e.g. imaps), or 'agent-shell-lookup-PROTO/USER@HOST:PORT'
+    for account USER on host HOST using protocol PROTO (e.g. imaps) on port
+    PORT.
+    Each section is optional. The most specific descriptor will be used.
+    See 'help authentication' for more information.
+    """))
     options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.FlagsOption("altfrom", [], doc="""Alternative Addresses for user.
 
