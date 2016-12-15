@@ -1671,7 +1671,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 # split only once, use second part of return only, perhaps?
                 if not skip:
                     # Default: Show each section's headers too
-                    fetchParts.append(("%s.MIME" % innerTag, None))
+                    if innerTag != "":
+                        # If this is the outermost part (e.g. this isn't a
+                        # multipart message), then there isn't a MIME header.
+                        # Only get the section MIME headers for lower levels.
+                        fetchParts.append(("%s.MIME" % innerTag, None))
                     fetchParts.append((innerTag, struct))
 #            if allParts and not isinstance(struct, structureMessage) and not hasattr(struct, "subs"):
 #                # Probably useful to display, not a multipart itself, or a
