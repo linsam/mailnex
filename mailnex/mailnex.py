@@ -524,9 +524,20 @@ def dictifyList(lst):
     # convert to list of key,val pairs, then to dictionary
     # See http://stackoverflow.com/a/1625023/4504704 (answer to
     # http://stackoverflow.com/questions/1624883/alternative-way-to-split-a-list-into-groups-of-n)
+    # Note: IMAP elements can be None, so a key-value list of no entries might
+    # be an empty array or None (for example, the parameters list of the
+    # disposition header from a FETCH BODYSTRUCTURE. The disposition might be
+    # None, in which case this doesn't even get called, or it might have, say,
+    # a disposition of 'inline', but no parameters. We'll get called for the
+    # empty parameters, and the calling code may then look to see if there was
+    # a 'filename' parameter.
     # TODO: Probably possible that there could be duplicate keys. Probably
     # need a custom dictionary to handle that. Might also be handy to store
     # the original case of the key and value.
+    if lst is None:
+        # We didn't have a list, so return an empty dictionary (no key/value
+        # pairs)
+        return {}
     return dict(zip(*(iter(map(lambda x: x.lower(),lst)),)*2))
 
 def processImapData(text, options):
