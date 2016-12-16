@@ -1787,20 +1787,26 @@ class Cmd(cmdprompt.CmdPrompt):
             if header in msg:
                 del msg[header]
         prefheaders = ""
+        otherheaders = ""
         for header in headerOrder:
             if header in msg:
                 for val in msg.get_all(header):
-                    prefheaders += "{}: {}\n".format(header, val)
+                    enc = unicode(email.header.make_header(email.header.decode_header(val)))
+                    prefheaders += "{}: {}\n".format(header, enc)
                 del msg[header]
+        for header in msg.items():
+            key, val = header
+            enc = unicode(email.header.make_header(email.header.decode_header(val)))
+            otherheaders += "{}: {}\n".format(key, enc)
+
         #TODO: Should headerorderend apply to both mime and message headers?
         if self.C.settings.headerorderend:
-            headerstr += msg.as_string().rstrip('\r\n')
-            headerstr += '\r\n'
+            headerstr += otherheaders
             headerstr += prefheaders
-            headerstr += '\r\n'
         else:
             headerstr += prefheaders
-            headerstr += msg.as_string()
+            headerstr += otherheaders
+        headerstr += '\r\n'
         return headerstr
 
     def partsToString(self, parts, allHeaders=False):
