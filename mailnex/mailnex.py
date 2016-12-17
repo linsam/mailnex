@@ -2407,8 +2407,24 @@ class Cmd(cmdprompt.CmdPrompt):
         # TODO: Notify the user if something looks a tad fishy here. For
         # example, if there was a Reply-to that wasn't a subset of the From
         # header, the user might be in for a surprise.
+        # TODO: mailx only quotes the first part of the message and ignores
+        # the rest. This could be good or bad.
         body = ""
+        # parts should look roughly like this:
+        #   [
+        #       (None, 'header', "the header data as text"),
+        #       (None, None, "the message structure as text"),
+        #       (None, 'mime', "the mime header as text, if applicable"),
+        #       ("part number", structure_data, "part payload text"),
+        #       # Repeat mime and part info
+        #   ]
         for part in parts[2:]:
+            if part[1] == "mime":
+                # Don't put the headers in the reply
+                continue
+            if part[1].disposition and part[1].disposition[0] == 'attachment':
+                # Don't include attachments in the reply
+                continue
             # TODO: really need a better quoting algorithm here
             for line in part[2].split("\r\n"):
                 if not line.startswith(">"):
