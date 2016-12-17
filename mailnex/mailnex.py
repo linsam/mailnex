@@ -2371,11 +2371,11 @@ class Cmd(cmdprompt.CmdPrompt):
             # and then split the components
             to = ",".join(hdrs['to']).split(',')
         else:
-            to = ""
+            to = []
         if 'cc' in hdrs:
             cc = ",".join(hdrs['cc']).split(',')
         else:
-            cc = ""
+            cc = []
         # TODO: What if the message has BCC headers? Warn the user? Prompt?
         # Discard? Sheepishly discarding for now. Need to see what mailx does,
         # I guess.
