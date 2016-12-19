@@ -1737,7 +1737,10 @@ class Cmd(cmdprompt.CmdPrompt):
                                     sigsum.append("bad policy")
                                 if sig.summary & gpgme.SIGSUM_SYS_ERROR:
                                     sigsum.append("sys error")
-                                #TODO: Show if a flag is set that we don't recognize. E.G. mask out what we look at above, plus the "RED" and "GREEN" values, and show the number if non-zero
+                                knownBits = gpgme.SIGSUM_VALID | gpgme.SIGSUM_GREEN | gpgme.SIGSUM_RED | gpgme.SIGSUM_KEY_REVOKED | gpgme.SIGSUM_KEY_EXPIRED | gpgme.SIGSUM_SIG_EXPIRED | gpgme.SIGSUM_KEY_MISSING | gpgme.SIGSUM_CRL_MISSING | gpgme.SIGSUM_CRL_TOO_OLD | gpgme.SIGSUM_BAD_POLICY | gpgme.SIGSUM_SYS_ERROR
+                                remainBits = sig.summary & ~knownBits
+                                if remainBits:
+                                    sigsum.append("%x" % remainBits)
                                 if len(sigsum):
                                     sigres += "(%s)" % ", ".join(sigsum)
                             if sig.validity == gpgme.VALIDITY_UNKNOWN:
