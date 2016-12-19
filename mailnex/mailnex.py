@@ -335,6 +335,10 @@ class structureMultipart(structureRoot):
         """
         structureRoot.__init__(self, tag, "multipart", subtype)
         # parameters
+        if parameters:
+            self.parameters = dictifyList(parameters)
+        else:
+            self.parameters = parameters
         self.disposition = disposition
         # language
         # location
@@ -368,11 +372,14 @@ class structureLeaf(structureRoot):
 class structureMessage(structureRoot):
     def __init__(self, tag, type_, subtype, attrs, bid, description, encoding, size, envelope, subStruct, lines, md5, disposition, language, location):
         structureRoot.__init__(self, tag, type_, subtype)
-        # attrs
-        # bid
-        # description
+        if attrs:
+            self.attrs = dictifyList(attrs)
+        else:
+            self.attrs = attrs
+        self.bid = bid # Body ID
+        self.description = description
         self.encoding = encoding
-        # size
+        self.size = size # octets of encoded message
         # envelope
         # substruct (auto-add? ignore?)
         # lines
