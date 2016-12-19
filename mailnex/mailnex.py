@@ -1696,6 +1696,11 @@ class Cmd(cmdprompt.CmdPrompt):
                         # re-transfer it over the internet again.
                         data = self.C.connection.fetch(index, '(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])' % (messageTag, messageTag, signatureTag))
                         dpart = processImapData(data[0][1], self.C.settings)[0]
+                        # TODO: dictifyList makes everything lowercase, which
+                        # is good for matching keys, but corrupts the message
+                        # and signature. For now, we'll just ensure that the
+                        # parts came back in the order we asked, but I don't
+                        # think it is guaranteed by the IMAP spec.
                         #dpart = dictifyList(dpart[0])
                         assert dpart[0].upper() == "BODY[%s.MIME]" % messageTag
                         assert dpart[2].upper() == "BODY[%s]" % messageTag
@@ -1704,10 +1709,6 @@ class Cmd(cmdprompt.CmdPrompt):
                         messageData = dpart[1] + dpart[3]
                         #sigData = dpart['body[%s]' % signatureTag]
                         sigData = dpart[5]
-                        with open("/tmp/dat","w") as d:
-                            d.write(messageData)
-                        with open("/tmp/dat.sig","w") as d:
-                            d.write(sigData)
 
                         ctx = gpgme.Context()
                         import io
