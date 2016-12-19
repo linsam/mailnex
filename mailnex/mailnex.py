@@ -1668,6 +1668,120 @@ class Cmd(cmdprompt.CmdPrompt):
             # this, such as message reply/forwarding
             extra = ""
             skip = False
+            sigres = None
+            if struct.type_ == "multipart" and struct.subtype == "signed":
+                p = struct.parameters
+                if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-signature':
+                    # TODO: What if the message doesn't have the protocol
+                    # parameter, but otherwise follows the protocol? (That is,
+                    # has 2 parts, the second part being
+                    # applciation/pgp-signature) Should we try handling that
+                    # anyway, or parse as if unsigned. On the one hand, the
+                    # internet mantra is to be forgiving with what you
+                    # receive, but on the other hand, if it doesn't specify
+                    # the protocol, it could be some other spec than we know
+                    # how to handle, and we probably shouldn't give the user
+                    # misleading information.
+                    if haveGpgme:
+                        inner = struct.tag.split('.')[1:]
+                        messageTag = ".".join(inner + ['1'])
+                        signatureTag = ".".join(inner + ['2'])
+                        # TODO: Fetching this here and again below is wasteful
+                        # of bandwidth. We should either fix up the structures
+                        # so that we can indicate to the fetch-and-print stage
+                        # to do signature checking, or else we should have
+                        # some kind of fetch cache. The fetch cache would be
+                        # good anyway; it would be great if someone wanted to
+                        # re-read a message they just read without having to
+                        # re-transfer it over the internet again.
+                        data = self.C.connection.fetch(index, '(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])' % (messageTag, messageTag, signatureTag))
+                        dpart = processImapData(data[0][1], self.C.settings)[0]
+                        #dpart = dictifyList(dpart[0])
+                        assert dpart[0].upper() == "BODY[%s.MIME]" % messageTag
+                        assert dpart[2].upper() == "BODY[%s]" % messageTag
+                        assert dpart[4].upper() == "BODY[%s]" % signatureTag
+                        #messageData = dpart['body[%s.mime]' % messageTag] + dpart['body[%s]' % messageTag]
+                        messageData = dpart[1] + dpart[3]
+                        #sigData = dpart['body[%s]' % signatureTag]
+                        sigData = dpart[5]
+                        with open("/tmp/dat","w") as d:
+                            d.write(messageData)
+                        with open("/tmp/dat.sig","w") as d:
+                            d.write(sigData)
+
+                        ctx = gpgme.Context()
+                        import io
+                        msgdat = io.BytesIO(messageData)
+                        sigdat = io.BytesIO(sigData)
+                        ret = ctx.verify(sigdat, msgdat, None)
+                        for sig in ret:
+                            if sig.summary & gpgme.SIGSUM_VALID:
+                                sigres = "\033[32mvalid\033[0m"
+                            else:
+                                sigres = "\033[31mbad\033[0m"
+                                sigsum = []
+                                if sig.summary & gpgme.SIGSUM_KEY_REVOKED:
+                                    sigsum.append("key revoked")
+                                if sig.summary & gpgme.SIGSUM_KEY_EXPIRED:
+                                    sigsum.append("key expired")
+                                if sig.summary & gpgme.SIGSUM_SIG_EXPIRED:
+                                    sigsum.append("sig expired")
+                                if sig.summary & gpgme.SIGSUM_KEY_MISSING:
+                                    sigsum.append("key missing")
+                                if sig.summary & gpgme.SIGSUM_CRL_MISSING:
+                                    sigsum.append("crl missing")
+                                if sig.summary & gpgme.SIGSUM_CRL_TOO_OLD:
+                                    sigsum.append("crl too old")
+                                if sig.summary & gpgme.SIGSUM_BAD_POLICY:
+                                    sigsum.append("bad policy")
+                                if sig.summary & gpgme.SIGSUM_SYS_ERROR:
+                                    sigsum.append("sys error")
+                                #TODO: Show if a flag is set that we don't recognize. E.G. mask out what we look at above, plus the "RED" and "GREEN" values, and show the number if non-zero
+                                if len(sigsum):
+                                    sigres += "(%s)" % ", ".join(sigsum)
+                            if sig.validity == gpgme.VALIDITY_UNKNOWN:
+                                sigres += "(?)"
+                            if sig.validity == gpgme.VALIDITY_UNDEFINED:
+                                sigres += "(q)"
+                            if sig.validity == gpgme.VALIDITY_NEVER:
+                                sigres += "(\033[31mn\033[0m)"
+                            if sig.validity == gpgme.VALIDITY_MARGINAL:
+                                sigres += "(\033[33mm\033[0m)"
+                            if sig.validity == gpgme.VALIDITY_FULL:
+                                sigres += "(\033[32mf\033[0m)"
+                            if sig.validity == gpgme.VALIDITY_ULTIMATE:
+                                sigres += "(\033[34mu\033[0m)"
+                            keys = []
+                            for k in ctx.keylist(sig.fpr, True):
+                                keys.append(k)
+                            if len(keys) != 1:
+                                # TODO: What if we get multiple matches for
+                                # the FPR? For now, we'll show the FPR raw if
+                                # we can't find it or find it isn't unique
+                                sigres += " from %s" % sig.fpr
+                            else:
+                                key = keys[0]
+                                # TODO: Some kind of check between from and
+                                # the sig. Some notes:
+                                #   * The message isn't strictly bad if the
+                                #     sender or froms don't match, but it is
+                                #     possibly odd.
+                                #   * The header check /should/ be against the
+                                #     contained message. E.g., if this sig is
+                                #     in a forward-as-attachment message, then
+                                #     the sender is likely NOT the signer, but
+                                #     the original sender of the inner message
+                                #     SHOULD be the signer.
+                                #   * While we are at it, we should check
+                                #     signed headers against unsigned headers,
+                                #     or at least some of the relevant ones.
+                                #     For example, enigmail will copy the
+                                #     recipients and originators headers, as
+                                #     well as subject and date, into the
+                                #     signed portion to allow verification
+                                #     that those headers weren't tampered.
+                                sigres += " from %s %s" % (sig.fpr[-8:], key.uids[0].uid)
+
             if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                 extra += " (%s)" % struct.disposition[0]
 # mailx shows attachments inline if they are text or message type. We
@@ -1679,7 +1793,13 @@ class Cmd(cmdprompt.CmdPrompt):
                     extra += " (name: %s)" % dispattrs['filename']
             # TODO XXX: Preprocess control chars out of all strings before
             # display to terminal!
-            structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
+            structureStrings.append("%s   %s/%s%s %s" % (
+                struct.tag,
+                struct.type_,
+                struct.subtype,
+                extra,
+                sigres if sigres else "",
+                ))
             innerTag = ".".join(struct.tag.split('.')[1:])
             # First pass, we'll just grab all text/plain parts. Later we'll
             # want to check disposition, and later we'll want to deal with
