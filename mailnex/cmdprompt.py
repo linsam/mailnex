@@ -2,7 +2,7 @@ import cmd
 import prompt_toolkit
 
 # TODO: Make pygments optional?
-from pygments.lexer import RegexLexer
+from pygments.lexer import Lexer
 from pygments.token import *
 from prompt_toolkit.layout.lexers import PygmentsLexer
 from pygments.token import Token
@@ -116,26 +116,36 @@ class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
         self.pending_async.append(a)
         a.send()
 
-class PromptLexer(RegexLexer):
-    """Basic lexer for our command line."""
-    name = 'Prompt'
-    aliases = ['prompt']
-    filenames = []
-    tokens = {
-            'root': [
-                # Commands. TODO: Auto generate this list
-                (r'^print\b', Generic.Inserted),
-                (r'^quit\b', Generic.Inserted),
-                (r'^help\b', Generic.Inserted),
-                (r'^headers\b', Generic.Inserted),
-                # Other stuff
-                (r'^[^ ]* ', Generic.Heading),
-                # I cannot get the next to match. If I end with '$' instead of
-                # '\n', or no ending after '.*', python hangs on what looks
-                # like an infinitely expanding malloc loop.
-                (r'.*\n', Text),
-                ]
-            }
+def PromptLexerFactory(cmd_obj):
+    class PromptLexer(Lexer):
+        """Basic lexer for our command line."""
+        def __init__(self, **options):
+            self.options = options
+            print(options)
+            Lexer.__init__(self, **options)
+        def get_tokens_unprocessed(self, text):
+            raise Exception("Just use get_tokens!")
+        def get_tokens(self, text):
+            res = []
+            data=text.split(" ", 1)
+            command = data[0] if len(data) else ""
+            rest = data[1] if len(data) == 2 else ""
+            if len(data) == 0:
+                return []
+            if len(data) > 0:
+                if "do_{}".format(command) in dir(self.cmd):
+                    res.append((Generic.Inserted, command))
+                else:
+                    res.append((Token.Text, text))
+                    return res
+            if len(data) > 1:
+                res.append((Token.Text, " " + rest))
+            return res
+        cmd = cmd_obj
+        name = 'Prompt'
+        aliases = ['prompt']
+        filenames = []
+    return PromptLexer
 
 class PromptPygStyle(pygments.style.Style):
     """A Simple style for our interactive prompt's user text."""
@@ -220,7 +230,7 @@ class CmdPrompt(cmd.Cmd):
                     u"",
                     get_prompt_tokens = gpt,
                     style = prompt_style,
-                    lexer = PygmentsLexer(PromptLexer),
+                    lexer = PygmentsLexer(PromptLexerFactory(self)),
                     completer = self.completer,
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
