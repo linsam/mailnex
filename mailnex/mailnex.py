@@ -1905,6 +1905,14 @@ class Cmd(cmdprompt.CmdPrompt):
             resparts.append((o[0], o[1], d))
         return resparts
 
+    def lex_help(self, text, rest, res):
+        if "do_{}".format(rest) in dir(self):
+            res.append((cmdprompt.Generic.Heading, rest))
+        elif "help_{}".format(rest) in dir(self):
+            res.append((cmdprompt.Generic.Heading, rest))
+        else:
+            res.append((cmdprompt.Text, rest))
+
     def filterHeaders(self, headers, ignore, headerOrder, allHeaders):
         headerstr = u''
         if allHeaders:

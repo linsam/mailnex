@@ -139,7 +139,16 @@ def PromptLexerFactory(cmd_obj):
                     res.append((Token.Text, text))
                     return res
             if len(data) > 1:
-                res.append((Token.Text, " " + rest))
+                if "lex_{}".format(command) in dir(self.cmd):
+                    # TODO: require each command to add the space?
+                    # Looks simpler, codewise, to do it here. But, since
+                    # this generates its own token, does Pygments waste
+                    # terminal bandwidth sending extra codes for the one
+                    # space?
+                    res.append((Token.Text, " "))
+                    getattr(self.cmd, "lex_{}".format(command))(text, rest, res)
+                else:
+                    res.append((Token.Text, " " + rest))
             return res
         cmd = cmd_obj
         name = 'Prompt'
