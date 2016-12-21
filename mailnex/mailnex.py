@@ -1906,12 +1906,27 @@ class Cmd(cmdprompt.CmdPrompt):
         return resparts
 
     def lex_help(self, text, rest, res):
+        # TODO: we aren't highlighting if there is more than one space before
+        # the help topic
         if "do_{}".format(rest) in dir(self):
             res.append((cmdprompt.Generic.Heading, rest))
         elif "help_{}".format(rest) in dir(self):
             res.append((cmdprompt.Generic.Heading, rest))
         else:
             res.append((cmdprompt.Text, rest))
+    def compl_help(self, document, complete_event):
+        topics = []
+        this_word = document.get_word_before_cursor()
+        for i in dir(self):
+            cmdstr = "do_{}".format(this_word)
+            helpstr = "help_{}".format(this_word)
+            if i.startswith(cmdstr):
+                topics.append(i[3:])
+            elif i.startswith(helpstr):
+                topics.append(i[5:])
+        for i in topics:
+            yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
+
 
     def filterHeaders(self, headers, ignore, headerOrder, allHeaders):
         headerstr = u''

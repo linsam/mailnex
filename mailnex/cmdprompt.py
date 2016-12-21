@@ -193,6 +193,16 @@ class Completer(prompt_toolkit.completion.Completer):
                 #   (like source of this completion. Might be used to show
                 #   which address book an address completion is from.
                 yield prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
+            raise StopIteration
+        start_words = document.current_line.split()
+        if len(start_words) > 1:
+            #TODO: This isn't working until the first letter of the second word is typed
+            command = start_words[0]
+            symbol = "compl_{}".format(command)
+            if symbol in dir(self.cmd):
+                gen = getattr(self.cmd, symbol)(document, complete_event)
+                while True:
+                    yield gen.next()
 
 class CmdPrompt(cmd.Cmd):
     """Subclass of Cmd that uses prompt_toolkit instead of readline/raw_input.
