@@ -1924,6 +1924,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 topics.append(i[3:])
             elif i.startswith(helpstr):
                 topics.append(i[5:])
+        # TODO: Should we really do icase sort? We aren't matching
+        # insensitively. This feels inconsistent.
+        topics.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
         for i in topics:
             yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
 
