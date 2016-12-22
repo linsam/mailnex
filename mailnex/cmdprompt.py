@@ -184,7 +184,7 @@ class Completer(prompt_toolkit.completion.Completer):
 
     def get_completions(self, document, complete_event):
         this_word = document.get_word_before_cursor()
-        start_of_line = document.current_line_before_cursor.strip()
+        start_of_line = document.current_line_before_cursor.lstrip()
         if this_word == start_of_line:
             for i in self.cmd.completenames(this_word):
                 # Other useful completion parameters:
@@ -194,15 +194,13 @@ class Completer(prompt_toolkit.completion.Completer):
                 #   which address book an address completion is from.
                 yield prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
             raise StopIteration
-        start_words = document.current_line.split()
-        if len(start_words) > 1:
-            #TODO: This isn't working until the first letter of the second word is typed
-            command = start_words[0]
-            symbol = "compl_{}".format(command)
-            if symbol in dir(self.cmd):
-                gen = getattr(self.cmd, symbol)(document, complete_event)
-                while True:
-                    yield gen.next()
+        start_words = document.current_line.split(None,1)
+        command = start_words[0]
+        symbol = "compl_{}".format(command)
+        if symbol in dir(self.cmd):
+            gen = getattr(self.cmd, symbol)(document, complete_event)
+            while True:
+                yield gen.next()
 
 class CmdPrompt(cmd.Cmd):
     """Subclass of Cmd that uses prompt_toolkit instead of readline/raw_input.
