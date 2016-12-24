@@ -1309,14 +1309,17 @@ class Cmd(cmdprompt.CmdPrompt):
                         "agent-shell-lookup",
                         ]
                 for l in lookups:
-                    print("Checking for", l)
+                    if self.C.settings.debug.general:
+                        print("Checking for", l)
                     if l in self.C.settings:
                         agentCmd = getattr(self.C.settings, l).value
-                        print(" Found it", agentCmd)
+                        if self.C.settings.debug.general:
+                            print(" Found it", agentCmd)
                         break
                 if agentCmd and agentCmd != "":
                     cmdarr = ["/bin/sh", "-c", agentCmd]
-                    print(" Running", cmdarr)
+                    if self.C.settings.debug.general:
+                        print(" Running", cmdarr)
                     s = subprocess.Popen(cmdarr, stdout=subprocess.PIPE)
                     pass_ = s.stdout.read(4096)
                     s.stdout.close()
