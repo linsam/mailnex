@@ -1329,6 +1329,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if self.C.settings.debug.general:
                             print(" Found it", agentCmd)
                         break
+                cantSave = False
                 if agentCmd and agentCmd != "":
                     cmdarr = ["/bin/sh", "-c", agentCmd]
                     if self.C.settings.debug.general:
@@ -1357,10 +1358,37 @@ class Cmd(cmdprompt.CmdPrompt):
                     except RuntimeError:
                         pass_ = None
                         print("Info: no password managers found; cannot save your password for automatic login")
+                        cantSave = True
+                prompt_to_save = False
                 if not pass_:
                     pass_ = getpass.getpass()
+                    prompt_to_save = True
                 print("Info: Logging in")
+                # TODO: Retry N times? Or at least, prompt for password entry
+                # if we got the password from an agent or keyring that didn't
+                # work. Ideally, if it came from the keyring, didn't work, and
+                # the user entered a new one that does, we'd offer saving it
+                # over the old keyring entry.
+                # TODO: Display where we got the password, if it wasn't
+                # entered by prompt (e.g. by agent (and which agent?) or by
+                # keyring (and which keyring?))
                 c.login(user, pass_)
+                if prompt_to_save and not cantSave:
+                    # TODO: Allow user to prevent this prompt. Perhaps by
+                    # disabling keyring in general, or by disabling it for
+                    # particular accounts (or enabling for particular accounts
+                    # only).
+                    while True:
+                        line = self.singleprompt("Save password to keyring (yes/no)? ").lower().strip()
+                        if line == 'y' or line == 'yes':
+                            print(" Saving...")
+                            try:
+                                keyring.set_password("imap://%s" % host, user, pass_)
+                            except RuntimeError:
+                                print("Error: couldn't save password to keyring")
+                            break
+                        elif line == 'n' or line == 'no':
+                            break
                 del pass_
                 print("Info: Loggin complete")
             except KeyboardInterrupt:
