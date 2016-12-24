@@ -1185,19 +1185,32 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     def do_folder(self, args):
-        """Connect to the given mailbox.
+        """Connect to the given mailbox, or show info about the current connection.
 
-        If argument starts with a '+', the value of setting 'folder' is prepended to the target
+        With no arguments, gives an overview of the current connection
+        (location, number of messages, etc).
+
+        With an argument, close any current connection and connect to the
+        specified location. Then show info. If 'headers' or 'headers_folder'
+        is set, also run the headers command.
+
+        If argument starts with a '+', the value of setting 'folder' is
+        prepended to the target
 
         Currently supported protocols:
             imap://     - IMAP4r1 with STARTTLS
             imaps://    - IMAP4r1 over SSL
+
+        Examples:
+            folder imap://john.smith@mail.example.com/Sent-Mail
+            folder +
+            folder +Sent-Mail
         """
 
         if args == "":
             # Just show information about the current connection, if any
             if not self.C.connection:
-                print("No connection")
+                print("No connection. Give a location to this command to establish a connection.\nSee 'help folder' for more info.")
                 return
             print("\"{}://{}@{}:{}/{}\": {} messages {} unread".format(
                 self.C.connection.mailnexProto,
