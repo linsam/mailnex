@@ -1339,8 +1339,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     res = s.wait()
                     if res != 0:
                         print(" agent-shell-lookup for this account did not succeed.")
+                        pass_ = None
                     elif len(pass_) > 4095:
                         print(" Password command gave back 4k or more characters; assuming not valid and moving on")
+                        pass_ = None
                     else:
                         if pass_.endswith('\n'):
                             # Strip off EOL, it isn't part of the password
