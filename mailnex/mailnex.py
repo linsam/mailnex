@@ -1359,6 +1359,11 @@ class Cmd(cmdprompt.CmdPrompt):
                         "cecertsfile_{}".format(host))
                 self.C.connection = None
                 return
+            except imap4.imap4Exception as ev:
+                print("Failed to login")
+                if 'imap_string' in dir(ev):
+                    print("  Server said:", repr(ev.imap_string))
+                return
         try:
             c.clearCB("exists")
             if box:
