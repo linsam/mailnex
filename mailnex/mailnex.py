@@ -3930,6 +3930,15 @@ class Cmd(cmdprompt.CmdPrompt):
         except KeyError:
             print("No setting named %s" % args)
 
+    def compl_set(self, document, complete_event):
+        topics = []
+        this_word = document.get_word_before_cursor()
+        for opt in self.C.settings:
+            if opt.name.startswith(this_word):
+                topics.append(opt.name)
+        topics.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        for i in topics:
+            yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
     @showExceptions
     def do_set(self, args):
         """Set or get option values
