@@ -209,16 +209,77 @@ class imap4ClientConnection(object):
             self.uidvalidity = int(codes[1], 10)
         elif codename == "UNSEEN":
             self.unseen = int(codes[1], 10)
-        # CONDSTORE additions
+        # RFC 4551 CONDSTORE additions
         elif codename == "HIGHESTMODSEQ":
             self.highestmodseq = int(codes[1], 10)
         elif codename == "NOMODSEQ":
             self.highestmodseq = None
-        # QRESYNC additions
+        # RFC 5162 QRESYNC additions
         elif codename == "CLOSED":
             pass
             # Also VANISHED, but that shouldn't happen unless we explicitly
             # enable QRESYNC
+        # RFC5530 section 6 list
+        #   2060
+        #       * NEWNAME
+        #   2221
+        #       * REFERRAL
+        #   3501
+        #       * PARSE
+        #   3516
+        #       * UNKNOWN-CTE
+        #   4315
+        #       * UIDNOTSTICKY
+        #       * APPENDUID
+        #       * COPYUID
+        #   4467
+        #       * URLMECH
+        #   4469
+        #       * TOOBIG
+        #       * BADURL
+        #   4551
+        #       * MODIFIED
+        #   4978
+        #       * COMPRESSIONACTIVE
+        #   5182
+        #       * NOTSAVED
+        #   5255
+        #       * BADCOMPARATOR
+        #   5257
+        #       * ANNOTATE
+        #       * ANNOTATIONS
+        #   5259
+        #       * TEMPFAIL
+        #       * MAXCONVERTMESSAGES
+        #       * MAXCONVERTPARTS
+        #   5267
+        #       * NOUPDATE
+        #   5464
+        #       * METADATA
+        #   5465
+        #       * NOTIFICATIONOVERFLOW
+        #       * BADEVENT
+        #   5466
+        #       * UNDEFINED-FILTER
+        #
+        # RFC5530 "IMAP Response Codes" additions
+        # * UNAVAILABLE
+        # * AUTHENTICATIONFAILED
+        # * AUTHORIZATIONFAILED
+        # * EXPIRED
+        # * PRIVACYREQUIRED
+        # * CONTACTADMIN
+        # * NOPERM
+        # * INUSE
+        # * EXPUNGEISSUED
+        # * CORRUPTION
+        # * SERVERBUG
+        # * CLIENTBUG
+        # * CANNOT
+        # * LIMIT
+        # * OVERQUOTA
+        # * ALREADYEXISTS
+        # * NONEXISTENT
         else:
             print("unknown code '%s'; ignoring" % codename)
 
