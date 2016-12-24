@@ -1332,7 +1332,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             # actually ends with LF, to put an extra LF in the
                             # output.
                             pass_ = pass_[:-1]
-                        print("Password",pass_)
+                        #print("Password",pass_)
                 else:
                     try:
                         pass_ =  keyring.get_password("imap://%s" % host, user)
