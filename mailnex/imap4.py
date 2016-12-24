@@ -43,6 +43,8 @@ re_continue = re.compile(r'\+ (OK|NO|BAD|PREAUTH|BYE) (\[[^]]*\])? ?(.*)')
 re_numdat = re.compile(r'\* (\d+) ([a-zA-Z]+) ?(.*)', re.DOTALL)
 re_untagdat = re.compile(r'\* ([a-zA-Z]+) ?(.*)', re.DOTALL)
 
+class imap4Exception(Exception):
+    """Root exception for all exceptions raised by this imap4 module"""
 
 class imap4ClientConnection(object):
     # Connections can be happily in several states:
@@ -189,12 +191,12 @@ class imap4ClientConnection(object):
             if codes[1][0] == '(':
                 codes[1] = codes[1][1:]
             else:
-                raise Exception("Malformed PERMANENTFLAGS")
+                raise imap4Exception("Malformed PERMANENTFLAGS")
             # Make this an assert?
             if codes[-1][-1] == ')':
                 codes[-1] = codes[-1][:-1]
             else:
-                raise Exception("Malformed PERMANENTFLAGS")
+                raise imap4Exception("Malformed PERMANENTFLAGS")
             self.permflags = codes[1:]
         elif codename == "READ-ONLY":
             self.rw = False
@@ -300,7 +302,7 @@ class imap4ClientConnection(object):
             thislen = len(data)
             if thislen == 0:
                 self.close()
-                raise Exception("Server connection lost? 0 length read occured")
+                raise imap4Exception("Server connection lost? 0 length read occured")
             line += data
             linelen += thislen
             # TODO: Timeout if X seconds have passed and yet we don't have a
@@ -309,13 +311,13 @@ class imap4ClientConnection(object):
             if self.maxlinelen and linelen > self.maxlinelen:
                 # TODO: Try to cleanup by flushing? Let something higher take
                 # care of it?
-                raise Exception("Server response too long (at %i, which exceeds maxlinelen %i)" % (len(line), self.maxlinelen))
+                raise imap4Exception("Server response too long (at %i, which exceeds maxlinelen %i)" % (len(line), self.maxlinelen))
             if line.endswith('\r\n'):
                 # Strip the line ending off
                 line = line[:-2]
                 # We got a whole line. Process it.
                 if line.startswith("+"):
-                    raise Exception("Continuation required")
+                    raise imap4Exception("Continuation required")
                 # Any response can have a response code. initial codes can be
                 # ALERT, BADCHARSET, CAPABILITY, PARSE, PERMANENTFLAGS,
                 # READ-ONLY, READ-WRITE, TRYCREATE, UIDNEXT, UIDVALIDITY,
@@ -368,7 +370,7 @@ class imap4ClientConnection(object):
                         if partial == "":
                             # TODO: Might have been SSL layer stuff. Figure
                             # out how to check if the socket is actually dead.
-                            raise Exception("Lost socket?")
+                            raise imap4Exception("Lost socket?")
                         line += partial
                         count -= len(partial)
                     # Now that we are done with the literal, resume normal
@@ -393,7 +395,7 @@ class imap4ClientConnection(object):
                         # Ideally, we'd have one kind of exception for NO and
                         # another for BAD, and one for whatever else we might
                         # get back.
-                        e = Exception("IMAP error: %s" % string)
+                        e = imap4Exception("IMAP error: %s" % string)
                         e.imap_status = status
                         e.imap_code = code
                         e.imap_string = string
@@ -508,7 +510,7 @@ class imap4ClientConnection(object):
             a = re.match(re_untagged, r)
             if a is None:
                 # TODO: Log the response?
-                raise Exception("Bad response from server")
+                raise imap4Exception("Bad response from server")
             status, code, string = a.groups()
             if code:
                 self.processCodes(status, code, string)
@@ -529,7 +531,7 @@ class imap4ClientConnection(object):
                 self.state = STATE_LOGOUT
             else:
                 # TODO: Log the response?
-                raise Exception("Unexpected response from server")
+                raise imap4Exception("Unexpected response from server")
             self.socket = s
             self.hostname = host
         except KeyboardInterrupt:
@@ -553,13 +555,13 @@ class imap4ClientConnection(object):
         return False
     def starttls(self):
         if self.state != STATE_UNAUTH:
-            raise Exception("Bad client state for command")
+            raise imap4Exception("Bad client state for command")
         if self.isTls():
-            raise Exception("Already in TLS mode")
+            raise imap4Exception("Already in TLS mode")
         # Run STARTTLS command, wait for go ahead
         res, code, string = self.doSimpleCommand("STARTTLS")
         if res != 'OK':
-            raise Exception("No TLS on server")
+            raise imap4Exception("No TLS on server")
         # TODO: Support client certificate
         self.origsocket = self.socket
         # So, the best practice here is to use an SSLContext to wrap the
@@ -578,7 +580,7 @@ class imap4ClientConnection(object):
                 print("WARNING: old python SSL detected. Host checking is *NOT* occuring, and some best practices aren't followed!")
                 self.socket = ssl.wrap_socket(self.socket, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
             else:
-                raise Exception("TBD: SSLContext-able without default context")
+                raise imap4Exception("TBD: SSLContext-able without default context")
         else:
             # Based on information from https://mail.python.org/pipermail/python-dev/2013-November/130649.html
             if (self.ca_certs):
@@ -603,11 +605,11 @@ class imap4ClientConnection(object):
             box = "INBOX"
         res, code, string = self.doSimpleCommand("SELECT %s" % box)
         if res != 'OK':
-            raise Exception("Failed to select box")
+            raise imap4Exception("Failed to select box")
     def getheaders(self, message):
         res, code, string = self.doSimpleCommand("fetch %s (BODY.PEEK[HEADER])" % message)
         if res != 'OK':
-            raise Exception("Failed to fetch headers")
+            raise imap4Exception("Failed to fetch headers")
     def fetch(self, message, what):
         """Generic fetcher. Given an IMAP spec of messages (not UIDs), fetch the 'what' from them.
 
@@ -626,12 +628,12 @@ class imap4ClientConnection(object):
         res, code, string = self.doSimpleCommand("fetch %s %s" % (message, what))
         self.cb_fetch = oldcb
         if res != 'OK':
-            raise Exception("Failed to fetch headers: %s %s" % (res, string))
+            raise imap4Exception("Failed to fetch headers: %s %s" % (res, string))
         return fetchlist
     def getCapabilities(self):
         res, code, string = self.doSimpleCommand("CAPABILITY")
         if res != "OK":
-            raise Exception("Failed to get capability: %s %s" %(res, string))
+            raise imap4Exception("Failed to get capability: %s %s" %(res, string))
         return self.caps
     def search(self, charset, query):
         searchres = []
@@ -642,6 +644,6 @@ class imap4ClientConnection(object):
         res, code, string = self.doSimpleCommand("SEARCH CHARSET %s %s" % (charset, query))
         self.cb_search = oldsearch
         if res != "OK":
-            raise Exception("Failed to do search: %s %s" % (res, string))
+            raise imap4Exception("Failed to do search: %s %s" % (res, string))
         return searchres
 
