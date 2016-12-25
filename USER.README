@@ -115,10 +115,10 @@ Index searching
 ---------------
 
 In addition to mailx like listing of files (for example, unread messages by "f
-:u" or IMAP style searches like "f (from bob after 22-Sep-2016 subject "pizza
+:u" or IMAP style searches like "f (from bob since 22-Sep-2016 subject "pizza
 day")", you can also do index searching akin to free-form search engine
 strings. At this time, indexing is not automatic. To build the index for the
-current mailbox, run "index". Once the index is built, you cna search it with
+current mailbox, run "index". Once the index is built, you can search it with
 the "search" command. For example:
 
   search python email sam
@@ -135,14 +135,14 @@ One issue with mailx is that, when operating on a list of messages within a
 mailbox, any deviation from the list (even within the list) will lose the
 list.
 
-For example, I can run "f (from bob after 22-Sep-2016 subject pizza)" to see a
+For example, I can run "f (from bob since 22-Sep-2016 subject pizza)" to see a
 list of messages starting on September 22nd, from my friend bob (or anyone
 named bob) with "pizza" somewhere in the subject line. I can then use '`' (the
 backtick) to reference that list, and using '`' as a command, see the messages
 in that list one at a time. However, if I view a specific number out of or in
 the list, or even just use the print command, the list that the backtick knows
 about gets replaced with the one new message. This makes it difficult to
-review the list, observer present status of the messages on the list, change
+review the list, observe present status of the messages on the list, change
 messages in the list, and then continue.
 
 With the "virtfolder" command ('vf' for short), you can specify the same

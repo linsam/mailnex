@@ -10,15 +10,8 @@ For usage instructions, see the file USER.README.
 Current Status: Still pretty Alpha
 
 There is a minimal set of functionality for reading *most* mail with a plain
-text part. Common/basic operations like deleting and forwarding are
-not yet supported, so I cannot consider this program to be generally useful
-yet.
-
-On a similar vein, security only somewhat implemented in anything
-remotely resembling correctness. It currently does try to verify
-certificates against the system's CA list, but doesn't verify that the
-host matches the certificate. On the upside, we do (attempt to)
-establish an encrypted channel by default.
+text part. Common/basic operations like forwarding are not yet supported, so I
+cannot consider this program to be generally useful yet.
 
 Very few mailx commands and settings are implemented so far. Non-imap
 folders don't work.
