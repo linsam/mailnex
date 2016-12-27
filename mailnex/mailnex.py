@@ -3120,9 +3120,12 @@ class Cmd(cmdprompt.CmdPrompt):
                     filename = parts[1]
                     attachFile(self.attachlist, filename)
                     return
-                self.C.printInfo("Current attachments:")
-                for att in range(len(self.attachlist)):
-                    self.C.printInfo("%i: %s" % (att + 1, self.attachlist[att]))
+                if len(self.attachlist):
+                    self.C.printInfo("Current attachments:")
+                    for att in range(len(self.attachlist)):
+                        self.C.printInfo("%i: %s" % (att + 1, self.attachlist[att]))
+                else:
+                    self.C.printInfo("No attachments yet.")
                 while True:
                     try:
                         line = self.singleprompt("attachment> ")
@@ -3143,9 +3146,12 @@ class Cmd(cmdprompt.CmdPrompt):
                         #self.C.printInfo("edit POS         edit attachment (TBD)")
                         self.C.printInfo("file POS FILE    change file to attach")
                     elif line.strip() == "list":
-                        self.C.printInfo("Current attachments:")
-                        for att in range(len(self.attachlist)):
-                            self.C.printInfo("%i: %s" % (att + 1, self.attachlist[att]))
+                        if len(self.attachlist):
+                            self.C.printInfo("Current attachments:")
+                            for att in range(len(self.attachlist)):
+                                self.C.printInfo("%i: %s" % (att + 1, self.attachlist[att]))
+                        else:
+                            self.C.printInfo("No attachments yet.")
                     elif line.startswith("add "):
                         attachFile(self.attachlist, line[4:])
                     elif line.startswith("insert"):
