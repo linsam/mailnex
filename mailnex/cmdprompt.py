@@ -126,6 +126,8 @@ def PromptLexerFactory(cmd_obj):
         def get_tokens_unprocessed(self, text):
             raise Exception("Just use get_tokens!")
         def get_tokens(self, text):
+            if not self.cmd.lexerEnabled:
+                return [(Token.Text, text)]
             res = []
             data=text.split(" ", 1)
             command = data[0] if len(data) else ""
@@ -230,6 +232,10 @@ class CmdPrompt(cmd.Cmd):
         self.completer = Completer(self)
         # ttyBusy tracks times when printing is a Bad Idea
         self.ttyBusy = False
+        # lexerEnabled is a marker for the lexer to check before doing
+        # interpretations. Currently, this just turns it off when the prompt
+        # isn't for the command line but for composing messages.
+        self.lexerEnabled = True
         if histfile:
             self.history = prompt_toolkit.history.FileHistory(histfile)
         else:
@@ -262,25 +268,23 @@ class CmdPrompt(cmd.Cmd):
         self.prompt = newprompt
 
     def singleprompt(self, prompt, ispassword=False, default=u'', titlefunc=None, completer=None):
-        tmpcli = prompt_toolkit.interface.CommandLineInterface(
-                application = prompt_toolkit.shortcuts.create_prompt_application(
-                    prompt,
-                    is_password=ispassword,
-                    default=default,
-                    get_title = titlefunc,
-                    completer = completer,
-                    ),
-                eventloop = self.ptkevloop,
-                #TODO: Reuse output from self.cli
-                output = prompt_toolkit.shortcuts.create_output(true_color = False),
-                )
-        # Don't reset so we that the default doesn't get blown away. Passing
-        # true blows it away and I don't yet know how to get it back. Since we
-        # create a new prompt for this every time, this isn't an issue.
-        res = tmpcli.run(reset_current_buffer = False)
-        text = res.text
-        # Uncomment the following line to cause the previous line to fail?
-        #tmpcli.exit()
+        origPrompt = self.prompt
+        self.prompt = prompt
+        origHistory = self.history
+        origCompleter = self.cli.application.buffer.completer
+        self.cli.application.buffer.completer = completer
+        # TODO: Interpret titlefunc!
+        tmphistory = prompt_toolkit.history.InMemoryHistory()
+        self.cli.application.buffer.history = tmphistory
+        self.lexerEnabled = False
+        try:
+            text = self.cli.run(True)
+            text = text.text
+        finally:
+            self.prompt = origPrompt
+            self.cli.application.buffer.history = origHistory
+            self.cli.application.buffer.completer = origCompleter
+            self.lexerEnabled = True
         return text
 
     def cmdSingle(self, intro=None):
