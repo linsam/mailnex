@@ -2843,6 +2843,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         # mailnex)
                     except EOFError:
                         line = '.'
+                    except KeyboardInterrupt:
+                        return self.do_x("")
 
                     if line == "." or line == "~.":
                         # Send message
@@ -3130,6 +3132,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     try:
                         line = self.singleprompt("attachment> ")
                     except EOFError:
+                        line = 'q'
+                    except KeyboardInterrupt:
                         line = 'q'
                     if line.strip() == '':
                         # Do nothing
