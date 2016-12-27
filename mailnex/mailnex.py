@@ -207,6 +207,7 @@ def attachFile(attachList, filename, pos=None, replace=False):
     try:
         st = os.stat(filename)
     except OSError as err:
+        import errno
         # Can't read it. Is it because it doesn't exist?
         if err.errno == errno.ENOENT:
             print("WARNING: Given file doesn't currently exist. Adding to list anyway. We'll try reading it again when completing the message")
