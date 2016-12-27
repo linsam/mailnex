@@ -2763,9 +2763,52 @@ class Cmd(cmdprompt.CmdPrompt):
 
             Eventually, we can add implementation without going through all the functions again to add it."""
             return func
+        class editorCompleter(cmdprompt.prompt_toolkit.completion.Completer):
+            """CLI Completer for the message editor"""
+            def get_completions(self, document, complete_event):
+                line = document.current_line_before_cursor
+                if not line.startswith("~@ "):
+                    # Only support completing filenames for now
+                    raise StopIteration
+                # TODO: Break out filename completer into separate function,
+                # to be reused by the attachment editor and possibly other
+                # places.
+                currentPath = line[3:]
+                # TODO: Cache the results from any given directory; it is very
+                # inefficient to recalculate this for every character the user
+                # types.
+                # Alternatively, only complete one request (e.g. user hits
+                # 'tab')
+                dirname = os.path.dirname(currentPath)
+                filename = os.path.basename(currentPath)
+                try:
+                    paths = os.listdir(dirname) if dirname else os.listdir(".")
+                except OSError:
+                    # Typically, file not found. Whatever the error, just
+                    # don't do completions.
+                    raise StopIteration
+                # Remove paths that don't start with our query
+                paths = filter(lambda x: x.startswith(filename), paths)
+                paths.sort()
+                for i in paths:
+                    extra=None
+                    try:
+                        if os.path.isdir(os.path.sep.join([dirname if dirname else '.',i])):
+                            extra = os.path.sep
+                    except OSError:
+                        # Ignore file-not-found and such. We shouldn't
+                        # actually get here typically (we got a list from
+                        # earlier), but things happen, like an entry being
+                        # removed after we got the list but before we checked
+                        # for it being a directory.
+                        # TODO: Since the error is usually that we cannot
+                        # check the entry (as in, it doesn't exist), perhaps
+                        # we should skip it in the listing?
+                        pass
+                    yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(filename), display_meta=extra)
         class editorCmds(object):
             """Similar to the regular command class, but we only run commands if the line starts with a '~'"""
-            def __init__(self, context, message, prompt, cli, addrCmpl, runner):
+            def __init__(self, context, message, prompt, cli, addrCmpl, runner, cmdCmpl):
                 object.__init__(self)
                 self.attachlist = []
                 # TODO: Allow a default setting for signing
@@ -2776,6 +2819,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.getAddressCompleter = addrCmpl
                 self.cli = cli
                 self.runAProgramStraight = runner
+                self.cmdCmpl = cmdCmpl
                 # Python doesn't allow certain symbols in function names that
                 # we intend to use as commands. Since we lookup the functions
                 # ourselves anyhow, we can just dump them into our dictionary (in
@@ -2791,7 +2835,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 while True:
                     try:
                         # TODO: allow tabs in the input
-                        line = self.singleprompt("")
+                        line = self.singleprompt("", completer=self.cmdCmpl)
                         # TODO: Allow ctrl+c to abort the message, but not mailnex
                         # (e.g. at this stage, two ctrl+c would be needed to exit
                         # mailnex. The first to abort the message, the second to exit
@@ -3146,7 +3190,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # We definitely want a way to edit an attachment (properties and
             # contents), and to add/edit arbitrary message parts. Should be
             # able to mark parts for signing, encryption, compression, etc.
-        editor = editorCmds(self.C, message, self.singleprompt, self.cli, self.getAddressCompleter, self.runAProgramStraight)
+        editor = editorCmds(self.C, message, self.singleprompt, self.cli, self.getAddressCompleter, self.runAProgramStraight, editorCompleter())
         if editor.run() == False:
             return False
 
