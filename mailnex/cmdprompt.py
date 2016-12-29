@@ -72,8 +72,17 @@ class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
             self.tty.close()
             self.realloop.stop()
         else:
-            # TODO: Obtain this from user preference, fall back on stdin
-            self.inputstream.feed(six.text_type(data, sys.stdin.encoding))
+            try:
+                # TODO: Obtain this from user preference, fall back on stdin
+                self.inputstream.feed(six.text_type(data, sys.stdin.encoding))
+            except Exception:
+                # If we don't stop, we can get into an exception loop such
+                # that every character the user types posts an exception and
+                # they cannot exit without spawning another terminal to run a
+                # kill command against this program.
+                self.tty.close()
+                self.realloop.stop()
+                raise
     # Other stuff prompt_toolkit wants us to have :-(
     def add_reader(self, fd, callback):
         print "add_reader called", fd, callback
