@@ -277,8 +277,9 @@ class CmdPrompt(cmd.Cmd):
         tmphistory = prompt_toolkit.history.InMemoryHistory()
         self.cli.application.buffer.history = tmphistory
         self.lexerEnabled = False
+        self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
         try:
-            text = self.cli.run(True)
+            text = self.cli.run(False)
             text = text.text
         finally:
             self.prompt = origPrompt
