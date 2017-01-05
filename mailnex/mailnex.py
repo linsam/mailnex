@@ -91,6 +91,7 @@ import pyuv
 import time
 from . import settings
 import subprocess
+import string
 try:
     import gpgme
     haveGpgme = True
@@ -3303,11 +3304,14 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: Allow the user to override the detected mime type
             entity = email.mime.Base.MIMEBase(*mtype.split("/"))
             entity.set_payload(data)
-            # TODO: Only use base64 if we have to. E.g. scan the file for bad
-            # bytes. Alternatively, check if it is a type of text (e.g.
-            # text/plain, text/html) and only do quoting if not.
-            # TODO: Allow user to override this (e.g. force base64 or quopri)
-            email.encoders.encode_base64(entity)
+
+            # Note: string.printable would be better, but it includes vertical
+            # tab and form-feed, which I'm not certain should be included in
+            # emails, so we'll construct our own without it for now.
+            printable = string.digits + string.letters + string.punctuation + ' \t\r\n'
+            if not all(c in printable for c in data):
+                # TODO: Allow user to override this (e.g. force base64 or quopri)
+                email.encoders.encode_base64(entity)
             entity.add_header('Content-Disposition', 'attachment', filename=attach.split(os.sep)[-1])
             if not isinstance(m, email.mime.Multipart.MIMEMultipart):
                 # Convert into multipart/mixed
