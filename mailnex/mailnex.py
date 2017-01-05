@@ -1936,7 +1936,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 o[1].encoding = None
                 o[1].attrs = None
             if o[1]:
-                encoding = o[1].encoding
+                encoding = o[1].encoding if hasattr(o[1], "encoding") else None
             else:
                 encoding = None
             # First, check for transfer encoding
@@ -1946,7 +1946,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 continue
             # Finally, check for character set encoding
             # and other layers, like format flowed
-            if o[1] and o[1].attrs and 'charset' in o[1].attrs:
+            if o[1] and hasattr(o[1], "attrs") and o[1].attrs and 'charset' in o[1].attrs:
                 charset = o[1].attrs['charset']
                 try:
                     # TODO: Is this possibly a security risk? Is there any
@@ -1975,7 +1975,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             d = "Part %s: failed to decode as %s" % (o[0], charset)
             else:
                 d = dstr
-            if o[1] and o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
+            if o[1] and hasattr(o[1], 'attrs') and o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
                 #TODO: Flowed format handling
                 pass
             if o[1] is None:
