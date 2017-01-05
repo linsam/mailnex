@@ -2115,6 +2115,36 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     @needsConnection
+    def do_save(self, args):
+        """Save an entire message to a file.
+
+        e.g.:
+            save 6531 /tmp/mymessage.eml
+
+        Doesn't update current message location or seen status.
+
+        If the file already exists, the message will be appended.
+
+        Note that there is no faked 'From ' line, so the resulting file cannot
+        be treated as an mbox file.
+
+        See also the 'write' command.
+        """
+        args=args.split(' ', 1)
+        if len(args) != 2:
+            print("Need a message and a filename")
+            return
+        filename=args[1]
+        msg = args[0]
+        data = self.C.connection.fetch(msg, '(BODY.PEEK[])')
+        parts = processImapData(data[0][1], self.C.settings)
+        data = parts[0][1]
+        with open(filename, "wa")  as outfile:
+            outfile.write(data)
+            outfile.flush()
+
+    @showExceptions
+    @needsConnection
     def do_write(self, args):
         """Write a message part (e.g. attachment) to a file.
 
