@@ -2130,6 +2130,7 @@ class Cmd(cmdprompt.CmdPrompt):
         saving a file, the contents of the message part are given as standard
         input to the named program.
 
+        See also the 'save' command (for writing the entire message (headers and all parts)
         See also the 'structure' command."""
         args=args.split(' ', 1)
         if len(args) != 2:
@@ -2147,8 +2148,11 @@ class Cmd(cmdprompt.CmdPrompt):
         struct = flattenStruct(struct)
         key = '.' + msgpart[1]
         if not key in struct:
-            print("Subpart not found in message. Try the 'structure' command.")
-            return
+            if u'' in struct:
+                key = u''
+            else:
+                print("Subpart not found in message. Try the 'structure' command.")
+                return
         part = struct[key]
         data = self.fetchAndDecode(msgpart, part)
         if data is None:
@@ -2202,8 +2206,11 @@ class Cmd(cmdprompt.CmdPrompt):
         struct = flattenStruct(struct)
         key = '.' + msgpart[1]
         if not key in struct:
-            print("Subpart not found in message. Try the 'structure' command.")
-            return
+            if u'' in struct:
+                key = u''
+            else:
+                print("Subpart not found in message. Try the 'structure' command.")
+                return
         part = struct[key]
         # This part is kindof tough, trade-off wise.
         # One the one hand, we don't want to bother downloading the whole file
