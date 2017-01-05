@@ -92,6 +92,7 @@ import time
 from . import settings
 import subprocess
 import string
+import shutil
 try:
     import gpgme
     haveGpgme = True
@@ -2859,6 +2860,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.cli = cli
                 self.runAProgramStraight = runner
                 self.cmdCmpl = cmdCmpl
+                # tmpdir is used for holding edited or created attachments. It
+                # should be automatically cleaned out when the message is sent
+                # or aborted.
+                self.tmpdir = None
                 # Python doesn't allow certain symbols in function names that
                 # we intend to use as commands. Since we lookup the functions
                 # ourselves anyhow, we can just dump them into our dictionary (in
@@ -3154,11 +3159,21 @@ class Cmd(cmdprompt.CmdPrompt):
                     #TODO: If editHeaders is set, retrieve those headers
 
             def at(self, line):
-                # Called with ~@
                 parts = line.split(None, 1)
                 if len(parts) == 2:
                     filename = parts[1]
-                    attachFile(self.attachlist, filename)
+                    if not filename.startswith('#'):
+                        attachFile(self.attachlist, filename)
+                    else:
+                        if self.tmpdir is None:
+                            self.tmpdir = tempfile.mkdtemp()
+                        data = self.C.connection.fetch(filename[1:], '(BODY.PEEK[])')
+                        parts = processImapData(data[0][1], self.C.settings)
+                        data = parts[0][1]
+                        f = tempfile.NamedTemporaryFile(dir=self.tmpdir, delete=False)
+                        f.write(data)
+                        f.close()
+                        attachFile(self.attachlist, f.name)
                     return
                 if len(self.attachlist):
                     self.C.printInfo("Current attachments:")
@@ -3340,6 +3355,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 n.attach(o)
                 m = n
             m.attach(entity)
+        if editor.tmpdir:
+            shutil.rmtree(editor.tmpdir)
 
         tos = addrs(m.get_all('To',[]))
         ccs = addrs(m.get_all('cc',[]))
