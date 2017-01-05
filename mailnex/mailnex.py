@@ -3496,7 +3496,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # that display the outer headers in summaries (like this one right
             # now, or as IMAP servers do searches, etc)
             for key in m.keys():
-                if key.lower() in ['to','from','cc','bcc','subject','date','message-id','user-agent']:
+                if key.lower() in ['to','from','cc','bcc','subject','date','message-id','user-agent','references','in-reply-to']:
                     newmsg[key] = m[key]
             m = newmsg
 
