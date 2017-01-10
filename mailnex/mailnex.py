@@ -2093,7 +2093,10 @@ class Cmd(cmdprompt.CmdPrompt):
             if headerstr != "":
                 body += headerstr
                 headerstr = u''
-            body += part[2]
+            if part[0].endswith(".HEADER"):
+                body += self.filterHeaders(part[2], self.C.settings.ignoredheaders.value, self.C.settings.headerorder.value, allHeaders)
+            else:
+                body += part[2]
             if not part[2].endswith('\r\n\r\n'):
                 body += "\r\n"
         return body
