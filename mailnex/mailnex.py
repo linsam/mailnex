@@ -4150,9 +4150,9 @@ class Cmd(cmdprompt.CmdPrompt):
                             print("   %s" % line)
                     oldval = opt.value
                     opt.value = opt.default
-                    print("Default:", opt)
+                    print("Default:", opt.value)
                     opt.value = oldval
-                    print("current:", opt)
+                    print("current:", opt.value)
                 elif args[-1] == '?':
                     # Print current value
                     try:
