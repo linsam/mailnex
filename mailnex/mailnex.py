@@ -2030,12 +2030,26 @@ class Cmd(cmdprompt.CmdPrompt):
             if header in msg:
                 for val in msg.get_all(header):
                     enc = unicode(email.header.make_header(email.header.decode_header(val)))
-                    prefheaders += "{}: {}\n".format(header, enc)
+                    tmpl = "format_header_{}".format(header.lower())
+                    if tmpl in self.C.settings:
+                        prefheaders += self.C.settings[tmpl].value.format(t=self.C.t,header=header,value=enc) + '\n'
+                    elif "format_header_PREF" in self.C.settings:
+                        prefheaders += self.C.settings["format_header_PREF"].value.format(t=self.C.t,header=header,value=enc) + '\n'
+                    elif "format_header" in self.C.settings:
+                        prefheaders += self.C.settings["format_header"].value.format(t=self.C.t,header=header,value=enc) + '\n'
+                    else:
+                        prefheaders += "{}: {}\n".format(header, enc)
                 del msg[header]
         for header in msg.items():
             key, val = header
             enc = unicode(email.header.make_header(email.header.decode_header(val)))
-            otherheaders += "{}: {}\n".format(key, enc)
+            tmpl = "format_header_{}".format(key.lower())
+            if tmpl in self.C.settings:
+                otherheaders += self.C.settings[tmpl].value.format(t=self.C.t,header=key,value=enc) + '\n'
+            elif "format_header" in self.C.settings:
+                prefheaders += self.C.settings["format_header"].value.format(t=self.C.t,header=key,value=enc) + '\n'
+            else:
+                otherheaders += "{}: {}\n".format(key, enc)
 
         #TODO: Should headerorderend apply to both mime and message headers?
         if self.C.settings.headerorderend:
@@ -4515,6 +4529,26 @@ def getOptionsSet():
         """))
     options.addOption(settings.StringOption("defaultTZ", "UTC"))
     options.addOption(settings.StringOption("folder", "", doc="Replacement text for folder related commands that start with '+'"))
+    options.addOption(settings.StringOption("format_header","{header}: {value}", doc="""Format string for email headers, like headline.
+
+    The format string follows the python format specification.
+    Fields are 'header' and 'value'. Also 't' is supported for terminal settings.
+
+    Ex: "{header}: {t.bold}{value}{t.normal}"
+
+    Individual headers can be formatted differently by naming them in lower
+    case after an underscore. For example, so set the subject line in bold
+    blue:
+
+        format_header_subject={t.bold_blue}{header}: {value}{t.normal}
+
+    To format preferred headers (those listed in 'headerorder'), use 'format_header_PREF'.
+
+    The format used will be the first of a header name match, header_PREF, and
+    lastly, 'format_header' itself.
+    """))
+
+
     # Use the username and hostname of this machine as a (hopefully reasonable)
     # guess for the from line.
     options.addOption(settings.StringOption("from", "%s@%s" % (getpass.getuser(), os.uname()[1]), doc="Value to use for From field of composed email messages"))
