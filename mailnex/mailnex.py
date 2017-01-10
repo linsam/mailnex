@@ -2316,8 +2316,10 @@ class Cmd(cmdprompt.CmdPrompt):
             #  viewing of an attachment with Mutt's pager/viewer/whatever.
             outfile.write(data)
             outfile.flush()
-            # TODO: Either ask before opening always, or make it a parameter.
-            print("Launching viewer:", fullcmd)
+            # TODO: make asking a parameter.
+            res = self.singleprompt("Launch viewer %r? [y/N] " % fullcmd).lower()
+            if res != 'y' and res != 'yes':
+                return
             # TODO: Support opening in the background (should check cap for
             # non-terminal status of program first). Note that background
             # launching complicates automatic removal of the temporary file.
