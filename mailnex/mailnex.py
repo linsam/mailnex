@@ -2210,7 +2210,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if filename[0] == '|':
             # TODO: Support opening in the background (maybe by checking for
             # an ampersand at the end of the program?)
-            res = self.runAProgramWithInput([filename[1:]], data)
+            res = self.runAProgramWithInput(['/bin/sh', '-c', filename[1:]], data)
             return
         with open(filename, "w")  as outfile:
             outfile.write(data)
