@@ -93,6 +93,8 @@ from . import settings
 import subprocess
 import string
 import shutil
+from cStringIO import StringIO
+from io import BytesIO
 try:
     import gpgme
     haveGpgme = True
@@ -164,6 +166,21 @@ class Context(object):
 
         # Some parts of the program might put other stuff in here. For
         # example, the exception trace wrapper.
+
+class MyGenerator(email.generator.Generator):
+    """Generator like the default email library generator, except without re-packing headers when signed.
+
+    The default generator treats multipart/signed specially: it keeps the
+    headers unmodified by disabling header wrapping when flattening.
+
+    Unfortunately, we calculate the signature before packing into a
+    multipart/signed, so the no-wrap doesn't occur; our signature is thus
+    calculated on wrapped headers, and disabling wrapping to make things
+    unmodified actually results in modifying them and, thus, invalidating our
+    signatures.
+    """
+    def _handle_multipart_signed(self, msg):
+        return self._handle_multipart(msg)
 
 class nodate(object):
     """Stand-in for date objects that aren't dates"""
@@ -3462,9 +3479,10 @@ class Cmd(cmdprompt.CmdPrompt):
             # consist of headers with unix (\n) line endings and a payload with
             # Windows/network line endings (\r\n).
             convlines = []
-            # TODO: don't use as_string, use a flattener so we don't get
-            # escaped 'From' lines
-            for line in m.as_string().split(b'\n'):
+            fp = StringIO()
+            gen = MyGenerator(fp)
+            gen.flatten(m)
+            for line in fp.getvalue().split(b'\n'):
                 # So, RFC822 dictates that the lines should be network
                 # terminated (\r\n), but doing so would result in quite a mix
                 # here, since the rest of python's email package use native
@@ -3519,10 +3537,12 @@ class Cmd(cmdprompt.CmdPrompt):
                     newmsg[key] = m[key]
             m = newmsg
 
-
+        fp = StringIO()
+        gen = MyGenerator(fp)
+        gen.flatten(m)
 
         #print("Debug: Your message is:")
-        #print(m.as_string())
+        #print(fp.getvalue())
         #return False
 
         s = subprocess.Popen([
@@ -3533,7 +3553,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: Support delivery status notification settings? "-N" "failure, delay, success, never"
             ] + recipients,
             stdin=subprocess.PIPE)
-        resstr = s.communicate(m.as_string())
+        resstr = s.communicate(fp.getvalue())
         res = s.wait()
         if res == 0:
             return True
