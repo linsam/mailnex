@@ -616,8 +616,7 @@ def processImapData(text, options):
         In a quote, a backslash provides for denoting a literal. E.g. "\"" is
         a string whose value is a double quote.
 
-    This implementation is currently incomplete. It doesn't handle the \ escape
-    in quoted strings and accepts quotes anywhere.
+    This implementation is currently incomplete. It accepts quotes anywhere.
     """
 
 
@@ -640,6 +639,12 @@ def processImapData(text, options):
         c = text[pos]
         if options.debug.parse:
             print(" Processing {} @ {}".format(repr(c), pos))
+        if c == '\\' and inquote:
+            # Backslash *should* only precede a doublequote or a backslash,
+            # but we'll let it escape anything
+            pos += 1
+            curtext.append(text[pos])
+            continue
         if c == ' ' or c == '\t':
             if inquote:
                 if options.debug.parse:
