@@ -201,7 +201,11 @@ def getResultPart(part, data):
     e.g.
         [key1, val1, key2, val2, key3, val3...]
 
-    Currently, this is a linear search, case insensitive."""
+    Currently, this is a linear search, case insensitive.
+
+    If values will be looked up often, using dictifyList with
+    "preserveValue=True" may be more performant.
+    """
     part = part.lower()
     for i in range(0,len(data),2):
         if data[i].lower() == part:
@@ -547,7 +551,17 @@ def flattenStruct(struct):
     pickparts(struct)
     return parts
 
-def dictifyList(lst):
+def dictifyList(lst, preserveValue=False):
+    """Convert a flat list of key-value into a dictionary.
+
+    E.g
+        [key1, val1, key2, val2, key3, val3...]
+    becomes:
+        {key1: val1, key2: val2, key3: val3...}
+
+    If the array is small and a value is only pulled once or twice, using
+    getResultPart may be more performant.
+    """
     # convert to list of key,val pairs, then to dictionary
     # See http://stackoverflow.com/a/1625023/4504704 (answer to
     # http://stackoverflow.com/questions/1624883/alternative-way-to-split-a-list-into-groups-of-n)
@@ -565,7 +579,16 @@ def dictifyList(lst):
         # We didn't have a list, so return an empty dictionary (no key/value
         # pairs)
         return {}
-    return dict(zip(*(iter(map(lambda x: x.lower(),lst)),)*2))
+    if not preserveValue:
+        return dict(zip(*(iter(map(lambda x: x.lower(),lst)),)*2))
+    i = [1]
+    def lowerother(val):
+        i[0] += 1
+        if i[0] % 2 == 0:
+            return val.lower()
+        return val
+    return dict(zip(*(iter(map(lambda x: lowerother(x),lst)),)*2))
+
 
 def processImapData(text, options):
     """Process a set of IMAP data items
@@ -1672,8 +1695,8 @@ class Cmd(cmdprompt.CmdPrompt):
 
                 data = processImapData(data[0][1], self.C.settings)
 
-                headers = data[0][1]
-                headers = processHeaders(headers)
+                headertext = getResultPart('body[header]', data[0])
+                headers = processHeaders(headertext)
                 print("\r%i"%i, end='')
                 sys.stdout.flush()
                 doc = xapian.Document()
@@ -1701,11 +1724,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 if 'message-id' in headers:
                     termgenerator.index_text(headers['message-id'][-1],1,'M')
 
-                termgenerator.index_text(data[0][3])
+                termgenerator.index_text(getResultPart('body[1]', data[0]))
                 # Support full document retrieval but without reference info
                 # (we'll have to fully rebuild the db to get new stuff. TODO:
                 # store UID and such)
-                doc.set_data(data[0][1])
+                doc.set_data(headertext)
                 idterm = u"Q" + str(i)
                 doc.add_boolean_term(idterm)
                 db.replace_document(idterm, doc)
@@ -1794,19 +1817,9 @@ class Cmd(cmdprompt.CmdPrompt):
                         # re-transfer it over the internet again.
                         data = self.C.connection.fetch(index, '(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])' % (messageTag, messageTag, signatureTag))
                         dpart = processImapData(data[0][1], self.C.settings)[0]
-                        # TODO: dictifyList makes everything lowercase, which
-                        # is good for matching keys, but corrupts the message
-                        # and signature. For now, we'll just ensure that the
-                        # parts came back in the order we asked, but I don't
-                        # think it is guaranteed by the IMAP spec.
-                        #dpart = dictifyList(dpart[0])
-                        assert dpart[0].upper() == "BODY[%s.MIME]" % messageTag
-                        assert dpart[2].upper() == "BODY[%s]" % messageTag
-                        assert dpart[4].upper() == "BODY[%s]" % signatureTag
-                        #messageData = dpart['body[%s.mime]' % messageTag] + dpart['body[%s]' % messageTag]
-                        messageData = dpart[1] + dpart[3]
-                        #sigData = dpart['body[%s]' % signatureTag]
-                        sigData = dpart[5]
+                        dpart = dictifyList(dpart, preserveValue=True)
+                        messageData = dpart['body[%s.mime]' % messageTag] + dpart['body[%s]' % messageTag]
+                        sigData = dpart['body[%s]' % signatureTag]
 
                         ctx = gpgme.Context()
                         import io
@@ -2612,9 +2625,9 @@ class Cmd(cmdprompt.CmdPrompt):
         content = b""
         for index in msgs:
             data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-            parts = processImapData(data[0][1], self.C.settings)
-            headers = parts[0][1]
-            body = parts[0][3]
+            parts = processImapData(data[0][1], self.C.settings)[0]
+            headers = getResultPart('BODY[HEADER]', parts)
+            body = getResultPart('BODY[TEXT]', parts)
             #content = headers.encode('utf-8') + body.encode('utf-8')
             content += b"Message {}:\n".format(index) + str(headers) + str(body)
         # TODO: Process content for control chars?
