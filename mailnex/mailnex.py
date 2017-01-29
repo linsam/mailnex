@@ -350,13 +350,15 @@ class structureRoot(object):
         return "<structure %s/%s>" % (self.type_, self.subtype)
 
 class structureMultipart(structureRoot):
-    def __init__(self, tag, subtype, parameters, disposition, language, location):
+    def __init__(self, tag, subtype, parameters, disposition=None, language=None, location=None, *newargs):
         """Create a multipart entry.
 
         @param tag name of this part (e.g. 1.5.3 for the third part of the fifth part of the first part)
         @param subtype variant of multipart (e.g. mixed, signed, alternative)
         (others as per IMAP spec)
         """
+        # TODO: Log if we got newargs? The spec says future versions may have
+        # more positional arguments, and we must handle but ignore them.
         structureRoot.__init__(self, tag, "multipart", subtype)
         # parameters
         if parameters:
@@ -391,7 +393,8 @@ class structureLeaf(structureRoot):
         self.size = size # octets of encoded message
         if type_.lower() == "text":
             self.lines, args = args[0], args[1:]
-        self.md5, self.disposition, self.language, self.location = args
+        # default extra positional parts to be None, but fill if available
+        self.md5, self.disposition, self.language, self.location = (args + (None,)*4)[:4]
 
 class structureMessage(structureRoot):
     def __init__(self, tag, type_, subtype, attrs, bid, description, encoding, size, envelope, subStruct, lines, md5, disposition, language, location):
