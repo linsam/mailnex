@@ -1682,7 +1682,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if i > C.lastMessage:
                 break
             try:
-                data = M.fetch(i, '(UID BODYSTRUCTURE)')
+                #data = M.fetch(i, '(UID BODYSTRUCTURE)')
                 #print(typ)
                 #print(data)
                 # TODO: use BODYSTRUCTURE to find text/plain subsection and fetch that instead of guessing it will be '1'.
@@ -1733,6 +1733,12 @@ class Cmd(cmdprompt.CmdPrompt):
                 doc.add_boolean_term(idterm)
                 db.replace_document(idterm, doc)
                 i += 1
+            except KeyboardInterrupt:
+                # TODO: There is usually an outstanding fetch at this point
+                # that would be good to consume somehow; otherwise we later
+                # get a warning about receiving data for an unknown request.
+                print("\n\nCanceled")
+                return
             finally:
                 pass
         print()
