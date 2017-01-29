@@ -3423,6 +3423,19 @@ class Cmd(cmdprompt.CmdPrompt):
         # and the second fails?)
         if 'bcc' in m:
             del m['bcc']
+        # Clean up other headers. If there is no value, probably shouldn't
+        # send the header. Note that 'From:' and 'Date:' are required. The
+        # addressing fields (from, to, cc, bcc, sender, etc) must have at
+        # least 1 address if the header is present (ignoring obsolete syntax)
+        if len(tos) == 0:
+            del m['to']
+        if len(ccs) == 0:
+            del m['cc']
+        if 'subject' in m and len(m['subject']) == 0:
+            # Subject, unlike addressing fields, may be present and empty. Not
+            # sure if we should prefer empty subject or no subject, or how to
+            # let the user decide.
+            del m['subject']
 
         # Now that we have a recipient list and final on-the-wire headers, we
         # can deal with encryption.
