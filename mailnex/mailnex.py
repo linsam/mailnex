@@ -813,6 +813,79 @@ def encodeEmail(fullmail):
     p2 = (str(email.header.Header(parts[0],'utf-8')), parts[1])
     return email.utils.formataddr(p2)
 
+#password = getPassword("smtp", user, host, port)
+def getPassword(settings, protocol, user, host, port):
+    """Attempt to lookup a password for plain/login authentication.
+
+    Will walk through agent-shell-lookup settings, keyrings, and finally
+    prompting.
+
+    Returns a 3-tuple of (method, savable, password) where method is a string
+    about how the password was obtained (agent, keyring, or interactive
+    currently defined, others may exist later), savable is a bool indicating
+    if the caller should offer to save the password into a keyring if logging
+    in is successful (typically only True if the password was entered
+    interactively, and at some point, based on the user not indicating that
+    they don't want to be prompted), and password is the string of the actual
+    password.
+    """
+    agentCmd = None
+    # NOTE: When updating how passwords or other auth is looked
+    # up, don't forget to update help_authentication()
+    lookups = [
+            "agent-shell-lookup-{}/{}@{}:{}".format(protocol, user, host, port),
+            "agent-shell-lookup-{}/{}@{}".format(protocol, user, host),
+            "agent-shell-lookup-{}@{}".format(user, host),
+            "agent-shell-lookup-{}".format(host),
+            "agent-shell-lookup",
+            ]
+    for l in lookups:
+        if settings.debug.general:
+            print("Checking for", l)
+        if l in settings:
+            agentCmd = getattr(settings, l).value
+            if settings.debug.general:
+                print(" Found it", agentCmd)
+            break
+    cantSave = False
+    if agentCmd and agentCmd != "":
+        cmdarr = ["/bin/sh", "-c", agentCmd]
+        if settings.debug.general:
+            print(" Running", cmdarr)
+        s = subprocess.Popen(cmdarr, stdout=subprocess.PIPE)
+        pass_ = s.stdout.read(4096)
+        s.stdout.close()
+        res = s.wait()
+        if res != 0:
+            print(" agent-shell-lookup for this account did not succeed.")
+            pass_ = None
+        elif len(pass_) > 4095:
+            print(" Password command gave back 4k or more characters; assuming not valid and moving on")
+            pass_ = None
+        else:
+            if pass_.endswith('\n'):
+                # Strip off EOL, it isn't part of the password
+                # itself. Should tell users if their passsword
+                # actually ends with LF, to put an extra LF in the
+                # output.
+                pass_ = pass_[:-1]
+            #print("Password",pass_)
+            method = "agent"
+    else:
+        try:
+            pass_ =  keyring.get_password("%s://%s" % (protocol, host), user)
+            method = "keyring"
+        except RuntimeError:
+            pass_ = None
+            print("Info: no password managers found; cannot save your password for automatic login")
+            cantSave = True
+    prompt_to_save = False
+    if not pass_:
+        pass_ = getpass.getpass()
+        prompt_to_save = True
+        method = "interactive"
+    return method, prompt_to_save, pass_
+
 class Cmd(cmdprompt.CmdPrompt):
     def help_hidden_commands(self):
         print("The following are hidden commands:")
@@ -1362,58 +1435,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         raise Exception("Failed to secure connection!")
                 if not user:
                     user = getpass.getuser()
-                agentCmd = None
-                # NOTE: When updating how passwords or other auth is looked
-                # up, don't forget to update help_authentication()
-                lookups = [
-                        "agent-shell-lookup-{}/{}@{}:{}".format(proto, user, host, port),
-                        "agent-shell-lookup-{}/{}@{}".format(proto, user, host),
-                        "agent-shell-lookup-{}@{}".format(user, host),
-                        "agent-shell-lookup-{}".format(host),
-                        "agent-shell-lookup",
-                        ]
-                for l in lookups:
-                    if self.C.settings.debug.general:
-                        print("Checking for", l)
-                    if l in self.C.settings:
-                        agentCmd = getattr(self.C.settings, l).value
-                        if self.C.settings.debug.general:
-                            print(" Found it", agentCmd)
-                        break
-                cantSave = False
-                if agentCmd and agentCmd != "":
-                    cmdarr = ["/bin/sh", "-c", agentCmd]
-                    if self.C.settings.debug.general:
-                        print(" Running", cmdarr)
-                    s = subprocess.Popen(cmdarr, stdout=subprocess.PIPE)
-                    pass_ = s.stdout.read(4096)
-                    s.stdout.close()
-                    res = s.wait()
-                    if res != 0:
-                        print(" agent-shell-lookup for this account did not succeed.")
-                        pass_ = None
-                    elif len(pass_) > 4095:
-                        print(" Password command gave back 4k or more characters; assuming not valid and moving on")
-                        pass_ = None
-                    else:
-                        if pass_.endswith('\n'):
-                            # Strip off EOL, it isn't part of the password
-                            # itself. Should tell users if their passsword
-                            # actually ends with LF, to put an extra LF in the
-                            # output.
-                            pass_ = pass_[:-1]
-                        #print("Password",pass_)
-                else:
-                    try:
-                        pass_ =  keyring.get_password("imap://%s" % host, user)
-                    except RuntimeError:
-                        pass_ = None
-                        print("Info: no password managers found; cannot save your password for automatic login")
-                        cantSave = True
-                prompt_to_save = False
-                if not pass_:
-                    pass_ = getpass.getpass()
-                    prompt_to_save = True
+                _, prompt_to_save, pass_ = getPassword(self.C.settings, proto, user, host, port)
                 print("Info: Logging in")
                 # TODO: Retry N times? Or at least, prompt for password entry
                 # if we got the password from an agent or keyring that didn't
