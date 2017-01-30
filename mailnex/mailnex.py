@@ -94,6 +94,7 @@ import subprocess
 import string
 import shutil
 from cStringIO import StringIO
+import io
 from io import BytesIO
 try:
     import gpgme
@@ -885,6 +886,78 @@ def getPassword(settings, protocol, user, host, port):
         prompt_to_save = True
         method = "interactive"
     return method, prompt_to_save, pass_
+
+def sigresToString(ctx, sig):
+    if sig.summary & gpgme.SIGSUM_VALID:
+        sigres = "\033[32mvalid\033[0m"
+    else:
+        sigres = "\033[31mbad\033[0m"
+        sigsum = []
+        if sig.summary & gpgme.SIGSUM_KEY_REVOKED:
+            sigsum.append("key revoked")
+        if sig.summary & gpgme.SIGSUM_KEY_EXPIRED:
+            sigsum.append("key expired")
+        if sig.summary & gpgme.SIGSUM_SIG_EXPIRED:
+            sigsum.append("sig expired")
+        if sig.summary & gpgme.SIGSUM_KEY_MISSING:
+            sigsum.append("key missing")
+        if sig.summary & gpgme.SIGSUM_CRL_MISSING:
+            sigsum.append("crl missing")
+        if sig.summary & gpgme.SIGSUM_CRL_TOO_OLD:
+            sigsum.append("crl too old")
+        if sig.summary & gpgme.SIGSUM_BAD_POLICY:
+            sigsum.append("bad policy")
+        if sig.summary & gpgme.SIGSUM_SYS_ERROR:
+            sigsum.append("sys error")
+        knownBits = gpgme.SIGSUM_VALID | gpgme.SIGSUM_GREEN | gpgme.SIGSUM_RED | gpgme.SIGSUM_KEY_REVOKED | gpgme.SIGSUM_KEY_EXPIRED | gpgme.SIGSUM_SIG_EXPIRED | gpgme.SIGSUM_KEY_MISSING | gpgme.SIGSUM_CRL_MISSING | gpgme.SIGSUM_CRL_TOO_OLD | gpgme.SIGSUM_BAD_POLICY | gpgme.SIGSUM_SYS_ERROR
+        remainBits = sig.summary & ~knownBits
+        if remainBits:
+            sigsum.append("%x" % remainBits)
+        if len(sigsum):
+            sigres += "(%s)" % ", ".join(sigsum)
+    if sig.validity == gpgme.VALIDITY_UNKNOWN:
+        sigres += "(?)"
+    if sig.validity == gpgme.VALIDITY_UNDEFINED:
+        sigres += "(q)"
+    if sig.validity == gpgme.VALIDITY_NEVER:
+        sigres += "(\033[31mn\033[0m)"
+    if sig.validity == gpgme.VALIDITY_MARGINAL:
+        sigres += "(\033[33mm\033[0m)"
+    if sig.validity == gpgme.VALIDITY_FULL:
+        sigres += "(\033[32mf\033[0m)"
+    if sig.validity == gpgme.VALIDITY_ULTIMATE:
+        sigres += "(\033[34mu\033[0m)"
+    keys = []
+    for k in ctx.keylist(sig.fpr, True):
+        keys.append(k)
+    if len(keys) != 1:
+        # TODO: What if we get multiple matches for
+        # the FPR? For now, we'll show the FPR raw if
+        # we can't find it or find it isn't unique
+        sigres += " from %s" % sig.fpr
+    else:
+        key = keys[0]
+        # TODO: Some kind of check between from and
+        # the sig. Some notes:
+        #   * The message isn't strictly bad if the
+        #     sender or froms don't match, but it is
+        #     possibly odd.
+        #   * The header check /should/ be against the
+        #     contained message. E.g., if this sig is
+        #     in a forward-as-attachment message, then
+        #     the sender is likely NOT the signer, but
+        #     the original sender of the inner message
+        #     SHOULD be the signer.
+        #   * While we are at it, we should check
+        #     signed headers against unsigned headers,
+        #     or at least some of the relevant ones.
+        #     For example, enigmail will copy the
+        #     recipients and originators headers, as
+        #     well as subject and date, into the
+        #     signed portion to allow verification
+        #     that those headers weren't tampered.
+        sigres += " from %s %s" % (sig.fpr[-8:], key.uids[0].uid)
+    return sigres
 
 class Cmd(cmdprompt.CmdPrompt):
     def help_hidden_commands(self):
@@ -1968,81 +2041,11 @@ class Cmd(cmdprompt.CmdPrompt):
                         sigData = dpart['body[%s]' % signatureTag]
 
                         ctx = gpgme.Context()
-                        import io
                         msgdat = io.BytesIO(messageData)
                         sigdat = io.BytesIO(sigData)
                         ret = ctx.verify(sigdat, msgdat, None)
                         for sig in ret:
-                            if sig.summary & gpgme.SIGSUM_VALID:
-                                sigres = "\033[32mvalid\033[0m"
-                            else:
-                                sigres = "\033[31mbad\033[0m"
-                                sigsum = []
-                                if sig.summary & gpgme.SIGSUM_KEY_REVOKED:
-                                    sigsum.append("key revoked")
-                                if sig.summary & gpgme.SIGSUM_KEY_EXPIRED:
-                                    sigsum.append("key expired")
-                                if sig.summary & gpgme.SIGSUM_SIG_EXPIRED:
-                                    sigsum.append("sig expired")
-                                if sig.summary & gpgme.SIGSUM_KEY_MISSING:
-                                    sigsum.append("key missing")
-                                if sig.summary & gpgme.SIGSUM_CRL_MISSING:
-                                    sigsum.append("crl missing")
-                                if sig.summary & gpgme.SIGSUM_CRL_TOO_OLD:
-                                    sigsum.append("crl too old")
-                                if sig.summary & gpgme.SIGSUM_BAD_POLICY:
-                                    sigsum.append("bad policy")
-                                if sig.summary & gpgme.SIGSUM_SYS_ERROR:
-                                    sigsum.append("sys error")
-                                knownBits = gpgme.SIGSUM_VALID | gpgme.SIGSUM_GREEN | gpgme.SIGSUM_RED | gpgme.SIGSUM_KEY_REVOKED | gpgme.SIGSUM_KEY_EXPIRED | gpgme.SIGSUM_SIG_EXPIRED | gpgme.SIGSUM_KEY_MISSING | gpgme.SIGSUM_CRL_MISSING | gpgme.SIGSUM_CRL_TOO_OLD | gpgme.SIGSUM_BAD_POLICY | gpgme.SIGSUM_SYS_ERROR
-                                remainBits = sig.summary & ~knownBits
-                                if remainBits:
-                                    sigsum.append("%x" % remainBits)
-                                if len(sigsum):
-                                    sigres += "(%s)" % ", ".join(sigsum)
-                            if sig.validity == gpgme.VALIDITY_UNKNOWN:
-                                sigres += "(?)"
-                            if sig.validity == gpgme.VALIDITY_UNDEFINED:
-                                sigres += "(q)"
-                            if sig.validity == gpgme.VALIDITY_NEVER:
-                                sigres += "(\033[31mn\033[0m)"
-                            if sig.validity == gpgme.VALIDITY_MARGINAL:
-                                sigres += "(\033[33mm\033[0m)"
-                            if sig.validity == gpgme.VALIDITY_FULL:
-                                sigres += "(\033[32mf\033[0m)"
-                            if sig.validity == gpgme.VALIDITY_ULTIMATE:
-                                sigres += "(\033[34mu\033[0m)"
-                            keys = []
-                            for k in ctx.keylist(sig.fpr, True):
-                                keys.append(k)
-                            if len(keys) != 1:
-                                # TODO: What if we get multiple matches for
-                                # the FPR? For now, we'll show the FPR raw if
-                                # we can't find it or find it isn't unique
-                                sigres += " from %s" % sig.fpr
-                            else:
-                                key = keys[0]
-                                # TODO: Some kind of check between from and
-                                # the sig. Some notes:
-                                #   * The message isn't strictly bad if the
-                                #     sender or froms don't match, but it is
-                                #     possibly odd.
-                                #   * The header check /should/ be against the
-                                #     contained message. E.g., if this sig is
-                                #     in a forward-as-attachment message, then
-                                #     the sender is likely NOT the signer, but
-                                #     the original sender of the inner message
-                                #     SHOULD be the signer.
-                                #   * While we are at it, we should check
-                                #     signed headers against unsigned headers,
-                                #     or at least some of the relevant ones.
-                                #     For example, enigmail will copy the
-                                #     recipients and originators headers, as
-                                #     well as subject and date, into the
-                                #     signed portion to allow verification
-                                #     that those headers weren't tampered.
-                                sigres += " from %s %s" % (sig.fpr[-8:], key.uids[0].uid)
-
+                            sigres = sigresToString(ctx, sig)
             if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                 extra += " (%s)" % struct.disposition[0]
 # mailx shows attachments inline if they are text or message type. We
@@ -3648,7 +3651,6 @@ class Cmd(cmdprompt.CmdPrompt):
             key = keys[0]
             ctx.signers = (key,)
             ctx.armor = True
-            import io
             # Convert all lines to have the same line ending, else signing
             # will be bad. At the moment, on Ubuntu 16.04, the message will
             # consist of headers with unix (\n) line endings and a payload with
