@@ -1240,9 +1240,48 @@ class Cmd(cmdprompt.CmdPrompt):
         startlineno would be 1.
         lines is an iterable; it could be a file object or a list, etc.
         """
-        for lineno, line in enumerate(lines, 1):
-            line = line.decode('utf-8')
-            if line.strip() == "":
+        inaccount = None
+        accounts = self.C.accounts
+        postConfFolder = None
+        for lineno, line in enumerate(lines, startlineno):
+            try:
+                line = line.decode('utf-8')
+            except UnicodeEncodeError as err:
+                print("Error processing line {} of {}: {}".format(lineno, fileName, err))
+                continue
+            if inaccount:
+                if line.strip() == "}":
+                    inaccount = None
+                elif line.strip().startswith("account"):
+                    print("Error in config line {}. Accounts cannot be nested".format(lineno))
+                else:
+                    accounts[inaccount].append((confFile,lineno,line.rstrip('\r\n').encode('utf-8')))
+            elif line.strip().startswith("account"):
+                m = re.match(r' *account *([^ ]*) *\{ *', line)
+                if not m:
+                    m = re.match(r'account *([^ ]*)', line.strip())
+                    if not m:
+                        print("Failed to parse account command in line {}".format(lineno))
+                        continue
+                    name = m.groups()[0]
+                    if not name in accounts:
+                        print("Failed to run account commands: no account {} yet.".format(repr(name)))
+                        continue
+                    ac = accounts[name]
+                    if len(ac):
+                        firstLine = ac[0]
+                        filename = firstLine[0]
+                        startline = firstLine[1]
+                        res = self.processConfig(filename, startline, map(lambda x: x[2], ac))
+                        if res:
+                            postConfFolder = res
+                    continue
+
+                name = m.groups()[0]
+                print("New account found: {}".format(name))
+                accounts[name] = []
+                inaccount = name
+            elif line.strip() == "":
                 # Blank line
                 continue
             elif line.strip().startswith('#'):
@@ -1315,6 +1354,40 @@ class Cmd(cmdprompt.CmdPrompt):
         compl = EmailCompleter()
         compl.settings = self.C.settings
         return compl
+
+    @showExceptions
+    def do_account(self, args):
+        """List defined accounts, or run commands for an account
+
+        account             list accounts
+        account -v          list accounts and show account settings
+        account NAME        invoke the account named NAME
+        """
+        stripArgs = args.strip()
+        if len(stripArgs) == 0 or stripArgs == '-v':
+            # Display accounts list
+            for i in self.C.accounts.keys():
+                print(" {}".format(i))
+                if stripArgs == "-v":
+                    for line in self.C.accounts[i]:
+                        print("  {}:{}: {}".format(line[0], line[1], line[2].decode('utf-8')))
+        else:
+            #Select an account
+            if ' ' in stripArgs:
+                print("Specify only one account")
+                return
+            name = stripArgs
+            if not name in self.C.accounts:
+                print("No account named {}.".format(repr(name)))
+                return
+            ac = self.C.accounts[name]
+            if len(ac):
+                firstLine = ac[0]
+                filename = firstLine[0]
+                startline = firstLine[1]
+                postFolder = self.processConfig(filename, startline, map(lambda x: x[2], ac))
+                if postFolder:
+                    self.do_folder(postFolder)
 
     @showExceptions
     def do_testq(self, text):
@@ -4850,6 +4923,7 @@ def interact(invokeOpts):
     C.settings = options
     postConfFolder = None
     global confFile
+    cmd.C.accounts = {}
     if invokeOpts.config:
         confFile = invokeOpts.config
     if confFile:
