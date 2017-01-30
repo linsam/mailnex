@@ -1230,6 +1230,43 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.C.currentMessage = self.C.nextMessage
                 # print will update nextMessage for us
                 self.do_print("")
+    def processConfig(self, fileName, startlineno, lines):
+        """Process configuration lines.
+
+        Called when processing a configuration file or a part of one (e.g. an
+        account specification)
+
+        fileName and startlineno are used for printing diagnostics. Normally
+        startlineno would be 1.
+        lines is an iterable; it could be a file object or a list, etc.
+        """
+        for lineno, line in enumerate(lines, 1):
+            line = line.decode('utf-8')
+            if line.strip() == "":
+                # Blank line
+                continue
+            elif line.strip().startswith('#'):
+                #print("comment")
+                continue
+            elif line.strip().startswith("set "):
+                #print("setting", line.strip()[4:])
+                m = re.match(r' *set *([^ =]+) *= *(.+)', line)
+                if not m:
+                    print("Failed to parse set command in line %i" % lineno)
+                    continue
+                key, value = m.groups()
+                try:
+                    self.C.settings[key] = value
+                except KeyError:
+                    self.C.settings.addOption(settings.UserOption(key, None))
+                    self.C.settings[key] = value
+
+            elif line.strip().startswith("folder "):
+                postConfFolder = line.strip()[7:]
+            else:
+                print("unknown command in line %i" % lineno)
+        return postConfFolder
+
     def getAddressCompleter(self):
         """Return a Completer class that will complete email addresses based on current preferences.
 
@@ -4819,31 +4856,7 @@ def interact(invokeOpts):
         # Walk through the config file
         with open(confFile) as conf:
             print("reading conf from", confFile)
-            for lineno, line in enumerate(conf, 1):
-                line = line.decode('utf-8')
-                if line.strip() == "":
-                    # Blank line
-                    continue
-                elif line.strip().startswith('#'):
-                    #print("comment")
-                    continue
-                elif line.strip().startswith("set "):
-                    #print("setting", line.strip()[4:])
-                    m = re.match(r' *([^ =]+) *= *(.+)', line[4:])
-                    if not m:
-                        print("Failed to parse set command in line %i" % lineno)
-                        continue
-                    key, value = m.groups()
-                    try:
-                        C.settings[key] = value
-                    except KeyError:
-                        C.settings.addOption(settings.UserOption(key, None))
-                        C.settings[key] = value
-
-                elif line.strip().startswith("folder "):
-                    postConfFolder = line.strip()[7:]
-                else:
-                    print("unknown command in line %i" % lineno)
+            postConfFolder = cmd.processConfig(confFile, 1, conf)
     C.t = blessings.Terminal()
     if postConfFolder:
         cmd.do_folder(postConfFolder)
