@@ -3610,6 +3610,51 @@ class Cmd(cmdprompt.CmdPrompt):
         #print(fp.getvalue())
         #return False
 
+        if('smtp' in self.C.settings and self.C.settings.smtp.value):
+            # Use SMTP
+            # Note: port 25 is plain SMTP, 465 is TLS wrapped plain SMTP, and
+            # 587 is SUBMIT (SUBMISSION). Both 25 and 587 are plain text until
+            # STARTTLS is used. If no protocol is given, we should probably
+            # use SUBMISSION by default.
+            constr = self.C.settings.smtp.value
+            if not constr.startswith("smtps://"):
+                raise Exception("Only support smtps for now")
+            # TODO: handle SMTP URIs more formally. See at least RFC3986
+            # (URI), RFC5092 (IMAP-URI) and draft-melnikov-smime-msa-to-mda-04
+            # or draft-earhart-url-smtp for details of proposed URL schemes
+            # and their basis
+            rem = re.match(r'smtps://([^@]*@)?([^:/]*)(:[^/]*)?/?', constr)
+            if not rem:
+                raise Exception("failed to match")
+            user, host, port = rem.groups()
+            print("user: {}\nhost: {}\nport: {}".format(user,host,port))
+            if user:
+                # Strip off @
+                user = user[:-1]
+                if ':' in user:
+                    raise Exception("Don't put passwords into the URL")
+                if ';' in user:
+                    raise Exception("We don't yet support modifiers")
+            if port:
+                port = int(port[1:])
+            else:
+                port = 465
+            import smtplib
+            # TODO: Allow overriding CA somehow
+            # TODO: Allow user certificates
+            s=smtplib.SMTP_SSL(host, port)
+            if user:
+                # TODO: Allow saving password to keyring
+                _, _, password = getPassword(self.C.settings, "smtps", user, host, port)
+                s.login(user, password)
+            # TODO: What if multiple from? Should use sender. Or, should we
+            # allow explicitly setting the smtp from value?
+            res = s.sendmail(m['from'], recipients, fp.getvalue())
+            for addr in res.keys():
+                # This could be done better. Also use error reporting
+                print("Error: Sending to {} failed".format(addr))
+            s.quit()
+            return True
         s = subprocess.Popen([
             # TODO: Allow the user to override this somehow
             "sendmail", # Use sendmail to, well, send the mail
@@ -4718,6 +4763,19 @@ def getOptionsSet():
     options.addOption(settings.StringOption("PAGER", "internal"))
     options.addOption(settings.StringOption("pgpkey", None, doc="PGP key search string. Can be an email address, UID, or fingerprint as recognized by gnupg. When unset, try to use the from field."))
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
+    options.addOption(settings.StringOption('smtp', None, doc="""Set to an smtp/submission URI to send messages via SMTP instead of local sendmail agent.
+
+        Supported URL schemes are "smtp://", "smtps://", and "submission://".
+        Of the three, 'submission' is recommended.
+
+        The rest is similar to imap scheme URLs used in the folder setting and
+        command. If a username isn't specified here, an attempt will be made
+        to send the message without a login on the server. If a username is
+        specified, password retrieval will ocur like with imap, but using
+        smtp, smtps, or submission as the protocol part.
+
+        NOTE: This feature is in progress. Only 'smtps' is actually supported so far.
+        """))
     return options
 
 def instancemethod(func, obj, cls):
