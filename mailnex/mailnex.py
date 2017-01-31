@@ -164,6 +164,10 @@ class Context(object):
         # Instance of blessings.Terminal or equivalent terminal formatting
         # package.
         self.t = None
+        # Message cache. Currently the key is the submessage identifier, and
+        # the value is the text content. E.G. mime headers for message 123
+        # part 4 would be key '123.4.MIME'
+        self.cache = {}
 
         # Some parts of the program might put other stuff in here. For
         # example, the exception trace wrapper.
@@ -362,7 +366,7 @@ class structureMultipart(structureRoot):
         # more positional arguments, and we must handle but ignore them.
         structureRoot.__init__(self, tag, "multipart", subtype)
         # parameters
-        if parameters:
+        if parameters and not isinstance(parameters, dict):
             self.parameters = dictifyList(parameters)
         else:
             self.parameters = parameters
@@ -499,6 +503,35 @@ def unpackStruct(data, options, depth=1, tag="", predesc=""):
                     extra = " (inline)"
             if options.debug.struct:
                 print("%s   %s%s/%s%s" % (tag, predesc, data[0], data[1], extra))
+    return this
+
+def unpackStructM(data, options, depth=1, tag="", predesc=""):
+    """Recursively unpack the structure of a message (by walking through a message)
+
+    @param data email message object
+    @depth starting depth (may be used for indenting output, or for debugging)
+    @tag current identifier of parent. For the first call, this should be the message ID. It will be dot separated for sub parts.
+    @predesc prefix description. Mostly used internally for when we hit a message/rfc822.
+    @return array of parts, which may contain array of parts.
+    """
+    extra = ""
+    this = None
+    if data.is_multipart():
+        # First pass, ignore most of the elements
+        this = structureMultipart(tag, data.get_content_subtype(), dict(data.get_params()))
+        r = data.get_payload()
+        j = 1
+        for submessage in r:
+            this.addSub(unpackStructM(submessage, options, depth + 1, tag + '.' + str(j)))
+            j += 1
+    else:
+        # TODO If we are message/rfc822, then we have further subdivision!
+        # For now, just end it here.
+        this = structureLeaf(tag, data.get_content_maintype(), data.get_content_subtype(), None, None, None, None, None, None)
+        if 'cache' in options:
+            headers = "\n".join(map(lambda x: "{}: {}".format(*x), data.items()))
+            options['cache'][tag+'.MIME'] = headers
+            options['cache'][tag] = data.get_payload()
     return this
 
 def flattenStruct(struct):
@@ -2009,6 +2042,35 @@ class Cmd(cmdprompt.CmdPrompt):
             extra = ""
             skip = False
             sigres = None
+            secondaryStruct = None
+            # TODO: What are protected-headers="v1"?
+            if struct.type_ == "multipart" and struct.subtype == 'encrypted':
+                p = struct.parameters
+                if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-encrypted':
+                    # TODO: What if the message doesn't have the protocol
+                    # parameter but otherwise follows the protocol?
+                    if haveGpgme:
+                        inner = struct.tag.split('.')[1:]
+                        encpart = ".".join(inner + ['2'])
+                        # TODO: see fetch cache comment in signed section, do
+                        # the same here maybe?
+                        data = self.C.connection.fetch(index, '(BODY.PEEK[%s])' % (encpart))
+                        dpart = processImapData(data[0][1], self.C.settings)[0]
+                        message = dpart[1]
+                        ctx = gpgme.Context()
+                        msgdat = io.BytesIO(message)
+                        result = io.BytesIO()
+                        try:
+                            ret = ctx.decrypt_verify(msgdat, result)
+                        except gpgme.GpgmeError:
+                            pass
+                        else:
+                            for sig in ret:
+                                # TODO: Handle displaying multiple signatures
+                                sigres = sigresToString(ctx, sig)
+                            m = email.message_from_string(result.getvalue())
+                            secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + ".d")
+
             if struct.type_ == "multipart" and struct.subtype == "signed":
                 p = struct.parameters
                 if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-signature':
@@ -2045,6 +2107,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         sigdat = io.BytesIO(sigData)
                         ret = ctx.verify(sigdat, msgdat, None)
                         for sig in ret:
+                            # TODO: Handle displaying multiple signatures
                             sigres = sigresToString(ctx, sig)
             if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                 extra += " (%s)" % struct.disposition[0]
@@ -2096,23 +2159,35 @@ class Cmd(cmdprompt.CmdPrompt):
             if hasattr(struct, "subs"):
                 for i in struct.subs:
                     pickparts(i, allParts)
+            if secondaryStruct:
+                pickparts(secondaryStruct, allParts)
         pickparts(struct, allParts)
         structureString = u"\n".join(structureStrings)
+        resparts.append((None, None, structureString + '\r\n\r\n'))
         if len(fetchParts) == 0:
-            return []
+            resparts.append(('info', None, "No displayable parts"))
+            return resparts
         elif len(fetchParts) == 1 and len(fetchParts[0][0]) == 0:
             # This message doesn't have parts, so fetch "part 1" to get the
             # body
             fparts = ["BODY.PEEK[1]"]
-            parts = ["BODY[1]"]
-        else:
-            fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
-            parts = ["BODY[%s]" % s[0] for s in fetchParts]
-        data = self.C.connection.fetch(index, '(%s)' % " ".join(fparts))
-        resparts.append((None, None, structureString + '\r\n\r\n'))
-        dpart = processImapData(data[0][1], self.C.settings)
-        for p,o in zip(parts,fetchParts):
-            dstr = getResultPart(p, dpart[0])
+            fetchParts[0] = (u'1', fetchParts[0][1])
+        fetchPartsFromServer = filter(lambda x: "{}.{}".format(index,x[0]) not in self.C.cache, fetchParts)
+        fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchPartsFromServer]
+        if fparts:
+            data = self.C.connection.fetch(index, '(%s)' % " ".join(fparts))
+            dpart = processImapData(data[0][1], self.C.settings)
+        for o in fetchParts:
+            if o in fetchPartsFromServer:
+                if self.C.settings.debug.general:
+                    print("got part {} from server".format(o[0]))
+                dstr = getResultPart("BODY[%s]" % (o[0],), dpart[0])
+            elif "{}.{}".format(index, o[0]) in self.C.cache:
+                if self.C.settings.debug.general:
+                    print("got part {} from cache".format(o[0]))
+                dstr = self.C.cache["{}.{}".format(index, o[0])]
+            else:
+                raise Exception("didn't fetch or find in cache? {} {}".format(index, o))
             if o[1] is None and isinstance(o[1], structureMultipart):
                 o[1].encoding = None
                 o[1].attrs = None
@@ -2267,7 +2342,8 @@ class Cmd(cmdprompt.CmdPrompt):
             if self.C.settings.allpartlabels:
                 body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
             if self.C.settings.debug.general:
-                body += "encoding: " + part[1].encoding + "\r\n"
+                if part[1].encoding:
+                    body += "encoding: " + part[1].encoding + "\r\n"
                 body += "struct: " + repr(part[1].__dict__) + "\r\n"
             if headerstr != "":
                 body += headerstr
@@ -2569,6 +2645,8 @@ class Cmd(cmdprompt.CmdPrompt):
         #  * Multipart/signed: check signature in second part against message
         #  in first part (unless told not to), then display sig status and
         #  then try to show the first part using above rules (recurse into it)
+        #  * Multipart/encrypted:: for pgp, ignore first part, decrypt second
+        #  part.
         #  * text/plain: easy, show the text after undoing transfer encoding
         #  and converting charset to the output device
         #
