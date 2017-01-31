@@ -5011,6 +5011,10 @@ def interact(invokeOpts):
         with open(confFile) as conf:
             print("reading conf from", confFile)
             postConfFolder = cmd.processConfig(confFile, 1, conf)
+    if invokeOpts.account:
+        res = cmd.processConfig("cmdline account", 1, ['account {}'.format(invokeOpts.account)])
+        if res:
+            postConfFolder = res
     C.t = blessings.Terminal()
     if postConfFolder:
         cmd.do_folder(postConfFolder)
@@ -5031,6 +5035,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="command line mail user agent")
     parser.add_argument('--config', help='custom configuration file')
+    parser.add_argument('--account','-A', help='run account command after config file is read')
     args = parser.parse_args()
     interact(args)
 
