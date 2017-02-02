@@ -1429,7 +1429,7 @@ class Cmd(cmdprompt.CmdPrompt):
             elif line.strip().startswith("folder "):
                 postConfFolder = line.strip()[7:]
             else:
-                print("unknown command in line %i" % lineno)
+                print("unknown command %s in line %s:%i" % (repr(line),fileName,lineno))
         return postConfFolder
 
     def getAddressCompleter(self):
