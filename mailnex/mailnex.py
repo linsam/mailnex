@@ -3132,6 +3132,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.attachlist = []
                 # TODO: Allow a default setting for signing
                 self.pgpsign = False
+                self.pgpencrypt = False
                 self.C = context
                 self.message = message
                 self.singleprompt = prompt
@@ -3270,6 +3271,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     "  ~v         Edit message in external (visual) editor\n"
                     "  ~x         Quit composing. Don't send. Discard current progress.\n"
                     "  ~pgpsign   Sign the message with a PGP key (toggle)"
+                    "  ~pgpenc    Encrypt the message with PGP (toggle)"
                     )
                 #     Commands from heirloom-mailx:
                 # ~!command    = execute shell command
@@ -3392,6 +3394,17 @@ class Cmd(cmdprompt.CmdPrompt):
                         self.C.printInfo("Will sign the whole message with OpenPGP/MIME")
                     else:
                         self.C.printInfo("Will NOT sign the whole message with OpenPGP/MIME")
+            @noarg
+            def do_pgpenc(self, line):
+                if not haveGpgme:
+                    self.C.printError("Cannot sign; python-gpgme package missing")
+                else:
+                    # Invert sign. Python doesn't like "sign = !sign"
+                    self.pgpencrypt = self.pgpencrypt == False
+                    if self.pgpencrypt:
+                        self.C.printInfo("Will encrypt the whole message with OpenPGP/MIME")
+                    else:
+                        self.C.printInfo("Will NOT encrypt the whole message with OpenPGP/MIME")
             @noarg
             def do_px(self, line):
                 """Print raw message, escaping non-printing and lf characters."""
@@ -3680,6 +3693,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # let the user decide.
             del m['subject']
 
+        if editor.pgpencrypt and not editor.pgpsign:
+            print("Don't yet support ecryption without also signing. Enabling signature.")
+            editor.pgpsign = True
         # Now that we have a recipient list and final on-the-wire headers, we
         # can deal with encryption.
         # We'll handle Signature and Encryption at the same point
@@ -3758,39 +3774,84 @@ class Cmd(cmdprompt.CmdPrompt):
             indat = b"\r\n".join(convlines)
             indat = io.BytesIO(indat)
             outdat = io.BytesIO()
-            # TODO: Handle case where signing fails (bad passphrase, cancelled
-            # operation, etc).
-            sigs = ctx.sign(indat, outdat, gpgme.SIG_MODE_DETACH)
-            outdat = outdat.getvalue()
-            if len(sigs) != 1:
-                raise Exception("More than one sig found when only one requested!")
-            sig = sigs[0]
-            digests = {}
-            for sym in dir(gpgme):
-                if sym.startswith('MD_'):
-                    digests[getattr(gpgme,sym)] = sym[3:]
+            if editor.pgpencrypt:
+                rkeys = []
+                for r in recipients:
+                    kl = list(ctx.keylist(r))
+                    if len(kl) == 0:
+                        print("No key found for {}!".format(r))
+                        # TODO: Allow selection, re-edit, or at least save to
+                        # DEAD.LETTER
+                        return False
+                    if len(kl) > 1:
+                        print("Multiple keys ({}) found for {}!".format(len(kl), r))
+                        # TODO: Allow selection, re-edit, or at least save to
+                        # DEAD.LETTER
+                        return False
+                    print("Found key {} {} for {}".format(kl[0].subkeys[0].keyid, kl[0].uids[0].uid, r))
+                    rkeys.append(kl[0])
+                # TODO: If sender isn't also a recipient, but we are storing,
+                # should encrypt for sender as well. Should we encrypt to
+                # sender always anyway? Maybe make it an option.
+                res = ctx.encrypt_sign(rkeys, 0, indat, outdat)
+                outdat = outdat.getvalue()
+                print("res:", res)
+                newmsg = email.mime.Multipart.MIMEMultipart("encrypted", protocol="application/pgp-encrypted")
+                pgppart = email.mime.Base.MIMEBase("application", "pgp-encrypted")
+                pgppart.set_payload("Version: 1\r\n")
+                datpart = email.mime.Base.MIMEBase("application", "octet-stream", name="encrypted.asc")
+                datpart.add_header('Content-Disposition', 'inline', filename="encrypted.asc")
+                datpart.set_payload(outdat)
+                newmsg.attach(pgppart)
+                newmsg.attach(datpart)
+                # Copy some headers from the encrypted message to the outer. We'll do
+                # to, from, cc, bcc, and subject and a few others for now. Should
+                # possibly do others.
+                # TODO: What if the user doesn't want these headers divulged
+                # in-the-clear? The To, CC, and Bcc can be figured out via the
+                # PGP data stream, since the current version of pygpgme
+                # doesn't let us request hiding the the recipients. Date and
+                # From are required, but could be faked (at least from
+                # probably can). The rest could be left out to hide the
+                # information.
+                for key in m.keys():
+                    if key.lower() in ['to','from','cc','bcc','subject','date','message-id','user-agent','references','in-reply-to']:
+                        newmsg[key] = m[key]
+                m = newmsg
+            else:
+                # TODO: Handle case where signing fails (bad passphrase, cancelled
+                # operation, etc).
+                sigs = ctx.sign(indat, outdat, gpgme.SIG_MODE_DETACH)
+                outdat = outdat.getvalue()
+                if len(sigs) != 1:
+                    raise Exception("More than one sig found when only one requested!")
+                sig = sigs[0]
+                digests = {}
+                for sym in dir(gpgme):
+                    if sym.startswith('MD_'):
+                        digests[getattr(gpgme,sym)] = sym[3:]
 
-            if not sig.hash_algo in digests:
-                raise Exception("Unknown hashing algorithm used!")
-            sigstr = "pgp-" + digests[sig.hash_algo].lower()
+                if not sig.hash_algo in digests:
+                    raise Exception("Unknown hashing algorithm used!")
+                sigstr = "pgp-" + digests[sig.hash_algo].lower()
 
-            # Create the signing wrapper
-            newmsg = email.mime.Multipart.MIMEMultipart("signed", micalg=sigstr, protocol="application/pgp-signature")
-            newmsg.attach(m)
-            sigpart = email.mime.Base.MIMEBase("application","pgp-signature")
-            sigpart.set_payload(outdat)
-            newmsg.attach(sigpart)
-            # Copy some headers from the signed message to the outer. We'll do
-            # to, from, cc, bcc, and subject and a few others for now. Should
-            # probably do others. We aren't going to move these; the receiver
-            # should be able to use the ones in the signed version as the
-            # official "untambered" version; these copies are just for clients
-            # that display the outer headers in summaries (like this one right
-            # now, or as IMAP servers do searches, etc)
-            for key in m.keys():
-                if key.lower() in ['to','from','cc','bcc','subject','date','message-id','user-agent','references','in-reply-to']:
-                    newmsg[key] = m[key]
-            m = newmsg
+                # Create the signing wrapper
+                newmsg = email.mime.Multipart.MIMEMultipart("signed", micalg=sigstr, protocol="application/pgp-signature")
+                newmsg.attach(m)
+                sigpart = email.mime.Base.MIMEBase("application","pgp-signature")
+                sigpart.set_payload(outdat)
+                newmsg.attach(sigpart)
+                # Copy some headers from the signed message to the outer. We'll do
+                # to, from, cc, bcc, and subject and a few others for now. Should
+                # probably do others. We aren't going to move these; the receiver
+                # should be able to use the ones in the signed version as the
+                # official "untambered" version; these copies are just for clients
+                # that display the outer headers in summaries (like this one right
+                # now, or as IMAP servers do searches, etc)
+                for key in m.keys():
+                    if key.lower() in ['to','from','cc','bcc','subject','date','message-id','user-agent','references','in-reply-to']:
+                        newmsg[key] = m[key]
+                m = newmsg
 
         fp = StringIO()
         gen = MyGenerator(fp)
