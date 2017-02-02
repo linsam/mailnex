@@ -3844,7 +3844,16 @@ class Cmd(cmdprompt.CmdPrompt):
                 # Create the signing wrapper
                 newmsg = email.mime.Multipart.MIMEMultipart("signed", micalg=sigstr, protocol="application/pgp-signature")
                 newmsg.attach(m)
-                sigpart = email.mime.Base.MIMEBase("application","pgp-signature")
+                sigpart = email.mime.Base.MIMEBase("application","pgp-signature", name="signature.asc")
+                # Not sure if inline or attachment is best. Some versions of
+                # Eudora try to save the signature as a file in the
+                # attachments directory if we don't have a disposition or make
+                # it attachment. OTOH, marking it inline might result in some
+                # MUAs trying to show the sig, which isn't useful without the
+                # partially processed message to go with it. Adding the header
+                # so that Eudora doesn't save the file based on the subject of
+                # the outer message.
+                sigpart.add_header('Content-Disposition', 'inline', filename="signature.asc")
                 sigpart.set_payload(outdat)
                 newmsg.attach(sigpart)
                 # Copy some headers from the signed message to the outer. We'll do
