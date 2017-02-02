@@ -992,6 +992,26 @@ def sigresToString(ctx, sig):
         sigres += " from %s %s" % (sig.fpr[-8:], key.uids[0].uid)
     return sigres
 
+def enumerateKeys(keys):
+    """Display a list of keys as for user selection."""
+    for i, key in enumerate(keys, 1):
+        print("{}: {}{}{}{}{}{}{}{}{} {} {}_{} {}".format(
+            i,
+            "C" if key.can_certify else " ",
+            "S" if key.can_sign else " ",
+            "E" if key.can_encrypt else " ",
+            "A" if key.can_authenticate else " ",
+            "D" if key.disabled else " ",
+            "X" if key.expired else " ",
+            "R" if key.revoked else " ",
+            "!" if key.invalid else " ",
+            "s" if key.secret else " ",
+            key.subkeys[0].length,
+            key.subkeys[0].fpr[-16:-8],
+            key.subkeys[0].fpr[-8:],
+            key.uids[0].uid,
+            ))
+
 class Cmd(cmdprompt.CmdPrompt):
     def help_hidden_commands(self):
         print("The following are hidden commands:")
@@ -3709,6 +3729,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 keysearch = m['from']
             for k in ctx.keylist(keysearch, True):
                 keys.append(k)
+            # TODO: Filter on keys that can sign. Possibly filter out
+            # expired/revoked keys.
             if len(keys) == 0:
                 ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
                 # This is probably not the right format for dead.letter
@@ -3719,25 +3741,7 @@ class Cmd(cmdprompt.CmdPrompt):
             elif len(keys) > 1:
                 # TODO: Better key selection interface. E.g. should have a
                 # header line, allow showing more details for a key
-                index = 0
-                for key in keys:
-                    index += 1
-                    print("{}: {}{}{}{}{}{}{}{}{} {} {}_{} {}".format(
-                        index,
-                        "C" if key.can_certify else " ",
-                        "S" if key.can_sign else " ",
-                        "E" if key.can_encrypt else " ",
-                        "A" if key.can_authenticate else " ",
-                        "D" if key.disabled else " ",
-                        "X" if key.expired else " ",
-                        "R" if key.revoked else " ",
-                        "!" if key.invalid else " ",
-                        "s" if key.secret else " ",
-                        key.subkeys[0].length,
-                        key.subkeys[0].fpr[-16:-8],
-                        key.subkeys[0].fpr[-8:],
-                        key.uids[0].uid,
-                        ))
+                enumerateKeys(keys)
                 keysel = self.singleprompt("Select key number (default 1): ", default="")
                 if keysel == "":
                     keysel = '1'
@@ -3785,9 +3789,11 @@ class Cmd(cmdprompt.CmdPrompt):
                         return False
                     if len(kl) > 1:
                         print("Multiple keys ({}) found for {}!".format(len(kl), r))
-                        # TODO: Allow selection, re-edit, or at least save to
-                        # DEAD.LETTER
-                        return False
+                        enumerateKeys(kl)
+                        keysel = self.singleprompt("Select key number (default 1): ", default="")
+                        if keysel == "":
+                            keysel = '1'
+                        kl = [kl[int(keysel) - 1]]
                     print("Found key {} {} for {}".format(kl[0].subkeys[0].keyid, kl[0].uids[0].uid, r))
                     rkeys.append(kl[0])
                 # TODO: If sender isn't also a recipient, but we are storing,
