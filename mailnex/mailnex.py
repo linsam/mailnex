@@ -916,7 +916,8 @@ def getPassword(settings, protocol, user, host, port):
     prompt_to_save = False
     if not pass_:
         pass_ = getpass.getpass()
-        prompt_to_save = True
+        if not cantSave:
+            prompt_to_save = True
         method = "interactive"
     return method, prompt_to_save, pass_
 
@@ -1682,7 +1683,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # entered by prompt (e.g. by agent (and which agent?) or by
                 # keyring (and which keyring?))
                 c.login(user, pass_)
-                if prompt_to_save and not cantSave:
+                if prompt_to_save:
                     # TODO: Allow user to prevent this prompt. Perhaps by
                     # disabling keyring in general, or by disabling it for
                     # particular accounts (or enabling for particular accounts
