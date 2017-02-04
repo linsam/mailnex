@@ -3010,7 +3010,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if part[1] == "mime":
                 # Don't put the headers in the reply
                 continue
-            if part[1].disposition and part[1].disposition[0] == 'attachment':
+            if hasattr(part[1],'disposition') and part[1].disposition and part[1].disposition[0] == 'attachment':
                 # Don't include attachments in the reply
                 continue
             # TODO: really need a better quoting algorithm here
