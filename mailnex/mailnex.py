@@ -529,7 +529,7 @@ def unpackStructM(data, options, depth=1, tag="", predesc=""):
         # For now, just end it here.
         this = structureLeaf(tag, data.get_content_maintype(), data.get_content_subtype(), None, None, None, None, None, None)
         if 'cache' in options:
-            headers = "\n".join(map(lambda x: "{}: {}".format(*x), data.items()))
+            headers = b"\n".join(map(lambda x: b"{}: {}".format(*x), data.items()))
             options['cache'][tag+'.MIME'] = headers
             options['cache'][tag] = data.get_payload()
     return this
@@ -2116,11 +2116,25 @@ class Cmd(cmdprompt.CmdPrompt):
                         # good anyway; it would be great if someone wanted to
                         # re-read a message they just read without having to
                         # re-transfer it over the internet again.
-                        data = self.C.connection.fetch(index, '(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])' % (messageTag, messageTag, signatureTag))
-                        dpart = processImapData(data[0][1], self.C.settings)[0]
-                        dpart = dictifyList(dpart, preserveValue=True)
-                        messageData = dpart['body[%s.mime]' % messageTag] + dpart['body[%s]' % messageTag]
-                        sigData = dpart['body[%s]' % signatureTag]
+                        if "{}.{}.MIME".format(index, messageTag) in self.C.cache:
+                            # try getting everything from cache; likely this
+                            # was a PGP-Signed wrapped in a PGP-Encrypted
+                            # message.
+                            # TODO: Have a generic parts fetch function that
+                            # tries the cache and then connection fetch for
+                            # each part given
+                            messageData = self.C.cache["{}.{}.MIME".format(index, messageTag)] + b"\r\n\r\n" + self.C.cache["{}.{}".format(index, messageTag)]
+                            sigData = self.C.cache["{}.{}".format(index, signatureTag)]
+                            with open("/tmp/msg","w") as f:
+                                f.write(messageData)
+                            with open("/tmp/msg.sig", "w") as f:
+                                f.write(sigData)
+                        else:
+                            data = self.C.connection.fetch(index, '(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])' % (messageTag, messageTag, signatureTag))
+                            dpart = processImapData(data[0][1], self.C.settings)[0]
+                            dpart = dictifyList(dpart, preserveValue=True)
+                            messageData = dpart['body[%s.mime]' % messageTag] + dpart['body[%s]' % messageTag]
+                            sigData = dpart['body[%s]' % signatureTag]
 
                         ctx = gpgme.Context()
                         msgdat = io.BytesIO(messageData)
