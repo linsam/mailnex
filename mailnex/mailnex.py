@@ -272,13 +272,28 @@ class MessageList(object):
                 self.add(i)
     def add(self, i):
         """Add a message ID to the message list"""
-        # First, first pass, we won't collapse the ranges and we'll post-sort.
-        # This is a terrible implementation
-        # TODO: fix this to be more efficient and actually collapse ranges
-        if (i, i) in self.ranges:
-            return
+        # TODO: This could probably be more effecient. For example, we could
+        # keep it sorted and avoid the post-sort call
+        for index in range(len(self.ranges)):
+            r = self.ranges[index]
+            if r[0] <= i and i <= r[1]:
+                return
+            if i == r[0] - 1:
+                self.ranges[index] = (i, r[1])
+                return
+            elif i == r[1] + 1:
+                self.ranges[index] = (r[0], i)
+                return
         self.ranges.append((i,i))
         self.ranges.sort()
+        for index in range(len(self.ranges)-1):
+            r1 = self.ranges[index]
+            r2 = self.ranges[index + 1]
+            if (r1[1] + 1 == r2[0]):
+                # Adjacent ranges; merge them
+                self.ranges[index] = (r1[0], r2[1])
+                del self.ranges[index + 1]
+                return
     def addRange(self, start, end):
         """Convenience function to add an inclusive range of messages in one go."""
         #TODO: We should be able to do similar to add but with ranges for faster operation.
