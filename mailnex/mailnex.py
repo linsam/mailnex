@@ -270,6 +270,10 @@ class MessageList(object):
         if iterable:
             for i in iterable:
                 self.add(i)
+    def __nonzero__(self):
+        return len(self.ranges) != 0
+    # Python 3 compat
+    __bool__ = __nonzero__
     def add(self, i):
         """Add a message ID to the message list"""
         # TODO: This could probably be more effecient. For example, we could
