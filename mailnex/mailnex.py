@@ -906,13 +906,17 @@ def getPassword(settings, protocol, user, host, port):
             #print("Password",pass_)
             method = "agent"
     else:
-        try:
-            pass_ =  keyring.get_password("%s://%s" % (protocol, host), user)
-            method = "keyring"
-        except RuntimeError:
-            pass_ = None
-            print("Info: no password managers found; cannot save your password for automatic login")
+        if not settings.usekeyring:
             cantSave = True
+            pass_ = None
+        else:
+            try:
+                pass_ =  keyring.get_password("%s://%s" % (protocol, host), user)
+                method = "keyring"
+            except RuntimeError:
+                pass_ = None
+                print("Info: no password managers found; cannot save your password for automatic login")
+                cantSave = True
     prompt_to_save = False
     if not pass_:
         pass_ = getpass.getpass()
@@ -5057,6 +5061,7 @@ def getOptionsSet():
 
         NOTE: This feature is in progress. Only 'smtps' is actually supported so far.
         """))
+    options.addOption(settings.BoolOption('usekeyring', True, doc="Set to attempt to use system keyrings for password storage"))
     return options
 
 def instancemethod(func, obj, cls):
