@@ -4029,6 +4029,42 @@ class Cmd(cmdprompt.CmdPrompt):
                 disp = ""
             print("{}{}   {}/{}{}".format(index, part, p.type_, p.subtype, disp))
 
+    def getRows(self, adjust=0):
+        """Gets the number of headline rows based on user preference.
+        Additionally, if the user preference is to base on the terminal,
+        get the current terminal size and subtract our overhead, adjusted
+        by the adjust parameter, possibly limited by a user specified
+        maximum.
+
+        adjust is not used when the user specifies a specific row count.
+        """
+        # Internal adjust is the number of rows the UI occupies.
+        # At the moment, that is 1 line for the prompt, and 7 lines for
+        # completion popup.
+        # TODO: Get this number from the UI
+        internalAdjust = 8
+        # Must show at least 1 row.
+        minrows = 1
+        try:
+            rows = int(self.C.settings.headlinerows.value)
+            return rows if rows > minrows else minrows
+        except ValueError:
+            if self.C.settings.headlinerows.value.lower() in ["term", "terminal"]:
+                rows = self.C.t.height - internalAdjust + adjust
+                return rows if rows > minrows else minrows
+            elif self.C.settings.headlinerows.value.lower().startswith("terminal<"):
+                _,maxval = self.C.settings.headlinerows.value.split("<")
+                maxval=int(maxval)
+                rows = self.C.t.height - internalAdjust + adjust
+                if rows > maxval:
+                    return maxval
+                return rows if rows > minrows else minrows
+            else:
+                # TODO: Error? Assume they meant terminal?
+                # Ideally, we'd catch this during the 'set' operation and not
+                # here!
+                raise
+
     @shortcut("h")
     @showExceptions
     @needsConnection
@@ -4051,7 +4087,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
             C.currentMessage = msglist[0]
             C.lastList = msglist
-        rows = 25 # TODO get from terminal
+        rows = self.getRows(adjust=-1)
         start = (C.currentMessage - 1) // rows * rows
         # ^- alternatively, start = C.currentMessage - (C.currentMessage % rows)
         start += 1 # IMAP is 1's based
@@ -4640,7 +4676,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # be an option.
 
         # First, find out where we are
-        rows = 25
+        rows = self.getRows(adjust=-1)
         if self.C.virtfolder:
             lastMessage = len(self.C.virtfolder)
         else:
@@ -4715,7 +4751,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # list of interesting pages, then figure out where we are, then move
         # through the list. We have to do most of that anyway, so I don't know
         # why mailx doesn't do this. Maybe they do a linear search?
-        rows = 25
+        rows = self.getRows(adjust=-1)
         if self.C.virtfolder:
             lastMessage = len(self.C.virtfolder)
         else:
@@ -4992,6 +5028,19 @@ def getOptionsSet():
                           normal text. Attributes can be combined:
                           't.italic_blue_on_red' makes italic blue text on red
                           background.
+        """))
+    options.addOption(settings.StringOption("headlinerows", "terminal<25",
+        doc="""Number of rows to display for h, z, and Z commands.
+
+        May be a positive integer, or the special value "terminal",
+        which will use the terminal rows count reduced by screen
+        overhead (e.g. a 25 row terminal screen might show 16 rows)
+
+        May also be "terminal<NN" where NN is the maximum number of
+        rows to display.
+
+        No matter what, at least 1 row is always shown, even if it
+        would scroll off the top of the terminal.
         """))
     options.addOption(settings.StringOption("headlinevf", "{this}{attr}{num:2}(g{gnum:4}) {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}", doc="Headline in virtual folder mode. If blank, use normal headline."))
     options.addOption(settings.FlagsOption('headerorder', [
