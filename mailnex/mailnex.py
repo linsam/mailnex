@@ -1456,6 +1456,55 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("unknown command %s in line %s:%i" % (repr(line),fileName,lineno))
         return postConfFolder
 
+    def cacheFetch(self, msgset, args):
+        """Retrieve parts from cache. If not in cache, retrieve from IMAP
+        first, then populate cache, then retrieve from cache.
+        """
+        # For now, we'll always fetch FLAGS from IMAP, as they aren't
+        # permenant. TODO: Have flag update statuses write to the cache when
+        # we get them, then we can just use the cache fully
+        # First pass, except for FLAGS, we'll not split up the parts. If any
+        # part is missing from the cache, we'll re-fetch all parts to populate
+        # the cache
+        assert args.startswith('(')
+        assert args.endswith(')')
+        argsList = args[1:-1].split()
+        origArgsList = list(argsList)
+        if 'FLAGS' in argsList:
+            argsList.remove('FLAGS')
+            if self.C.settings.debug.general:
+                print("executing IMAP command FETCH {} {}".format(msgset.imapListStr(), '(FLAGS)'))
+            data = self.C.connection.fetch(msgset.imapListStr(), '(FLAGS)')
+            for d in data:
+                r = processImapData(d[1], self.C.settings)[0]
+                self.C.cache["{}.{}".format(d[0], 'FLAGS')] = getResultPart('FLAGS', r)
+
+        flist = MessageList()
+        for i in msgset.iterate():
+            for a in argsList:
+                if not '{}.{}'.format(i,a) in self.C.cache:
+                    flist.add(i)
+                    break
+        if flist:
+            args = '({})'.format(" ".join(argsList))
+            if self.C.settings.debug.general:
+                print("executing IMAP command FETCH {} {}".format(flist.imapListStr(), args))
+            data = self.C.connection.fetch(flist.imapListStr(), args)
+            for d in data:
+                r = processImapData(d[1], self.C.settings)[0]
+                for arg in argsList:
+                    part = getResultPart(arg, r)
+                    self.C.cache["{}.{}".format(d[0], arg)] = part
+        data = []
+        for i in msgset.iterate():
+            d = []
+            for a in origArgsList:
+                d.append(a)
+                d.append(self.C.cache['{}.{}'.format(i, a)])
+            data.append((i, d))
+        return data
+
+
     def getAddressCompleter(self):
         """Return a Completer class that will complete email addresses based on current preferences.
 
@@ -4149,18 +4198,13 @@ class Cmd(cmdprompt.CmdPrompt):
         msgset = messageList.imapListStr()
         args = "(ENVELOPE INTERNALDATE FLAGS)"
         if self.C.settings.debug.general:
-            print("executing IMAP command FETCH {} {}".format(msgset, args))
-        data = self.C.connection.fetch(msgset, args)
+            print("FETCH {} {}".format(messageList.imapListStr(), args))
+        data = self.cacheFetch(messageList, args)
         #data = normalizeFetch(data)
         for d in data:
-            try:
-                d = (d[0], processImapData(d[1], self.C.settings))
-            except Exception as ev:
-                print("  %s  (error parsing envelope!)" % d[0], ev)
-                continue
-            envelope = getResultPart("ENVELOPE", d[1][0])
-            internaldate = getResultPart("INTERNALDATE", d[1][0])
-            flags = getResultPart("FLAGS", d[1][0])
+            envelope = getResultPart("ENVELOPE", d[1])
+            internaldate = getResultPart("INTERNALDATE", d[1])
+            flags = getResultPart("FLAGS", d[1])
             envelope = Envelope(*envelope)
 
             # Handle attrs. First pass, only do collapsed form.
