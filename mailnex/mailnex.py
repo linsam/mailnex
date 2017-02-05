@@ -2459,6 +2459,20 @@ class Cmd(cmdprompt.CmdPrompt):
             outfile.write(data)
             outfile.flush()
 
+    def getStructure(self, index):
+        if '{}.structure'.format(index) in self.C.cache:
+            print("Fetch structure from cache")
+            struct = self.C.cache['{}.structure'.format(index)]
+        else:
+            print("Fetch structure from imap")
+            data = self.C.connection.fetch(index, '(BODYSTRUCTURE)')
+            parts = processImapData(data[0][1], self.C.settings)
+            struct = getResultPart('BODYSTRUCTURE', parts[0])
+            self.C.cache['{}.structure'.format(index)] = struct
+        struct = unpackStruct(struct, self.C.settings)
+        struct = flattenStruct(struct)
+        return struct
+
     @showExceptions
     @needsConnection
     def do_write(self, args):
@@ -2487,11 +2501,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(msgpart) == 1:
             # Use the first part if none given
             msgpart = (msgpart[0], "1")
-        data = self.C.connection.fetch(msgpart[0], '(BODYSTRUCTURE)')
-        parts = processImapData(data[0][1], self.C.settings)
-        struct = getResultPart('BODYSTRUCTURE', parts[0])
-        struct = unpackStruct(struct, self.C.settings)
-        struct = flattenStruct(struct)
+        struct = self.getStructure(msgpart[0])
         key = '.' + msgpart[1]
         if not key in struct:
             if u'' in struct:
@@ -2544,12 +2554,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(msgpart) == 1:
             # Use the first part if none given
             msgpart = (msgpart[0], "1")
-        data = self.C.connection.fetch(msgpart[0], '(BODYSTRUCTURE)')
-        parts = processImapData(data[0][1], self.C.settings)
-        struct = getResultPart('BODYSTRUCTURE', parts[0])
-        m = mailcap.getcaps()
-        struct = unpackStruct(struct, self.C.settings)
-        struct = flattenStruct(struct)
+        struct = self.getStructure(msgpart[0])
         key = '.' + msgpart[1]
         if not key in struct:
             if u'' in struct:
@@ -4013,46 +4018,16 @@ class Cmd(cmdprompt.CmdPrompt):
         else:
             # For now, only support showing one set of headers.
             index = msglist[0]
-        data = M.fetch(index, '(BODYSTRUCTURE)')
-        #print(data)
-        for entry in data:
-            #print(entry)
-            try:
-                # We should get a list of the form (ID, DATA)
-                # where DATA is a list of the form ("BODYSTRUCTURE", struct)
-                # and where struct is the actual structure
-                d = processImapData(entry[1], self.C.settings)
-                val = str(entry[0])
-                d = d[0]
-            except Exception as ev:
-                print(ev)
-                return
-            if d[0] != "BODYSTRUCTURE":
-                print("fail?")
-                print(d)
-                return
-            res = unpackStruct(d[1], self.C.settings, tag=val)
-            if C.settings.debug.struct:
-                print("---")
-            def disp(struct):
-                extra = ""
-                if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
-                    extra += " (%s)" % struct.disposition[0]
-                    # TODO: Add filename if present
-                # TODO XXX: Preprocess control chars out of all strings before
-                # display to terminal!
-                print("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
-                if isinstance(struct, structureMessage):
-                    extra = ""
-                    # Switch to the inner for further processing
-                    struct = struct.subs[0]
-                    if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
-                        extra += " (%s)" % struct.disposition[0]
-                    print("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
-                if hasattr(struct, "subs"):
-                    for i in struct.subs:
-                        disp(i)
-            disp(res)
+        parts = self.getStructure(index)
+        for part in sorted(parts.keys()):
+            p = parts[part]
+            if p.disposition:
+                # TODO: Display attachment filename if available
+                # ["attachment", ["filename", "file1.txt"]]
+                disp = " ({})".format(p.disposition[0])
+            else:
+                disp = ""
+            print("{}{}   {}/{}{}".format(index, part, p.type_, p.subtype, disp))
 
     @shortcut("h")
     @showExceptions
