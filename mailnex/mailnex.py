@@ -334,6 +334,7 @@ class MessageList(object):
             for i in range(r[0], r[1] + 1):
                 yield i
         raise StopIteration()
+    __iter__ = iterate
 
 
 class Envelope(object):
@@ -549,8 +550,14 @@ def unpackStructM(data, options, depth=1, tag="", predesc=""):
         this = structureLeaf(tag, data.get_content_maintype(), data.get_content_subtype(), None, None, None, None, None, None)
         if 'cache' in options:
             headers = b"\n".join(map(lambda x: b"{}: {}".format(*x), data.items()))
-            options['cache'][tag+'.MIME'] = headers
-            options['cache'][tag] = data.get_payload()
+            if '.' in tag:
+                index,part = tag.split('.', 1)
+            else:
+                # TODO: should never reach here. Assert instead?
+                index = tag
+                part = ""
+            options['cache']["{}.BODY[{}.MIME]".format(index,part)] = headers
+            options['cache']["{}.BODY[{}]".format(index,part)] = data.get_payload()
     return this
 
 def flattenStruct(struct):
@@ -1459,6 +1466,11 @@ class Cmd(cmdprompt.CmdPrompt):
     def cacheFetch(self, msgset, args):
         """Retrieve parts from cache. If not in cache, retrieve from IMAP
         first, then populate cache, then retrieve from cache.
+
+        msgset can be a MessageList, a list, or an integer (for a single message).
+
+        Returns an array of message data sets, even when only a single message
+        is requested.
         """
         # For now, we'll always fetch FLAGS from IMAP, as they aren't
         # permenant. TODO: Have flag update statuses write to the cache when
@@ -1468,8 +1480,12 @@ class Cmd(cmdprompt.CmdPrompt):
         # the cache
         assert args.startswith('(')
         assert args.endswith(')')
+        if isinstance(msgset,int):
+            # Convert to list
+            msgset = [msgset]
         argsList = args[1:-1].split()
         origArgsList = list(argsList)
+        # Always re-cache flags
         if 'FLAGS' in argsList:
             argsList.remove('FLAGS')
             if self.C.settings.debug.general:
@@ -1479,12 +1495,16 @@ class Cmd(cmdprompt.CmdPrompt):
                 r = processImapData(d[1], self.C.settings)[0]
                 self.C.cache["{}.{}".format(d[0], 'FLAGS')] = getResultPart('FLAGS', r)
 
+        # Build a fetch list
         flist = MessageList()
-        for i in msgset.iterate():
+        for i in msgset:
             for a in argsList:
+                if a.upper().startswith("BODY.PEEK"):
+                    a = "BODY" + a[9:]
                 if not '{}.{}'.format(i,a) in self.C.cache:
                     flist.add(i)
                     break
+        # Fetch and cache
         if flist:
             args = '({})'.format(" ".join(argsList))
             if self.C.settings.debug.general:
@@ -1493,12 +1513,16 @@ class Cmd(cmdprompt.CmdPrompt):
             for d in data:
                 r = processImapData(d[1], self.C.settings)[0]
                 for arg in argsList:
+                    if arg.upper().startswith("BODY.PEEK"):
+                        arg = "BODY" + arg[9:]
                     part = getResultPart(arg, r)
                     self.C.cache["{}.{}".format(d[0], arg)] = part
         data = []
-        for i in msgset.iterate():
+        for i in msgset:
             d = []
             for a in origArgsList:
+                if a.upper().startswith("BODY.PEEK"):
+                    a = "BODY" + a[9:]
                 d.append(a)
                 d.append(self.C.cache['{}.{}'.format(i, a)])
             data.append((i, d))
@@ -2094,9 +2118,8 @@ class Cmd(cmdprompt.CmdPrompt):
         return everything instead of just text parts.
         """
         resparts = []
-        data = self.C.connection.fetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')
-        parts = processImapData(data[0][1], self.C.settings)
-        headers = getResultPart('BODY[HEADER]', parts[0])
+        parts = self.cacheFetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')[0]
+        headers = getResultPart('BODY[HEADER]', parts[1])
         # TODO: Headers are required to be ASCII or encoded using a header
         # encoding that results in ASCII (lists charset and encodes as
         # quoted-printable or base64 with framing). We should decode headers
@@ -2120,7 +2143,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # type of message/rfc822, but *that* message has a header of
         # content-type text/plain or multipart/alternative or whatever.
         #
-        structstr = getResultPart('BODYSTRUCTURE', parts[0])
+        structstr = getResultPart('BODYSTRUCTURE', parts[1])
         struct = unpackStruct(structstr, self.C.settings, tag=str(index))
         structureStrings = []
         fetchParts = []
@@ -2145,11 +2168,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     if haveGpgme:
                         inner = struct.tag.split('.')[1:]
                         encpart = ".".join(inner + ['2'])
-                        # TODO: see fetch cache comment in signed section, do
-                        # the same here maybe?
-                        data = self.C.connection.fetch(index, '(BODY.PEEK[%s])' % (encpart))
-                        dpart = processImapData(data[0][1], self.C.settings)[0]
-                        message = dpart[1]
+                        data = self.cacheFetch(index, '(BODY.PEEK[%s])' % (encpart))[0]
+                        message = getResultPart("BODY[{}]".format(encpart), data[1])
                         ctx = gpgme.Context()
                         msgdat = io.BytesIO(message)
                         result = io.BytesIO()
@@ -2181,33 +2201,9 @@ class Cmd(cmdprompt.CmdPrompt):
                         inner = struct.tag.split('.')[1:]
                         messageTag = ".".join(inner + ['1'])
                         signatureTag = ".".join(inner + ['2'])
-                        # TODO: Fetching this here and again below is wasteful
-                        # of bandwidth. We should either fix up the structures
-                        # so that we can indicate to the fetch-and-print stage
-                        # to do signature checking, or else we should have
-                        # some kind of fetch cache. The fetch cache would be
-                        # good anyway; it would be great if someone wanted to
-                        # re-read a message they just read without having to
-                        # re-transfer it over the internet again.
-                        if "{}.{}.MIME".format(index, messageTag) in self.C.cache:
-                            # try getting everything from cache; likely this
-                            # was a PGP-Signed wrapped in a PGP-Encrypted
-                            # message.
-                            # TODO: Have a generic parts fetch function that
-                            # tries the cache and then connection fetch for
-                            # each part given
-                            messageData = self.C.cache["{}.{}.MIME".format(index, messageTag)] + b"\r\n\r\n" + self.C.cache["{}.{}".format(index, messageTag)]
-                            sigData = self.C.cache["{}.{}".format(index, signatureTag)]
-                            with open("/tmp/msg","w") as f:
-                                f.write(messageData)
-                            with open("/tmp/msg.sig", "w") as f:
-                                f.write(sigData)
-                        else:
-                            data = self.C.connection.fetch(index, '(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])' % (messageTag, messageTag, signatureTag))
-                            dpart = processImapData(data[0][1], self.C.settings)[0]
-                            dpart = dictifyList(dpart, preserveValue=True)
-                            messageData = dpart['body[%s.mime]' % messageTag] + dpart['body[%s]' % messageTag]
-                            sigData = dpart['body[%s]' % signatureTag]
+                        data = self.cacheFetch(index, '(BODY.PEEK[{}.MIME] BODY.PEEK[{}] BODY.PEEK[{}])'.format(messageTag, messageTag, signatureTag))[0]
+                        messageData = getResultPart('BODY[{}.MIME]'.format(messageTag), data[1]) + getResultPart('BODY[{}]'.format(messageTag), data[1])
+                        sigData = getResultPart('BODY[{}]'.format(signatureTag), data[1])
 
                         ctx = gpgme.Context()
                         msgdat = io.BytesIO(messageData)
@@ -2279,22 +2275,11 @@ class Cmd(cmdprompt.CmdPrompt):
             # body
             fparts = ["BODY.PEEK[1]"]
             fetchParts[0] = (u'1', fetchParts[0][1])
-        fetchPartsFromServer = filter(lambda x: "{}.{}".format(index,x[0]) not in self.C.cache, fetchParts)
-        fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchPartsFromServer]
+        fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
         if fparts:
-            data = self.C.connection.fetch(index, '(%s)' % " ".join(fparts))
-            dpart = processImapData(data[0][1], self.C.settings)
+            data = self.cacheFetch(index, '(%s)' % " ".join(fparts))[0]
         for o in fetchParts:
-            if o in fetchPartsFromServer:
-                if self.C.settings.debug.general:
-                    print("got part {} from server".format(o[0]))
-                dstr = getResultPart("BODY[%s]" % (o[0],), dpart[0])
-            elif "{}.{}".format(index, o[0]) in self.C.cache:
-                if self.C.settings.debug.general:
-                    print("got part {} from cache".format(o[0]))
-                dstr = self.C.cache["{}.{}".format(index, o[0])]
-            else:
-                raise Exception("didn't fetch or find in cache? {} {}".format(index, o))
+            dstr = getResultPart("BODY[%s]" % (o[0],), data[1])
             if o[1] is None and isinstance(o[1], structureMultipart):
                 o[1].encoding = None
                 o[1].attrs = None
@@ -2528,15 +2513,8 @@ class Cmd(cmdprompt.CmdPrompt):
             outfile.flush()
 
     def getStructure(self, index):
-        if '{}.structure'.format(index) in self.C.cache:
-            print("Fetch structure from cache")
-            struct = self.C.cache['{}.structure'.format(index)]
-        else:
-            print("Fetch structure from imap")
-            data = self.C.connection.fetch(index, '(BODYSTRUCTURE)')
-            parts = processImapData(data[0][1], self.C.settings)
-            struct = getResultPart('BODYSTRUCTURE', parts[0])
-            self.C.cache['{}.structure'.format(index)] = struct
+        res = self.cacheFetch(index, '(BODYSTRUCTURE)')[0]
+        struct = getResultPart('BODYSTRUCTURE', res[1])
         struct = unpackStruct(struct, self.C.settings)
         struct = flattenStruct(struct)
         return struct
