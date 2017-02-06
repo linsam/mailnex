@@ -549,7 +549,8 @@ def unpackStructM(data, options, depth=1, tag="", predesc=""):
         # For now, just end it here.
         this = structureLeaf(tag, data.get_content_maintype(), data.get_content_subtype(), None, None, None, None, None, None)
         if 'cache' in options:
-            headers = b"\n".join(map(lambda x: b"{}: {}".format(*x), data.items()))
+            headers = b"\r\n".join(map(lambda x: b"{}: {}".format(*x), data.items()))
+            headers += b"\r\n\r\n"
             if '.' in tag:
                 index,part = tag.split('.', 1)
             else:
