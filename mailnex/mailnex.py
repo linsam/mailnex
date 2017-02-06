@@ -1642,6 +1642,24 @@ class Cmd(cmdprompt.CmdPrompt):
         print("Opened maildir with %i messages." % len(M))
 
     @showExceptions
+    def do_cache(self, args):
+        """Manage live cache.
+
+        cache clear         clear whole cache
+        cache cleardec      clear decrypted data from cache
+        """
+        args = args.strip()
+        if args == 'clear':
+            del self.C.cache
+            self.C.cache = {}
+        elif args == 'cleardec':
+            for i in self.C.cache.keys():
+                if '.d.' in i:
+                    del self.C.cache[i]
+        else:
+            print("Please select clear or cleardec")
+        return
+    @showExceptions
     def do_folder(self, args):
         """Connect to the given mailbox, or show info about the current connection.
 
