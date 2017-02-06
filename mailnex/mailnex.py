@@ -2434,7 +2434,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if self.C.settings.allpartlabels:
                 body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
             if self.C.settings.debug.general:
-                if part[1].encoding:
+                if hasattr(part[1], 'encoding') and part[1].encoding:
                     body += "encoding: " + part[1].encoding + "\r\n"
                 body += "struct: " + repr(part[1].__dict__) + "\r\n"
             if headerstr != "":
