@@ -2161,28 +2161,33 @@ class Cmd(cmdprompt.CmdPrompt):
             secondaryStruct = None
             # TODO: What are protected-headers="v1"?
             if struct.type_ == "multipart" and struct.subtype == 'encrypted':
-                p = struct.parameters
-                if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-encrypted':
-                    # TODO: What if the message doesn't have the protocol
-                    # parameter but otherwise follows the protocol?
-                    if haveGpgme:
-                        inner = struct.tag.split('.')[1:]
-                        encpart = ".".join(inner + ['2'])
-                        data = self.cacheFetch(index, '(BODY.PEEK[%s])' % (encpart))[0]
-                        message = getResultPart("BODY[{}]".format(encpart), data[1])
-                        ctx = gpgme.Context()
-                        msgdat = io.BytesIO(message)
-                        result = io.BytesIO()
-                        try:
-                            ret = ctx.decrypt_verify(msgdat, result)
-                        except gpgme.GpgmeError:
-                            pass
-                        else:
-                            for sig in ret:
-                                # TODO: Handle displaying multiple signatures
-                                sigres = sigresToString(ctx, sig)
-                            m = email.message_from_string(result.getvalue())
-                            secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + ".d")
+                if '{}.d.SUBSTRUCTURE'.format(struct.tag) in self.C.cache:
+                    # Already decoded this message
+                    secondaryStruct = self.C.cache['{}.d.SUBSTRUCTURE'.format(struct.tag)]
+                else:
+                    p = struct.parameters
+                    if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-encrypted':
+                        # TODO: What if the message doesn't have the protocol
+                        # parameter but otherwise follows the protocol?
+                        if haveGpgme:
+                            inner = struct.tag.split('.')[1:]
+                            encpart = ".".join(inner + ['2'])
+                            data = self.cacheFetch(index, '(BODY.PEEK[%s])' % (encpart))[0]
+                            message = getResultPart("BODY[{}]".format(encpart), data[1])
+                            ctx = gpgme.Context()
+                            msgdat = io.BytesIO(message)
+                            result = io.BytesIO()
+                            try:
+                                ret = ctx.decrypt_verify(msgdat, result)
+                            except gpgme.GpgmeError:
+                                pass
+                            else:
+                                for sig in ret:
+                                    # TODO: Handle displaying multiple signatures
+                                    sigres = sigresToString(ctx, sig)
+                                m = email.message_from_string(result.getvalue())
+                                secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + ".d")
+                                self.C.cache["{}.d.SUBSTRUCTURE".format(struct.tag)] = secondaryStruct
 
             if struct.type_ == "multipart" and struct.subtype == "signed":
                 p = struct.parameters
