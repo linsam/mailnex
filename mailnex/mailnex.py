@@ -2571,7 +2571,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(msgpart) == 1:
             # Use the first part if none given
             msgpart = (msgpart[0], "1")
-        struct = self.getStructure(msgpart[0])
+        struct = self.getStructure(int(msgpart[0]))
         key = '.' + msgpart[1]
         if not key in struct:
             if u'' in struct:
@@ -2624,7 +2624,8 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(msgpart) == 1:
             # Use the first part if none given
             msgpart = (msgpart[0], "1")
-        struct = self.getStructure(msgpart[0])
+        struct = self.getStructure(int(msgpart[0]))
+        m = mailcap.getcaps()
         key = '.' + msgpart[1]
         if not key in struct:
             if u'' in struct:
