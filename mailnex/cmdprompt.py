@@ -365,6 +365,46 @@ class CmdPrompt(cmd.Cmd):
         self.ptkevloop.realloop.run()
         self.ttyBusy = False
         return res[0]
+    def runAProgramAsFilter(self, args, data):
+        """Run a program with the given input. Leaves stdout/stderr alone.
+
+        This should be run when the prompt is inactive."""
+        res=[None, b""]
+        done=[0]
+        def finish(proc,status,signal):
+            proc.close()
+            proc.loop.stop()
+            res[0] = status
+        com = pyuv.Pipe(self.ptkevloop.realloop, True)
+        como = pyuv.Pipe(self.ptkevloop.realloop, True)
+        stdio = [
+                pyuv.StdIO(stream=com, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_READABLE_PIPE),
+                pyuv.StdIO(stream=como, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_WRITABLE_PIPE),
+                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                ]
+        self.ttyBusy = True
+        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        def closeWhenDone(handle, error):
+            # TODO: Maybe report error?
+            handle.close()
+        def doneWriting(handle, error):
+            # TODO: Maybe report error?
+            if done[0]:
+                closeWhenDone(handle, error)
+            done[0] = True
+        def readCb(handle, data, error):
+            if data is None:
+                handle.stop_read()
+                if done[0]:
+                    closeWhenDone(handle, error)
+                done[0] = True
+                return
+            res[1] += data
+        como.start_read(readCb)
+        com.write(data, closeWhenDone)
+        self.ptkevloop.realloop.run()
+        self.ttyBusy = False
+        return res
     def runAProgramStraight(self, args):
         """Run a program without anything special. Leaves stdin/stdout/stderr alone.
 
