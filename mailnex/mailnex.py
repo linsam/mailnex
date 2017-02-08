@@ -2467,6 +2467,36 @@ class Cmd(cmdprompt.CmdPrompt):
             if part[0].endswith(".HEADER"):
                 body += self.filterHeaders(part[2], self.C.settings.ignoredheaders.value, self.C.settings.headerorder.value, allHeaders)
             else:
+                t = part[1].type_
+                s = part[1].subtype
+                print(" {}/{}".format(t,s))
+                if 'pipe-{}/{}'.format(t,s) in self.C.settings:
+                    cmd = self.C.settings['pipe-{}/{}'.format(t,s)].value
+                    print("cmd: {}".format(cmd))
+                    #print(repr(part[2]))
+                    #print(type(part[2]))
+                    #print("About to send",repr(part[2][-200:]))
+                    with tempfile.NamedTemporaryFile() as outfile:
+                        #outfile.write(part[2].encode('iso-8859-1'))
+                        if 'pipe-ienc-{}/{}'.format(t,s) in self.C.settings:
+                            ienc = self.C.settings['pipe-ienc-{}/{}'.format(t,s)].value
+                        else:
+                            ienc = 'utf-8'
+                        outfile.write(part[2].encode(ienc,'xmlcharrefreplace'))
+                        #outfile.write(part[2])
+                        outfile.flush()
+                        if cmd.endswith("%s") or cmd.endswith("%f"):
+                            cmd = cmd[:-2] + outfile.name
+                            status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], b"")
+                            if status == 0:
+                                if 'pipe-oenc-{}/{}'.format(t,s) in self.C.settings:
+                                    oenc = self.C.settings['pipe-oenc-{}/{}'.format(t,s)].value
+                                else:
+                                    oenc = 'utf-8'
+                                part = (part[0], part[1], data.decode(oenc))
+                            else:
+                                print("Error running:", status)
+
                 body += part[2]
             if not part[2].endswith('\r\n\r\n'):
                 body += "\r\n"
