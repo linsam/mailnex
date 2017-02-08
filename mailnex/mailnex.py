@@ -2329,6 +2329,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     # CP1252 and then claiming it is iso-8859-1.
                     for c in map(unichr, range(0x80,0xa0)):
                         if c in d:
+                            if self.C.settings.debug.general:
+                                print("Found control characters!")
                             raise UnicodeDecodeError(str(charset), b"", 0, 1, b"control character detected")
                 except UnicodeDecodeError as err:
                     if charset == 'iso-8859-1':
@@ -2338,6 +2340,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         # except encourage the sender to stop using outlook.
                         try:
                             d = dstr.decode('windows-1252')
+                            if self.C.settings.debug.general:
+                                print("decoded as cp-1252 instead of iso-8859-1")
                         except:
                             d = "Part %s: failed to decode as %s or windows-1252\r\n" % (o[0], charset)
                     else:
@@ -2345,6 +2349,9 @@ class Cmd(cmdprompt.CmdPrompt):
                             d = "Part %s: failed to decode as %s (%s)\r\n%s" % (o[0], charset, err, repr(dstr))
                         else:
                             d = "Part %s: failed to decode as %s" % (o[0], charset)
+                else:
+                    if self.C.settings.debug.general:
+                        print("Successfully decoded as", charset)
             else:
                 d = dstr
             if o[1] and hasattr(o[1], 'attrs') and o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
