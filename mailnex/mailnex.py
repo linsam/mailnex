@@ -76,6 +76,7 @@ import keyring
 import xdg.BaseDirectory
 # shell helper
 from . import cmdprompt
+from . import printfStyle
 # Date handler
 import dateutil.parser
 # Color and other terminal stuffs
@@ -2520,13 +2521,14 @@ class Cmd(cmdprompt.CmdPrompt):
                         # if we couldn't do charref, we'll try strict
                         # instead
                         encdata = part[2].encode(ienc)
-                    if cmd.endswith("%s") or cmd.endswith("%f"):
+                    if printfStyle.check(cmd, ['f']):
                         with tempfile.NamedTemporaryFile() as outfile:
                             outfile.write(encdata)
                             outfile.flush()
-                            cmd = cmd[:-2] + outfile.name
+                            cmd = printfStyle.replace(cmd, {'s': s, 't': t, 'f': outfile.name})
                             status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], b"")
                     else:
+                        cmd = printfStyle.replace(cmd, {'s': s, 't': t})
                         status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], encdata)
                     if status == 0:
                         oenc = None
@@ -5220,9 +5222,14 @@ def getOptionsSet():
 
         The given command is interpreted by the system shell. If the command
         contains '%f', the data to be filtered will be written to a temporary
-        file and the file name will replace the %f. Otherwise, the data is
+        file and the file name will replace the '%f'. Otherwise, the data is
         given to the filter's stdin. The filter's stdout is then used to
         replace the content for display.
+
+        The following escapes are interpreted:
+
+            %t      mime type of message part
+            %s      mime subtype of message part
 
         This is intended for content matching, and the following search order
         is performed based on the part's mime type:
