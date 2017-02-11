@@ -2342,6 +2342,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             d = dstr.decode('windows-1252')
                             if self.C.settings.debug.general:
                                 print("decoded as cp-1252 instead of iso-8859-1")
+                            realcharset = 'windows-1252'
                         except:
                             d = "Part %s: failed to decode as %s or windows-1252\r\n" % (o[0], charset)
                     else:
@@ -2349,14 +2350,19 @@ class Cmd(cmdprompt.CmdPrompt):
                             d = "Part %s: failed to decode as %s (%s)\r\n%s" % (o[0], charset, err, repr(dstr))
                         else:
                             d = "Part %s: failed to decode as %s" % (o[0], charset)
+                        realcharset = None
                 else:
                     if self.C.settings.debug.general:
                         print("Successfully decoded as", charset)
+                    realcharset = charset
             else:
                 d = dstr
+                realcharset = None
             if o[1] and hasattr(o[1], 'attrs') and o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
                 #TODO: Flowed format handling
                 pass
+            if o[1]:
+                o[1].realcharset = realcharset
             if o[1] is None:
                 # MIME header
                 o = (None, 'mime')
@@ -2476,10 +2482,9 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 t = part[1].type_
                 s = part[1].subtype
-                print(" {}/{}".format(t,s))
                 if 'pipe-{}/{}'.format(t,s) in self.C.settings:
                     cmd = self.C.settings['pipe-{}/{}'.format(t,s)].value
-                    print("cmd: {}".format(cmd))
+                    body += "filtered with cmd: {}\n\n".format(cmd)
                     #print(repr(part[2]))
                     #print(type(part[2]))
                     #print("About to send",repr(part[2][-200:]))
@@ -2487,6 +2492,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         #outfile.write(part[2].encode('iso-8859-1'))
                         if 'pipe-ienc-{}/{}'.format(t,s) in self.C.settings:
                             ienc = self.C.settings['pipe-ienc-{}/{}'.format(t,s)].value
+                        elif hasattr(part[1], 'realcharset'):
+                            ienc = part[1].realcharset
                         else:
                             ienc = 'utf-8'
                         outfile.write(part[2].encode(ienc,'xmlcharrefreplace'))
