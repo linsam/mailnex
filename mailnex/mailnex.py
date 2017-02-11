@@ -2482,31 +2482,70 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 t = part[1].type_
                 s = part[1].subtype
-                if 'pipe-{}/{}'.format(t,s) in self.C.settings:
-                    cmd = self.C.settings['pipe-{}/{}'.format(t,s)].value
+                cmd = None
+                settingsearch = [
+                    'pipe-{}/{}'.format(t, s),
+                    'pipe-{}'.format(t, s),
+                    'pipe'.format(t, s),
+                    ]
+                for setting in settingsearch:
+                    if setting in self.C.settings and self.C.settings[setting].value:
+                        cmd = self.C.settings[setting].value
+                        break
+                if cmd:
                     body += "filtered with cmd: {}\n\n".format(cmd)
                     #print(repr(part[2]))
                     #print(type(part[2]))
                     #print("About to send",repr(part[2][-200:]))
                     with tempfile.NamedTemporaryFile() as outfile:
                         #outfile.write(part[2].encode('iso-8859-1'))
-                        if 'pipe-ienc-{}/{}'.format(t,s) in self.C.settings:
-                            ienc = self.C.settings['pipe-ienc-{}/{}'.format(t,s)].value
-                        elif hasattr(part[1], 'realcharset'):
+                        ienc = None
+                        settingsearch = [
+                            'pipe-ienc-{}/{}'.format(t, s),
+                            'pipe-ienc-{}'.format(t, s),
+                            'pipe-ienc'.format(t, s),
+                            ]
+                        for setting in settingsearch:
+                            if setting in self.C.settings and self.C.settings[setting].value:
+                                ienc = self.C.settings[setting].value
+                                break
+                        if not ienc:
+                            if hasattr(part[1], 'realcharset'):
+                                ienc = part[1].realcharset
+                            else:
+                                ienc = 'utf-8'
+                        if ienc == 'same' and hasattr(part[1], 'realcharset'):
                             ienc = part[1].realcharset
-                        else:
-                            ienc = 'utf-8'
-                        outfile.write(part[2].encode(ienc,'xmlcharrefreplace'))
+                        # TODO: Maybe allow chaining encoders. E.g. encode to
+                        # utf-8, then to base64.
+                        try:
+                            encdata = part[2].encode(ienc,'xmlcharrefreplace')
+                        except AssertionError:
+                            # Some encoders demmand strict error handling, so
+                            # if we couldn't do charref, we'll try strict
+                            # instead
+                            encdata = part[2].encode(ienc)
+                        outfile.write(encdata)
                         #outfile.write(part[2])
                         outfile.flush()
                         if cmd.endswith("%s") or cmd.endswith("%f"):
                             cmd = cmd[:-2] + outfile.name
                             status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], b"")
                             if status == 0:
-                                if 'pipe-oenc-{}/{}'.format(t,s) in self.C.settings:
-                                    oenc = self.C.settings['pipe-oenc-{}/{}'.format(t,s)].value
-                                else:
+                                oenc = None
+                                settingsearch = [
+                                'pipe-oenc-{}/{}'.format(t, s),
+                                'pipe-oenc-{}'.format(t, s),
+                                'pipe-oenc'.format(t, s),
+                                ]
+                                for setting in settingsearch:
+                                    if setting in self.C.settings and self.C.settings[setting].value:
+                                        oenc = self.C.settings[setting].value
+                                        break
+                                if oenc is None:
                                     oenc = 'utf-8'
+                                elif oenc == 'same':
+                                    oenc = ienc
                                 part = (part[0], part[1], data.decode(oenc))
                             else:
                                 print("Error running:", status)
@@ -5180,6 +5219,87 @@ def getOptionsSet():
         ], doc="Prefered order of MIME headers. See also 'headerorder'."))
 
     options.addOption(settings.StringOption("PAGER", "internal"))
+    options.addOption(settings.StringOption("pipe", None, doc="""Filter content prior to display using command.
+
+        The given command is interpreted by the system shell. If the command
+        contains '%f', the data to be filtered will be written to a temporary
+        file and the file name will replace the %f. Otherwise, the data is
+        given to the filter's stdin. The filter's stdout is then used to
+        replace the content for display.
+
+        This is intended for content matching, and the following search order
+        is performed based on the part's mime type:
+
+            pipe-type/subtype
+            pipe-type
+            pipe
+
+        Example types are 'text' or 'application'. Example subtypes are 'html' or 'octect-stream'
+
+        Example use:
+
+            set pipe-text/html=links2 -dump %f
+
+        See also 'pipe-ienc' and 'pipe-oenc'
+        """))
+    options.addOption(settings.StringOption("pipe-ienc", None, doc="""Set input encoding for filter command.
+
+    This encodes the data stream using the given encoding before sending the
+    data to the command.
+
+    mailnex internally converts all data to unicode when reading. This data
+    must be encoded into a valid character stream for a program to interpret
+    it. This setting indicates what encoding the command needs for its input.
+
+    If unspecified, or if using the special value "same", mailnex will attempt
+    to use the charset specified for the message part to be filtered. If no
+    charset is specified in the message, mailnex assumes utf-8 (which should
+    be safe, since no charset on the input should mean ASCII, a subset of
+    utf-8)
+
+    The search order is:
+
+        pipe-ienc-TYPE/SUBTYPE
+        pipe-ienc-TYPE
+        pipe-ienc
+
+    where TYPE and SUBTYPE are the mime content-type.
+
+    NOTE: some message parts have in-band charset information in addition to
+    the mime specified charset. In this case, using a value other than 'same'
+    is likely to confuse a filter that interprets the inband specifier. For
+    example, some text/html messages do this.
+
+    NOTE: Any encoding that python understands can be used here. You should,
+    however, only specify charset encodings. For example, specifying base64
+    won't work, because it expects a byte stream, not a unicode stream.
+
+    See also 'pipe' and 'pipe-oenc'
+    """))
+    options.addOption(settings.StringOption("pipe-oenc", None, doc="""Set output encoding for filter command.
+
+    This decodes the data stream using the given encoding after reading the
+    data from the command.
+
+    mailnex internally converts all data to unicode when reading. This data
+    must be encoded into a valid character stream for a program to interpret
+    it. This setting indicates what encoding the command uses for its output.
+
+    If unspecified, mailnex will assume utf-8 encoding. If the special value
+    "same" is given, mailnex will use the same encoding as was used for the
+    input of the filter (which might be different from the charset of the
+    original message part, unless ienc is also set to "same").
+
+    The search order is:
+
+        pipe-ienc-TYPE/SUBTYPE
+        pipe-ienc-TYPE
+        pipe-ienc
+
+    where TYPE and SUBTYPE are the mime content-type.
+
+    See also 'pipe' and 'pipe-ienc'
+    """))
     options.addOption(settings.StringOption("pgpkey", None, doc="PGP key search string. Can be an email address, UID, or fingerprint as recognized by gnupg. When unset, try to use the from field."))
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
     options.addOption(settings.StringOption('smtp', None, doc="""Set to an smtp/submission URI to send messages via SMTP instead of local sendmail agent.
