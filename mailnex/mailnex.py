@@ -2494,61 +2494,58 @@ class Cmd(cmdprompt.CmdPrompt):
                         break
                 if cmd:
                     body += "filtered with cmd: {}\n\n".format(cmd)
-                    #print(repr(part[2]))
-                    #print(type(part[2]))
-                    #print("About to send",repr(part[2][-200:]))
-                    with tempfile.NamedTemporaryFile() as outfile:
-                        #outfile.write(part[2].encode('iso-8859-1'))
-                        ienc = None
-                        settingsearch = [
-                            'pipe-ienc-{}/{}'.format(t, s),
-                            'pipe-ienc-{}'.format(t, s),
-                            'pipe-ienc'.format(t, s),
-                            ]
-                        for setting in settingsearch:
-                            if setting in self.C.settings and self.C.settings[setting].value:
-                                ienc = self.C.settings[setting].value
-                                break
-                        if not ienc:
-                            if hasattr(part[1], 'realcharset'):
-                                ienc = part[1].realcharset
-                            else:
-                                ienc = 'utf-8'
-                        if ienc == 'same' and hasattr(part[1], 'realcharset'):
+                    ienc = None
+                    settingsearch = [
+                        'pipe-ienc-{}/{}'.format(t, s),
+                        'pipe-ienc-{}'.format(t, s),
+                        'pipe-ienc'.format(t, s),
+                        ]
+                    for setting in settingsearch:
+                        if setting in self.C.settings and self.C.settings[setting].value:
+                            ienc = self.C.settings[setting].value
+                            break
+                    if not ienc:
+                        if hasattr(part[1], 'realcharset'):
                             ienc = part[1].realcharset
-                        # TODO: Maybe allow chaining encoders. E.g. encode to
-                        # utf-8, then to base64.
-                        try:
-                            encdata = part[2].encode(ienc,'xmlcharrefreplace')
-                        except AssertionError:
-                            # Some encoders demmand strict error handling, so
-                            # if we couldn't do charref, we'll try strict
-                            # instead
-                            encdata = part[2].encode(ienc)
-                        outfile.write(encdata)
-                        #outfile.write(part[2])
-                        outfile.flush()
-                        if cmd.endswith("%s") or cmd.endswith("%f"):
+                        else:
+                            ienc = 'utf-8'
+                    if ienc == 'same' and hasattr(part[1], 'realcharset'):
+                        ienc = part[1].realcharset
+                    # TODO: Maybe allow chaining encoders. E.g. encode to
+                    # utf-8, then to base64.
+                    try:
+                        encdata = part[2].encode(ienc,'xmlcharrefreplace')
+                    except AssertionError:
+                        # Some encoders demmand strict error handling, so
+                        # if we couldn't do charref, we'll try strict
+                        # instead
+                        encdata = part[2].encode(ienc)
+                    if cmd.endswith("%s") or cmd.endswith("%f"):
+                        with tempfile.NamedTemporaryFile() as outfile:
+                            outfile.write(encdata)
+                            outfile.flush()
                             cmd = cmd[:-2] + outfile.name
                             status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], b"")
-                            if status == 0:
-                                oenc = None
-                                settingsearch = [
-                                'pipe-oenc-{}/{}'.format(t, s),
-                                'pipe-oenc-{}'.format(t, s),
-                                'pipe-oenc'.format(t, s),
-                                ]
-                                for setting in settingsearch:
-                                    if setting in self.C.settings and self.C.settings[setting].value:
-                                        oenc = self.C.settings[setting].value
-                                        break
-                                if oenc is None:
-                                    oenc = 'utf-8'
-                                elif oenc == 'same':
-                                    oenc = ienc
-                                part = (part[0], part[1], data.decode(oenc))
-                            else:
-                                print("Error running:", status)
+                    else:
+                        status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], encdata)
+                    if status == 0:
+                        oenc = None
+                        settingsearch = [
+                        'pipe-oenc-{}/{}'.format(t, s),
+                        'pipe-oenc-{}'.format(t, s),
+                        'pipe-oenc'.format(t, s),
+                        ]
+                        for setting in settingsearch:
+                            if setting in self.C.settings and self.C.settings[setting].value:
+                                oenc = self.C.settings[setting].value
+                                break
+                        if oenc is None:
+                            oenc = 'utf-8'
+                        elif oenc == 'same':
+                            oenc = ienc
+                        part = (part[0], part[1], data.decode(oenc))
+                    else:
+                        print("Error running:", status)
 
                 body += part[2]
             if not part[2].endswith('\r\n\r\n'):
