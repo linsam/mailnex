@@ -2414,6 +2414,114 @@ class Cmd(cmdprompt.CmdPrompt):
         for i in topics:
             yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
 
+    def do_help(self, args):
+        """List available commands/topics or details about a specific command or topic
+
+        help        list commands and topics
+        help CMD    show help on command CMD
+        """
+        # This overrides the one from cmd.Cmd. That one assumed terminal width
+        # was 80 and didn't support calling out to a pager.
+        if args:
+            # Show specific command or topic if available
+            if hasattr(self, "help_{}".format(args)):
+                # Either a topic or dedicated function version of help for a
+                # command. Call the function and use its string
+                helpdata = getattr(self, "help_{}".format(args))()
+                if helpdata is None:
+                    # TODO: functiona probably output its own data. Maybe we
+                    # should flag that?
+                    helpdata = ""
+            elif hasattr(self, "do_{}".format(args)):
+                helpdata = None
+                if hasattr(getattr(self, "do_{}".format(args)), "__doc__"):
+                    helpdata = getattr(getattr(self, "do_{}".format(args)), "__doc__")
+                if not helpdata:
+                    helpdata = "No documentation for command '{}'".format(args)
+            else:
+                helpdata = "Unknown command/topic: '{}'".format(args)
+            # TODO: Reflow help text (to terminal width), and fixup indentation.
+            if not isinstance(helpdata, (list, tuple)):
+                helpdata = helpdata.split('\n')
+        else:
+            cmdstr = "do_"
+            helpstr = "help_"
+            doc = []
+            undoc = []
+            topic = []
+            for i in dir(self):
+                if i.startswith(cmdstr):
+                    command = i[len(cmdstr):]
+                    if command in topic:
+                        # We found a help_{} before the do_{}. Move it
+                        topic.remove(command)
+                        doc.append(command)
+                    else:
+                        docstr = ""
+                        if hasattr(getattr(self, i), "__doc__"):
+                            docstr = getattr(getattr(self, i), "__doc__")
+                        if docstr:
+                            doc.append(command)
+                        else:
+                            undoc.append(command)
+                elif i.startswith(helpstr):
+                    topicstr = i[len(helpstr):]
+                    if not topicstr in doc:
+                        # We haven't already found a command this is
+                        # documenting. Put it in the topics list. If we find a
+                        # command later, it will be moved; no need to search
+                        # for a matching command here.
+                        topic.append(topicstr)
+            width = self.C.t.width
+            outlines = []
+            # cmd has a nice organize-as-columns implementation, but it
+            # directly writes to stdout. We want to hold it for possible
+            # sending to a pager. Rather than re-implement it ourselves, we'll
+            # just replace stdout temporarily
+            oldout = self.stdout
+            myio = StringIO()
+            self.stdout = myio
+            indent = "    "
+            def icasecmp(a, b):
+                return cmp(a.lower(), b.lower())
+            doc.sort(icasecmp)
+            topic.sort(icasecmp)
+            undoc.sort(icasecmp)
+            if doc:
+                outlines.append("Documented commands:")
+                self.columnize(doc, width - len(indent))
+                myio.reset()
+                for line in myio:
+                    outlines.append(indent + line[:-1])
+                myio.reset()
+                myio.truncate()
+                outlines.append("")
+            if topic:
+                outlines.append("Topics:")
+                self.columnize(topic, width - len(indent))
+                myio.reset()
+                for line in myio:
+                    outlines.append(indent + line[:-1])
+                myio.reset()
+                myio.truncate()
+                outlines.append("")
+            if undoc:
+                outlines.append("Undocumented commands:")
+                self.columnize(undoc, width - len(indent))
+                myio.reset()
+                for line in myio:
+                    outlines.append(indent + line[:-1])
+                myio.reset()
+                myio.truncate()
+                outlines.append("")
+            self.stdout = oldout
+            helpdata = outlines
+        # TODO: Use crt_help or crt. Also, use a function to get below-line
+        # height
+        if len(helpdata) > self.C.t.height - 8:
+            self.runAProgramWithInput(["less", "-R"], "\n".join(helpdata).encode("utf-8"))
+        else:
+            print("\n".join(helpdata))
 
     def filterHeaders(self, headers, ignore, headerOrder, allHeaders):
         headerstr = u''
