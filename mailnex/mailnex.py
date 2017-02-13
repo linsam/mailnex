@@ -1268,16 +1268,35 @@ class Cmd(cmdprompt.CmdPrompt):
             have to undelete it before it is accessible again.
         """
 
+        args = args.strip()
         s=set()
         # Second pass, read a few specials 
         if args == '.':
             return [self.C.currentMessage]
-        if args == '+':
-            # TODO: boundary check
-            return [self.C.currentMessage + 1]
-        if args == '-':
-            # TODO: boundary check
-            return [self.C.currentMessage - 1]
+        if args.startswith('+'):
+            if len(args) > 1:
+                distance = int(args[1:])
+            else:
+                distance = 1
+            target = self.C.currentMessage + distance
+            # allowing 1 past end causes commands like 'print' to show EOF
+            # instead of the last message. This prevents things like repeating
+            # 'p +' from showing the last message over and over
+            if target > self.C.lastMessage + 1:
+                target = self.C.lastMessage + 1
+            return [target]
+        if args.startswith('-'):
+            if len(args) > 1:
+                distance = int(args[1:])
+            else:
+                distance = 1
+            target = self.C.currentMessage - distance
+            # allowing 1 past end causes commands like 'print' to show EOF
+            # instead of the last message. This prevents things like repeating
+            # 'p +' from showing the last message over and over
+            if target <= 0:
+                target = 0
+            return [target]
         if args == '`':
             # TODO: print "No previously marked messages" if the list is empty
             return self.C.lastList

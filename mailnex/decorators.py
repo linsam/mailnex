@@ -45,6 +45,11 @@ def argsToMessageList(func):
 
     If no arguments are provided, uses None. This allows a command to distinguish between arguments that produce no patch, and a lack of arguments.
 
+    If the message list evaluates to out of bounds, prints a diagnostic and
+    doesn't call the wrapped function (e.g. "at EOF" when trying to display
+    the next message after the last). This isn't foolproof, and relies on
+    parseMessageList to detect it.
+
     We could just return the current message when nothing is given, but that would make the updateMessageSelectionAtEnd decorator much harder to implement, since it should unmark on no argument (that is, clear the lastList).
 
     As well, some commands behave differently with or without an argument. E.g. headers does different selection updates and displays markers differently.
@@ -53,6 +58,13 @@ def argsToMessageList(func):
     def argsToMessageListWrapper(self, args):
         if args:
             msglist = self.parseMessageList(args)
+            if len(msglist) == 1:
+                if msglist[0] == 0:
+                    print("Nothing before the first message")
+                    return None
+                elif msglist[0] >= self.C.lastMessage + 1:
+                    print("at EOF")
+                    return None
         else:
             msglist = None
         return func(self, msglist)
