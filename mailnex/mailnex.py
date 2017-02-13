@@ -1047,49 +1047,50 @@ def enumerateKeys(keys):
 
 class Cmd(cmdprompt.CmdPrompt):
     def help_hidden_commands(self):
-        print("The following are hidden commands:")
-        print()
-        print("      -> print next message (usually 'print +' except the first time)")
-        print("  h   -> headers")
-        print("  p   -> print")
-        print("  q   -> quit")
-        print("  x   -> exit")
+        return """The following are hidden commands:
+
+            -> print next message (usually 'print +' except the first time)
+        h   -> headers
+        p   -> print
+        q   -> quit
+        x   -> exit
+        """
     def help_optional_packages(self):
         # TODO: format to the user's terminal
-        # TODO: Call pager if shorter than CRT
-        print("Some commands require optional packages to be installed to enable")
-        print("functionality. For example, indexing and searching the index require")
-        print("that Xapian be installed with python bindings. Similarly,")
-        print("cryptographically signing email requires python bindings for gpgme.")
-        print()
-        print("These are often unavailable via pip install, and must therefore either")
-        print("be installed by hand or come from your system's package manager. As")
-        print("such, if running mailnex from a virtual-env, the virtual-env needs")
-        print("to be set to have access to the system packages (using the")
-        print("'--system-site-packages' flag of the virtualenv tool). See the file")
-        print("'INSTALL' that came with this program for more details.")
+        return """Some commands require optional packages to be installed to enable
+        functionality. For example, indexing and searching the index require
+        that Xapian be installed with python bindings. Similarly,
+        cryptographically signing email requires python bindings for gpgme.
+
+        These are often unavailable via pip install, and must therefore either
+        be installed by hand or come from your system's package manager. As
+        such, if running mailnex from a virtual-env, the virtual-env needs
+        to be set to have access to the system packages (using the
+        '--system-site-packages' flag of the virtualenv tool). See the file
+        'INSTALL' that came with this program for more details.
+        """
     def help_authentication(self):
         # TODO: format to the user's terminal
-        # TODO: Call pager if shorter than CRT
-        print("mailnex looks for passwords from the following sources")
-        print("in the following order:")
-        print(" * option 'agent-shell-lookup-PROTOCOL/USER@HOST:PORT'")
-        print(" * option 'agent-shell-lookup-PROTOCOL/USER@HOST'")
-        print(" * option 'agent-shell-lookup-USER@HOST'")
-        print(" * option 'agent-shell-lookup-HOST'")
-        print(" * option 'agent-shell-lookup'")
-        print(" * user keyring (e.g. seahorse or kwallet. see 'pydoc keyring.backends' for a list)")
-        print(" * prompt for input")
-        print()
-        print("Note that, in all cases, the password is kept in RAM only")
-        print("long enough to send to the server. If the connection is")
-        print("lost, a new password will have to be sourced to reconnect.")
-        print()
-        print("Note that mailnex tries to prevent the password from traversing")
-        print("the network in the clear by requiring a TLS connection. Note that")
-        print("this doesn't prevent the remote side from subsequently abusing the")
-        print("password, nor does it protect against local retrieval (e.g. memory")
-        print("dumping this program while the raw data is still in memory)")
+        return """mailnex looks for passwords from the following sources
+        in the following order:
+         * option 'agent-shell-lookup-PROTOCOL/USER@HOST:PORT'
+         * option 'agent-shell-lookup-PROTOCOL/USER@HOST'
+         * option 'agent-shell-lookup-USER@HOST'
+         * option 'agent-shell-lookup-HOST'
+         * option 'agent-shell-lookup'
+         * user keyring (e.g. seahorse or kwallet. see 'pydoc keyring.backends' for a list)
+         * prompt for input
+
+        Note that, in all cases, the password is kept in RAM only
+        long enough to send to the server. If the connection is
+        lost, a new password will have to be sourced to reconnect.
+
+        Note that mailnex tries to prevent the password from traversing
+        the network in the clear by requiring a TLS connection. Note that
+        this doesn't prevent the remote side from subsequently abusing the
+        password, nor does it protect against local retrieval (e.g. memory
+        dumping this program while the raw data is still in memory)
+        """
 
     def parseMessageList(self, args):
         """Parse a message list specification string into a list of matching message IDs.
