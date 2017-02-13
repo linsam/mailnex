@@ -1627,9 +1627,20 @@ class Cmd(cmdprompt.CmdPrompt):
         compl.settings = self.C.settings
         return compl
 
+    @showExceptions
     def equals(self, args):
-        """Show current message number (.)"""
-        print(self.C.currentMessage)
+        """Show current message number (.)
+
+        With 'all', show the various states."""
+        if args != "all":
+            print(self.C.currentMessage)
+            return
+        print("last list:", self.C.lastList)
+        #print("last search:", self.C.lastsearch)
+        print("last command:", self.C.lastcommand)
+        print("last message:", self.C.lastMessage)
+        print("current message:", self.C.currentMessage)
+        print("next message:", self.C.nextMessage)
 
     @showExceptions
     def do_account(self, args):
