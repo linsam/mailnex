@@ -4436,7 +4436,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
-            print("Failed to flag: %s" % ev)
+            print("Failed to delete: %s" % ev)
 
     @showExceptions
     @needsConnection
@@ -4459,7 +4459,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
-            print("Failed to unflag: %s" % ev)
+            print("Failed to undelete: %s" % ev)
 
     @showExceptions
     @needsConnection
@@ -4487,7 +4487,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
-            print("Failed to flag: %s" % ev)
+            print("Failed to mark as read: %s" % ev)
 
     @showExceptions
     @needsConnection
@@ -4508,7 +4508,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
-            print("Failed to unflag: %s" % ev)
+            print("Failed to unmark as read: %s" % ev)
 
     @showExceptions
     @needsConnection
