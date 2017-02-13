@@ -73,6 +73,7 @@ def argsToMessageList(func):
 # Constants for updateMessageSelectionAtEnd:
 UMSAE_DEFAULT = 0
 UMSAE_NEXT_IS_CURRENT = 1 # 'from' behavior. NEXT and CURRENT set the same
+UMSAE_RETURNS_CURRENT = 2 # 'next' behavior. CURRENT isn't the last in the list.
 
 def updateMessageSelectionAtEnd(UMSAE_style):
     """This decorator updates message selections after the wrapped function completes, but only if no exception is raised.
@@ -113,6 +114,14 @@ def updateMessageSelectionAtEnd(UMSAE_style):
                 self.C.nextMessage = self.C.currentMessage + 1
             elif UMSAE_style == UMSAE_NEXT_IS_CURRENT:
                 self.C.nextMessage = self.C.currentMessage
+            elif UMSAE_style == UMSAE_RETURNS_CURRENT:
+                self.C.currentMessage = res
+                self.C.nextMessage = self.C.currentMessage + 1
+                # Functions using this style forfeit their ability to return
+                # data to caller. Most commonly, the caller is the command
+                # loop, and any truth value results in exiting, so this isn't
+                # a problem.
+                res = None
             else:
                 raise Exception("Unknown UMSAE style")
             return res

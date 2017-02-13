@@ -1384,6 +1384,8 @@ class Cmd(cmdprompt.CmdPrompt):
             return self.do_from(a)
         elif c[0] == 'f' and len(c) > 1 and not c[1].isalpha():
             return self.do_from(c[1:] + ' ' + a)
+        elif c == 'n':
+            return self.do_next(a)
         elif c == 'p':
             return self.do_print(a)
         elif c == 'P':
@@ -1413,7 +1415,7 @@ class Cmd(cmdprompt.CmdPrompt):
             self.do_search(self.C.lastsearch, offset=self.C.lastsearchpos)
         else:
             # Next message
-            # TODO: mailx has a special case, which is when it picks the
+            # Note: mailx has a special case, which is when it picks the
             # message, e.g. when opening a box and it picks the first
             # flagged or unread message. In which case, the implicit
             # "next" command shows the message marked as current.
@@ -1421,8 +1423,8 @@ class Cmd(cmdprompt.CmdPrompt):
             # Likewise, after a from command, the current message is used
             # instead of the next.
             #
-            # Plan: Have both currentMessage and nextMessage. Typically
-            # they are different, but can be the same.
+            # We handle this by having both currentMessage and nextMessage,
+            # and upate them appropriately.
             #
             # TODO: extension to mailx: Next could mean next in a list;
             # e.g. a saved list or results of f/search command or custom
@@ -1430,12 +1432,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # Ideally, we'd mention the active list in the prompt. Ideally
             # we'd also list what the implicit command is in the prompt
             # (e.g. next or search continuation)
-            if (self.C.nextMessage > self.C.lastMessage):
-                print("at EOF")
-            else:
-                self.C.currentMessage = self.C.nextMessage
-                # print will update nextMessage for us
-                self.do_print("")
+            self.do_next("")
     def processConfig(self, fileName, startlineno, lines):
         """Process configuration lines.
 
@@ -2966,6 +2963,51 @@ class Cmd(cmdprompt.CmdPrompt):
             self.runAProgramStraight(['/bin/sh', '-c', fullcmd])
 
 
+    @shortcut("n")
+    @showExceptions
+    @needsConnection
+    @argsToMessageList
+    @updateMessageSelectionAtEnd(UMSAE_RETURNS_CURRENT)
+    def do_next(self, msglist):
+        """Display the next message in the given list.
+
+        If no list given, displays the next message in the mailbox.
+
+        Starts with the message after the current one and looks for a match in
+        the list. If none found, picks the first message in the list.
+
+        Usefull to just to the next unread message like so:
+
+            next :u
+
+        Or iterate through the last message list by repeatedly running
+
+            next `
+        """
+        index = None
+        if msglist is None:
+            index = self.C.nextMessage
+        else:
+            for i in msglist:
+                if i > self.C.currentMessage:
+                    index = i
+                    break
+            if not index:
+                index = msglist[0]
+
+        vindex = index
+        if self.C.virtfolder:
+            index = self.C.virtfolder[index - 1]
+        parts = self.getTextPlainParts(index)
+        # TODO: This code copied from do_print.
+        # Should be made common. See also TODOs from there.
+        body = self.partsToString(parts)
+        content = b"\033[7mMessage %i:\033[0m\n" % index
+        content += body.encode('utf-8')
+        res = self.runAProgramWithInput(["less","-R"], content)
+        if res == 0:
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
+        return vindex
 
     @shortcut("p")
     @showExceptions
