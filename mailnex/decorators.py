@@ -70,43 +70,54 @@ def argsToMessageList(func):
         return func(self, msglist)
     return argsToMessageListWrapper
 
-def updateMessageSelectionAtEnd(func):
+# Constants for updateMessageSelectionAtEnd:
+UMSAE_DEFAULT = 0
+UMSAE_NEXT_IS_CURRENT = 1 # 'from' behavior. NEXT and CURRENT set the same
+
+def updateMessageSelectionAtEnd(UMSAE_style):
     """This decorator updates message selections after the wrapped function completes, but only if no exception is raised.
 
     The wrapped function must take a message list as its first non-self parameter. (for example, wrap this with argsToMessageList)
 
     Most commands select the last message of the message list as the current message and update the previous message to the previously current message, and update the marked message list to be the given message list.
     """
-    @wraps(func)
-    def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
-        # First, cache the current message; the command we run might change
-        # it, but we need it to update the last message correctly. We'll also
-        # use it to restore the current message if the function fails.
-        previouslyCurrent = self.C.currentMessage
-        try:
-            res = func(self, msglist, *args, **kwargs)
-        except Exception:
-            # First restore the current message if we can, but don't fail if
-            # we can't.
+    def wrap1(func):
+        @wraps(func)
+        def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
+            # First, cache the current message; the command we run might change
+            # it, but we need it to update the last message correctly. We'll also
+            # use it to restore the current message if the function fails.
+            previouslyCurrent = self.C.currentMessage
             try:
-                self.C.currentMessage = previouslyCurrent
-            except:
-                pass
-            # Next pass it on up
-            raise
-        # We successfully finished (well, didn't have an exception), so
-        # update the values
-        # However, don't update if the message list was empty
-        if msglist is None:
-            self.C.lastList = []
-        else:
-            self.C.lastList = msglist
-            if len(msglist):
-                self.C.prevMessage = previouslyCurrent
-                self.C.currentMessage = msglist[-1]
-                #TODO how to handle self.C.nextMessage?
-        return res
-    return updateMessageSelectionAtEnd
+                res = func(self, msglist, *args, **kwargs)
+            except Exception:
+                # First restore the current message if we can, but don't fail if
+                # we can't.
+                try:
+                    self.C.currentMessage = previouslyCurrent
+                except:
+                    pass
+                # Next pass it on up
+                raise
+            # We successfully finished (well, didn't have an exception), so
+            # update the values
+            # However, don't update if the message list was empty
+            if msglist is None:
+                self.C.lastList = []
+            else:
+                self.C.lastList = msglist
+                if len(msglist):
+                    self.C.prevMessage = previouslyCurrent
+                    self.C.currentMessage = msglist[-1]
+            if UMSAE_style == UMSAE_DEFAULT:
+                self.C.nextMessage = self.C.currentMessage + 1
+            elif UMSAE_style == UMSAE_NEXT_IS_CURRENT:
+                self.C.nextMessage = self.C.currentMessage
+            else:
+                raise Exception("Unknown UMSAE style")
+            return res
+        return updateMessageSelectionAtEnd
+    return wrap1
 
 def showExceptions(func):
     """This decorator displays exceptions and returns to normal operation.

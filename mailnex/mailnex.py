@@ -2817,7 +2817,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_print(self, msglist):
         C = self.C
         M = C.connection
@@ -2935,15 +2935,22 @@ class Cmd(cmdprompt.CmdPrompt):
             # However, some people probably like the mailx behavior better
             # because they are used to it, so we ought to support it.
             M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
-            # Update message stuffs. Should probably update the 'lastList' as
-            # well.
-            C.nextMessage = C.currentMessage + 1
+        # TODO: Raise exception if not successful?
+        # Pros: Explicitly lets the user know something went wrong (no output
+        # is probably a bad thing
+        # Cons: The output can be pretty verbose (may be mitigated by raising
+        # a special exception type that a higher level can catch and treat)
+        # Pro/Con: Not raising an exception causes the message numbers to
+        # update (see decorators.updateMessageSelectionAtEnd). I don't know if
+        # it is better to update or not. As a point of reference: s-nail
+        # 14.8.6 appears to show nothing and move on. It also marks messages
+        # as read, even though the PAGER fails.
 
     @shortcut("P")
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_Print(self, msglist):
         """Print all text parts of a message.
 
@@ -2983,9 +2990,6 @@ class Cmd(cmdprompt.CmdPrompt):
         if res == 0:
             # TODO: Allow asynchronous mode. See do_print for details.
             M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
-            # Update message stuffs. Should probably update the 'lastList' as
-            # well.
-            C.nextMessage = C.currentMessage + 1
 
     @showExceptions
     @optionalNeeds(haveXapian, "Needs python-xapian package installed")
@@ -3055,7 +3059,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_show(self, msglist):
         """Show the raw, unprocessed message"""
         C = self.C
@@ -3101,7 +3105,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_reply(self, msglist):
         C = self.C
         M = C.connection
@@ -3276,10 +3280,6 @@ class Cmd(cmdprompt.CmdPrompt):
         sent = self.editMessage(newmsg)
         if sent:
             M.doSimpleCommand("STORE %s +FLAGS (\Answered)" % index)
-            # Update message stuffs. Should probably update the 'lastList' as
-            # well.
-            C.nextMessage = C.currentMessage + 1
-
 
     def editMessage(self, message):
 
@@ -4142,7 +4142,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_mheader(self, msglist):
         C = self.C
         M = C.connection
@@ -4175,7 +4175,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_structure(self, msglist):
         C = self.C
         M = C.connection
@@ -4398,7 +4398,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_NEXT_IS_CURRENT)
     def do_from(self, msglist):
         """List messages (like headers command) for given message list only."""
         # I originally thought 'f' was short for 'find' or something like
@@ -4414,12 +4414,11 @@ class Cmd(cmdprompt.CmdPrompt):
             return
 
         self.showHeaders(MessageList(msglist))
-        C.nextMessage = C.currentMessage
 
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_delete(self, msglist):
         """Mark messages for deletion.
 
@@ -4442,7 +4441,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_undelete(self, msglist):
         """Remove deletion mark for a message.
 
@@ -4472,7 +4471,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_read(self, msglist):
         """Mark messages as being seen (read).
         """
@@ -4493,7 +4492,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_unread(self, msglist):
         """Remove Seen flag from messages (make unread).
         """
@@ -4514,7 +4513,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_flag(self, msglist):
         """Flag messages.
 
@@ -4538,7 +4537,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     @argsToMessageList
-    @updateMessageSelectionAtEnd
+    @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_unflag(self, msglist):
         """Remove Flag from messages.
 
