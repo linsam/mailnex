@@ -1091,6 +1091,26 @@ class Cmd(cmdprompt.CmdPrompt):
         password, nor does it protect against local retrieval (e.g. memory
         dumping this program while the raw data is still in memory)
         """
+    def help_message_specifiers(self):
+        return """mailnex supports most of the standard mailx message list specifiers with some enhancements.
+
+        Plain number        message with that number.       e.g.  5
+        Range               messages in range inclusive.    e.g.  5-10
+        :u                  unread messages
+        :f                  flagged messages
+        +                   next message(*)
+        +N                  Nth next message                e.g.  +3
+        -                   previous message
+        -N                  Nth previous message
+        `                   last message list
+        ^                   first message
+        $                   last message
+        (CRI)               IMAP search critera CRI         e.g. (to bob)
+                e.g. (unseen since 5-jan-2017 to bob subject "meeting day")
+
+        (*) This is different than the 'next' command; the '+' always selects
+        the message following the current message.
+        """
 
     def parseMessageList(self, args):
         """Parse a message list specification string into a list of matching message IDs.
