@@ -1046,6 +1046,13 @@ def enumerateKeys(keys):
             ))
 
 class Cmd(cmdprompt.CmdPrompt):
+    def __init__(self, *args, **kwargs):
+        cmdprompt.CmdPrompt.__init__(self, *args, **kwargs)
+        self.__dict__[b'do_='] = self.equals
+        # Allow the equals symbol to show up in commands, which allows a
+        # command to be named '='. Alternatively, we could handle it in the
+        # default handler.
+        self.identchars += "="
     def help_hidden_commands(self):
         return """The following are hidden commands:
 
@@ -1619,6 +1626,10 @@ class Cmd(cmdprompt.CmdPrompt):
         compl = EmailCompleter()
         compl.settings = self.C.settings
         return compl
+
+    def equals(self, args):
+        """Show current message number (.)"""
+        print(self.C.currentMessage)
 
     @showExceptions
     def do_account(self, args):
