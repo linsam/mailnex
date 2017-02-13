@@ -173,7 +173,7 @@ class PromptPygStyle(pygments.style.Style):
     # types. I haven't made this do anything, so we'll leave it blank.
     default_style = ''
     styles = {
-            Generic.Inserted: 'italic #88f',
+            Generic.Inserted: '#88f',
             Generic.Heading: 'bold #8f8',
             Text: 'bold #ccf',
             # Error is used for, at least, text that doesn't match any token
