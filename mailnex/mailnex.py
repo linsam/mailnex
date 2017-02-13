@@ -2633,12 +2633,15 @@ class Cmd(cmdprompt.CmdPrompt):
             if self.C.settings.debug.general:
                 if hasattr(part[1], 'encoding') and part[1].encoding:
                     body += "encoding: " + part[1].encoding + "\r\n"
-                body += "struct: " + repr(part[1].__dict__) + "\r\n"
+                if part[1]:
+                    body += "struct: " + repr(part[1].__dict__) + "\r\n"
             if headerstr != "":
                 body += headerstr
                 headerstr = u''
             if part[0].endswith(".HEADER"):
                 body += self.filterHeaders(part[2], self.C.settings.ignoredheaders.value, self.C.settings.headerorder.value, allHeaders)
+            elif not part[1]:
+                body += part[2]
             else:
                 t = part[1].type_
                 s = part[1].subtype
