@@ -267,10 +267,17 @@ class CmdPrompt(cmd.Cmd):
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
                     get_title = self.get_title,
+                    get_bottom_toolbar_tokens=self.toolbar,
                     ),
                 eventloop = self.ptkevloop,
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
         )
+        self.status = {'unread': None}
+    def toolbar(self, cli):
+        return [
+                (Token.Text, " Unread: "),
+                (Generic.Heading, str(self.status['unread'])),
+                ]
 
     def setPrompt(self, newprompt):
         """Set the prompt string"""

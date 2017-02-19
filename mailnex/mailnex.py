@@ -1748,6 +1748,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if not self.C.connection:
                 print("No connection. Give a location to this command to establish a connection.\nSee 'help folder' for more info.")
                 return
+            unseen = len(self.C.connection.search("utf-8", "UNSEEN"))
             print("\"{}://{}@{}:{}/{}\": {} messages {} unread".format(
                 self.C.connection.mailnexProto,
                 self.C.connection.mailnexUser,
@@ -1755,8 +1756,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.C.connection.mailnexPort,
                 self.C.connection.mailnexBox,
                 self.C.lastMessage,
-                len(self.C.connection.search("utf-8", "UNSEEN")),
+                unseen,
                 ))
+            self.status['unread'] = unseen
             return
 
 
@@ -1924,6 +1926,7 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.lastMessage = c.exists
             c.setCB("exists", self.newExist)
             c.setCB("expunge", self.newExpunge)
+            c.setCB("fetch", self.fetchMonitor)
             if self.C.currentMessage > self.C.lastMessage:
                 # This should only really happen when lastMessage is 0, but
                 # range checking is probably good anyway.
@@ -2043,6 +2046,41 @@ class Cmd(cmdprompt.CmdPrompt):
         # maintain the message numbers the user expects. Managing the
         # de-synchronization would probably be challenging, though
         self.C.lastMessage -= 1
+
+    def fetchMonitor(self, msg, data):
+        data = processImapData(data, self.C.settings)[0]
+        l = lambda: print("fetch received:", msg, data)
+        if self.cli._is_running and self.C.settings.debug.general:
+            self.cli.run_in_terminal(l)
+        if 'FLAGS' in data:
+            flags = getResultPart('FLAGS', data)
+            p = '{}.FLAGS'.format(msg)
+            if p in self.C.cache:
+                oldflags = self.C.cache[p]
+                if '\\Seen' in oldflags and not '\\Seen' in flags:
+                    self.status['unread'] += 1
+                if not '\\Seen' in oldflags and '\\Seen' in flags:
+                    self.status['unread'] -= 1
+            else:
+                # We don't know what the flags were, so we don't know if the
+                # unread (unseen) count changed. We'll have to ask for a new
+                # count. We don't want to do this for *every* fetch result we
+                # get; if a client marked a whole bunch of messages as read,
+                # we'll get called for each back-to-back, and re-searching the
+                # unseen count might be inefficient on the server (and
+                # certainly is a waste of network)
+                oldflags = None
+                # TODO: schedule refresh for a second or so later.
+                #unseen = len(self.C.connection.search("utf-8", "UNSEEN"))
+                #self.status['unread'] = unseen
+
+                pass
+            self.C.cache[p] = flags
+            l = lambda: print("New flags:", flags, "old flags:", oldflags)
+            if self.cli._is_running and self.C.settings.debug.general:
+                self.cli.run_in_terminal(l)
+            if self.cli._is_running:
+                self.cli.invalidate()
 
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing

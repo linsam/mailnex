@@ -431,6 +431,8 @@ class imap4ClientConnection(object):
                                     print("FETCH for %s" % num, data)
                                 if self.cb_fetch:
                                     self.cb_fetch(num, data)
+                                if "fetch" in self.cbs:
+                                    self.cbs["fetch"](num, data)
                             elif typ.upper() == "EXPUNGE":
                                 if self.debug:
                                     print("EXPUNGE for %s" % num)
