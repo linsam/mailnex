@@ -2987,6 +2987,9 @@ class Cmd(cmdprompt.CmdPrompt):
         index = None
         if msglist is None:
             index = self.C.nextMessage
+            if index > self.C.lastMessage:
+                print("at EOF")
+                return self.C.currentMessage
         else:
             for i in msglist:
                 if i > self.C.currentMessage:
