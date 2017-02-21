@@ -3887,10 +3887,21 @@ class Cmd(cmdprompt.CmdPrompt):
                 # that is, set the terminal up for "normal" use while we
                 # invoke our terminal-using function
                 with self.cli.input.cooked_mode():
+                    editor = None
+                    if hasattr(self.C.settings, "VISUAL") and self.C.settings.VISUAL.value:
+                        editor = self.C.settings.VISUAL.value
+                    elif hasattr(self.C.settings, "EDITOR") and self.C.settings.EDITOR.value:
+                        editor = self.C.settings.EDITOR.value
+                    elif os.environ.get('VISUAL'):
+                        editor = os.environ.get('VISUAL')
+                    elif os.environ.get('EDITOR'):
+                        editor = os.environ.get('EDITOR')
+                    else:
+                        editor = "vim"
                     # For whatever reason, vim complains the input isn't from
                     # the terminal unless we redirect it ourselves. I'm
                     # guessing prompt_toolkit changed python's stdin somehow
-                    res = self.runAProgramStraight(["vim", f[1]])
+                    res = self.runAProgramStraight(["/bin/sh","-c", editor + " " + f[1]])
                 if res != 0:
                     self.C.printWarning("Edit aborted; message unchanged")
                 else:
