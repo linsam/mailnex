@@ -272,6 +272,10 @@ class CmdPrompt(cmd.Cmd):
                 eventloop = self.ptkevloop,
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
         )
+        # ui_lines is the number of lines occupied by the UI.
+        # For example, 1 line for command prompt, 7 lines for completion menu,
+        # 1 line for toolbar.
+        self.ui_lines = 9
         self.status = {'unread': None}
     def toolbar(self, cli):
         return [

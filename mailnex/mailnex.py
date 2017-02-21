@@ -2594,9 +2594,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 outlines.append("")
             self.stdout = oldout
             helpdata = outlines
-        # TODO: Use crt_help or crt. Also, use a function to get below-line
-        # height
-        if len(helpdata) > self.C.t.height - 8:
+        # TODO: Use crt_help or crt.
+        if len(helpdata) > self.C.t.height - self.ui_lines:
             self.runAProgramWithInput(["less", "-R"], "\n".join(helpdata).encode("utf-8"))
         else:
             print("\n".join(helpdata))
@@ -4450,8 +4449,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # Internal adjust is the number of rows the UI occupies.
         # At the moment, that is 1 line for the prompt, and 7 lines for
         # completion popup.
-        # TODO: Get this number from the UI
-        internalAdjust = 8
+        internalAdjust = self.ui_lines
         # Must show at least 1 row.
         minrows = 1
         try:
