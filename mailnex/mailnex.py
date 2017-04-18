@@ -2014,6 +2014,18 @@ class Cmd(cmdprompt.CmdPrompt):
 
     def newExist(self, value):
         delta = value - self.C.lastMessage
+        # Assume new messages must be unseen. Assume we'll get a fetch
+        # notification if it subsequently becomes seen. TODO: Verify these
+        # assumptions!
+        if self.C.settings.debug.general:
+            print("Notified of new message(s) (newExist = {}, so delta is {})".format(value, delta))
+        for i in range(self.C.lastMessage + 1, value + 1):
+            p = '{}.FLAGS'.format(i)
+            # Don't set \Seen flag
+            self.C.cache[p]=[]
+            if self.C.settings.debug.general:
+                print(" Faking cache of {}".format(p))
+        self.status['unread'] += delta
         self.C.lastMessage = value
         if self.ttyBusy:
             # TODO: Collect messages for display once it isn't busy any more.
@@ -2046,6 +2058,19 @@ class Cmd(cmdprompt.CmdPrompt):
         # maintain the message numbers the user expects. Managing the
         # de-synchronization would probably be challenging, though
         self.C.lastMessage -= 1
+        # was the message unseen? If so, decrement self.status['unread']
+        p = '{}.FLAGS'.format(msg)
+        if p in self.cache:
+            if '\\Seen' not in self.cache[p]:
+                self.status['unread'] -= 1
+            else:
+                # Wasn't part of unread count. Nothing to do.
+                pass
+        else:
+            # We don't know if it was seen or not.
+            # TODO: Schedule an unseen count in a second or something to
+            # update the status
+            pass
 
     def fetchMonitor(self, msg, data):
         data = processImapData(data, self.C.settings)[0]
@@ -2070,7 +2095,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 # unseen count might be inefficient on the server (and
                 # certainly is a waste of network)
                 oldflags = None
-                # TODO: schedule refresh for a second or so later.
+                # TODO: schedule refresh for a second or so later, unless such
+                # a refresh is already pending (once per second shouldn't be
+                # bad if a lot of operations are continuously happening in the
+                # background. If we were instead to delayuntil a second after
+                # things stop can make us look very unresponsive.
                 #unseen = len(self.C.connection.search("utf-8", "UNSEEN"))
                 #self.status['unread'] = unseen
 
