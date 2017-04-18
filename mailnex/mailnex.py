@@ -4527,9 +4527,18 @@ class Cmd(cmdprompt.CmdPrompt):
         for part in sorted(parts.keys()):
             p = parts[part]
             if p.disposition:
-                # TODO: Display attachment filename if available
-                # ["attachment", ["filename", "file1.txt"]]
                 disp = " ({})".format(p.disposition[0])
+                # Display attachment filename if available
+                # p.disposition looks like ["attachment", ["filename", "file1.txt"]]
+                if p.disposition[1]:
+                    try:
+                        d = getResultPart('filename', p.disposition[1])
+                        # TODO: Interpret name (may be a quopri or b64 encoded
+                        # header)
+                        disp += " (name: {})".format(d)
+                    except:
+                        # Probably didn't have a 'filename' parameter
+                        pass
             else:
                 disp = ""
             print("{}{}   {}/{}{}".format(index, part, p.type_, p.subtype, disp))
