@@ -175,6 +175,7 @@ class PromptPygStyle(pygments.style.Style):
     styles = {
             Generic.Inserted: '#88f',
             Generic.Heading: 'bold #8f8',
+            Generic.Error: 'bold #f00',
             Text: 'bold #ccf',
             # Error is used for, at least, text that doesn't match any token
             # (when using a RegexLexer derivitive). As such, it is used for

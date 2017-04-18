@@ -257,6 +257,40 @@ def attachFile(attachList, filename, pos=None, replace=False):
     else:
         attachList[pos] = filename
 
+def pathCompleter(currentPath):
+    # TODO: Cache the results from any given directory; it is very
+    # inefficient to recalculate this for every character the user
+    # types.
+    # Alternatively, only complete one request (e.g. user hits
+    # 'tab')
+    dirname = os.path.dirname(currentPath)
+    filename = os.path.basename(currentPath)
+    try:
+        paths = os.listdir(dirname) if dirname else os.listdir(".")
+    except OSError:
+        # Typically, file not found. Whatever the error, just
+        # don't do completions.
+        raise StopIteration
+    # Remove paths that don't start with our query
+    paths = filter(lambda x: x.startswith(filename), paths)
+    paths.sort()
+    for i in paths:
+        extra=None
+        try:
+            if os.path.isdir(os.path.sep.join([dirname if dirname else '.',i])):
+                extra = os.path.sep
+        except OSError:
+            # Ignore file-not-found and such. We shouldn't
+            # actually get here typically (we got a list from
+            # earlier), but things happen, like an entry being
+            # removed after we got the list but before we checked
+            # for it being a directory.
+            # TODO: Since the error is usually that we cannot
+            # check the entry (as in, it doesn't exist), perhaps
+            # we should skip it in the listing?
+            pass
+        yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(filename), display_meta=extra)
+
 class MessageList(object):
     """Acts like a set, but automatically collapses ranges.
 
@@ -2861,6 +2895,50 @@ class Cmd(cmdprompt.CmdPrompt):
         struct = flattenStruct(struct)
         return struct
 
+    def lex_write(self, text, rest, res):
+        def checkMsg(tok):
+            try:
+                msg = tok.split('.')
+                msg = map(int,msg)
+            except:
+                res.append((cmdprompt.Generic.Error, tok))
+            else:
+                if msg[0] < 0 or msg[0] > self.C.lastMessage:
+                    res.append((cmdprompt.Generic.Error, tok))
+                else:
+                    res.append((cmdprompt.Generic.Heading, tok))
+        tok = rest.split()
+        if len(tok) == 1:
+            checkMsg(tok[0])
+            rest = rest[len(tok[0]):]
+            if len(rest):
+                # Catch spaces typed by user
+                res.append((cmdprompt.Generic.Normal, rest))
+            return
+        elif len(tok) == 2:
+            checkMsg(tok[0])
+            # TODO: Ideally, validate path or look for pipe
+            res.append((cmdprompt.Generic.Normal, rest[len(tok[0]):]))
+            return
+        else:
+            # TODO: Look for pipe ('|') and such
+            res.append((cmdprompt.Generic.Normal, rest))
+        return
+    def compl_write(self, document, complete_event):
+        topics = []
+        this_word = document.get_word_before_cursor()
+        before = document.current_line_before_cursor
+        after = document.current_line_after_cursor
+        line = before + after
+        # TODO: Find out which word this is. Look for pipe to abort completion
+        if '|' in line:
+            raise StopIteration()
+        count = len(before.split())
+        if count != 3:
+            raise StopIteration()
+        compl = pathCompleter(before.split()[-1])
+        while True:
+            yield compl.next()
     @showExceptions
     @needsConnection
     def do_write(self, args):
@@ -3569,43 +3647,14 @@ class Cmd(cmdprompt.CmdPrompt):
                 line = document.current_line_before_cursor
                 if not line.startswith("~@ "):
                     # Only support completing filenames for now
-                    raise StopIteration
+                    raise StopIteration()
                 # TODO: Break out filename completer into separate function,
                 # to be reused by the attachment editor and possibly other
                 # places.
                 currentPath = line[3:]
-                # TODO: Cache the results from any given directory; it is very
-                # inefficient to recalculate this for every character the user
-                # types.
-                # Alternatively, only complete one request (e.g. user hits
-                # 'tab')
-                dirname = os.path.dirname(currentPath)
-                filename = os.path.basename(currentPath)
-                try:
-                    paths = os.listdir(dirname) if dirname else os.listdir(".")
-                except OSError:
-                    # Typically, file not found. Whatever the error, just
-                    # don't do completions.
-                    raise StopIteration
-                # Remove paths that don't start with our query
-                paths = filter(lambda x: x.startswith(filename), paths)
-                paths.sort()
-                for i in paths:
-                    extra=None
-                    try:
-                        if os.path.isdir(os.path.sep.join([dirname if dirname else '.',i])):
-                            extra = os.path.sep
-                    except OSError:
-                        # Ignore file-not-found and such. We shouldn't
-                        # actually get here typically (we got a list from
-                        # earlier), but things happen, like an entry being
-                        # removed after we got the list but before we checked
-                        # for it being a directory.
-                        # TODO: Since the error is usually that we cannot
-                        # check the entry (as in, it doesn't exist), perhaps
-                        # we should skip it in the listing?
-                        pass
-                    yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(filename), display_meta=extra)
+                compl = pathCompleter(currentPath)
+                while True:
+                    yield compl.next()
         class editorCmds(object):
             """Similar to the regular command class, but we only run commands if the line starts with a '~'"""
             def __init__(self, context, message, prompt, cli, addrCmpl, runner, cmdCmpl):
