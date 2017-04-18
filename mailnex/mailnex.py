@@ -2794,7 +2794,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if encoding:
             # Some mailers do weird casing, so we'll normalize it
             encoding = encoding.lower()
-        if encoding in [None, "", "nil", '7bit', '8bit']:
+        if encoding in [None, "", "nil", '7bit', '8bit', '7-bit', '8-bit']:
             # Don't need to do anything
             return data
         elif encoding == "quoted-printable":
