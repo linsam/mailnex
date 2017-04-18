@@ -257,17 +257,19 @@ def attachFile(attachList, filename, pos=None, replace=False):
     else:
         attachList[pos] = filename
 
+def normalizePath(currentPath):
+    if currentPath.startswith("~{}".format(os.path.sep)):
+        if 'HOME' in os.environ:
+            currentPath='{}{}{}'.format(os.environ['HOME'], os.path.sep, currentPath[2:])
+    return currentPath
+
 def pathCompleter(currentPath):
     # TODO: Cache the results from any given directory; it is very
     # inefficient to recalculate this for every character the user
     # types.
     # Alternatively, only complete one request (e.g. user hits
     # 'tab')
-    if currentPath.startswith("~{}".format(os.path.sep)):
-        if 'HOME' in os.environ:
-            currentPath='{}{}{}'.format(os.environ['HOME'], os.path.sep, currentPath[2:])
-        else:
-            raise StopIteration()
+    currentPath = normalizePath(currentPath)
     dirname = os.path.dirname(currentPath)
     filename = os.path.basename(currentPath)
     try:
@@ -2990,6 +2992,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # an ampersand at the end of the program?)
             res = self.runAProgramWithInput(['/bin/sh', '-c', filename[1:]], data)
             return
+        filename = normalizePath(filename)
         with open(filename, "w")  as outfile:
             outfile.write(data)
             outfile.flush()
@@ -4001,7 +4004,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 if len(parts) == 2:
                     filename = parts[1]
                     if not filename.startswith('#'):
-                        attachFile(self.attachlist, filename)
+                        attachFile(self.attachlist, normalizePath(filename))
                     else:
                         if self.tmpdir is None:
                             self.tmpdir = tempfile.mkdtemp()
