@@ -263,6 +263,11 @@ def pathCompleter(currentPath):
     # types.
     # Alternatively, only complete one request (e.g. user hits
     # 'tab')
+    if currentPath.startswith("~{}".format(os.path.sep)):
+        if 'HOME' in os.environ:
+            currentPath='{}{}{}'.format(os.environ['HOME'], os.path.sep, currentPath[2:])
+        else:
+            raise StopIteration()
     dirname = os.path.dirname(currentPath)
     filename = os.path.basename(currentPath)
     try:
