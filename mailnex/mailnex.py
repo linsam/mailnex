@@ -106,6 +106,8 @@ import magic
 from prompt_toolkit.completion import Completer, Completion
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
+cacheDir = xdg.BaseDirectory.save_cache_path("linsam.homelinux.com","mailnex")
+histFile = os.sep.join((cacheDir, "histfile"))
 
 # Enums
 ATTR_NEW = 0
@@ -5693,7 +5695,7 @@ def instancemethod(func, obj, cls):
     return func.__get__(obj, cls)
 
 def interact(invokeOpts):
-    cmd = Cmd(prompt="mailnex> ", histfile="mailnex_history")
+    cmd = Cmd(prompt="mailnex> ", histfile=histFile)
     C = Context()
     C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
     C.lastcommand=""
