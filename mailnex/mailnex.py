@@ -4205,6 +4205,10 @@ class Cmd(cmdprompt.CmdPrompt):
         ccs = addrs(m.get_all('cc',[]))
         bccs = addrs(m.get_all('bcc',[]))
         recipients = list(set(tos + ccs + bccs))
+        # Get rid of empty addresses, which can occur from double comma, or
+        # trailing comma
+        # TODO: Should also clean up the headers?
+        recipients = filter(None, recipients)
         if len(recipients) == 0:
             ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
             # This is probably not the right format for dead.letter
