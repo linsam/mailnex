@@ -996,6 +996,38 @@ def getPassword(settings, protocol, user, host, port):
         method = "interactive"
     return method, prompt_to_save, pass_
 
+def normalizeSize(value, bi=False):
+    """Given an integer value, normalize it to an SI prefix magnatude, and return as a float,string tuple
+
+    e.g. normalizeSize(22867) -> (22.867, "k")
+         normalizeSize(4096) -> (4.096, "k")
+         normalizeSize(4096, bi=True) -> (4.0, "k")
+    """
+    mult = 1024 if bi else 1000
+    pos = 0
+    # Unit Prefixes
+    # See http://physics.nist.gov/cuu/Units/prefixes.html and
+    # http://physics.nist.gov/cuu/Units/binary.html
+    # kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta
+    # We'll skip 'deca' and 'hecto'; those are just about never seen when
+    # discussing things like bytes.
+    # Note: In the binary case, the IEC apparently didn't adopt deca and
+    # hecto, nor did they adopt Zetta (zebi) nor Yotta (yobi). We'll support
+    # these anyway; I'm sure it will be understood, and I doubt we'll see
+    # sizes that big in the near future anyway.
+    units = ('', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y')
+    value = float(value)
+    res = value
+    div = 1
+    while pos + 1 < len(units) and res > mult:
+        pos += 1
+        div *= mult
+        res = value / div
+    unit = units[pos]
+    if bi and unit:
+        unit += 'i'
+    return (res, unit)
+
 def sigresToString(ctx, sig):
     if sig.summary & gpgme.SIGSUM_VALID:
         sigres = "\033[32mvalid\033[0m"
@@ -1750,6 +1782,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
         cache clear         clear whole cache
         cache cleardec      clear decrypted data from cache
+        cache info          show information about the cache
         """
         args = args.strip()
         if args == 'clear':
@@ -1759,6 +1792,16 @@ class Cmd(cmdprompt.CmdPrompt):
             for i in self.C.cache.keys():
                 if '.d.' in i:
                     del self.C.cache[i]
+        elif args == 'info':
+            # This approximates the size of the cache data.
+            s = sys.getsizeof(self.C.cache)
+            print("Cache structure: %7.3f %sB" % normalizeSize(s, bi=True))
+            c = 0
+            for k,v in self.C.cache.iteritems():
+                c += sys.getsizeof(k)
+                c += sys.getsizeof(v)
+            print("Cache contents:  %7.3f %sB" % normalizeSize(c, bi=True))
+            print("Cache size:      %7.3f %sB" % normalizeSize(s + c, bi=True))
         else:
             print("Please select clear or cleardec")
         return
