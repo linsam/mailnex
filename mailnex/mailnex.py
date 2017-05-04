@@ -1790,7 +1790,7 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.cache = {}
         elif args == 'cleardec':
             for i in self.C.cache.keys():
-                if '.d.' in i:
+                if '.d.' in i or 'BODY[d.' in i:
                     del self.C.cache[i]
         elif args == 'info':
             # This approximates the size of the cache data.
