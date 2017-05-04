@@ -1455,7 +1455,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # repeat/continue last command
         if self.C.lastcommand=="search":
             self.C.lastsearchpos += 10
-            self.do_search(self.C.lastsearch, offset=self.C.lastsearchpos)
+            self.search2(self.C.lastsearch, offset=self.C.lastsearchpos)
         else:
             # Next message
             # Note: mailx has a special case, which is when it picks the
@@ -4959,7 +4959,12 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     @optionalNeeds(haveXapian, "Needs python-xapian package installed")
-    def do_search(self, args, offset=0, pagesize=10):
+    def do_search(self, args):
+        """Search emails for given query"""
+        self.search2(args)
+    def search2(self, args, offset=0, pagesize=10):
+        # This is a separate function from do_search as it is called from more
+        # than one place, so we can't wrap it as a base command.
         C = self.C
         C.lastsearch = args
         C.lastsearchpos = offset
