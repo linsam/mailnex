@@ -1898,11 +1898,22 @@ class Cmd(cmdprompt.CmdPrompt):
                     ):
                 # We can reuse the existing connection
                 c = self.C.connection
+                if box != C.connection.mailnexBox:
+                    # Changed box (probably; this doesn't skip things like
+                    # going from '' to 'INBOX' to 'inbox', for example), so
+                    # cached message information is (probably) wrong, so wipe
+                    # the cache
+                    del self.C.cache
+                    self.C.cache = {}
             else:
                 print("disconnecting")
                 C.connection.close()
                 #C.connection.logout()
                 C.connection = None
+                # Since we closed the connection, the message cache is no
+                # longer valid. Wipe it.
+                del self.C.cache
+                self.C.cache = {}
         if not C.connection:
             print("Connecting to '%s'" % args)
             c = imap4.imap4ClientConnection()
@@ -2143,6 +2154,11 @@ class Cmd(cmdprompt.CmdPrompt):
         # Alternatively, use message UIDs behind the scenes so that we can
         # maintain the message numbers the user expects. Managing the
         # de-synchronization would probably be challenging, though
+        # TODO: Fix up the cache, either clear all entries after the lowest
+        # changed number, or somehow fixup all the keys to be the right
+        # numbers again. (OR maybe store the UID instead of the ID of the
+        # message in the cache; then we can simply remove that UID from the
+        # cache and be done, maybe)
         self.C.lastMessage -= 1
         # was the message unseen? If so, decrement self.status['unread']
         p = '{}.FLAGS'.format(msg)
