@@ -33,6 +33,7 @@ particular:
     Convenient for grouping unread or flagged email together and with
     low message id numbers).
   * search engine style searching of messages (after manual indexing)
+  * Basic OpenPGP signing and encryption (PGP/MIME only)
 
 And, here are a few things that we fall far behind from mailx (or at
 least the heirloom mailx variant):
@@ -42,8 +43,6 @@ least the heirloom mailx variant):
   * incomplete message list support
   * difficult to install due to non-distro package requirements
   * No support for local spool/mbox/maildir nor pop3.
-  * no encryption support; poor signing support
-  * no content-type helper support
 
 
 Goals:
