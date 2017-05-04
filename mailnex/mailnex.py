@@ -3810,8 +3810,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     "              save is set, unless 'drafts' is set.\n"
                     "  ~v         Edit message in external (visual) editor\n"
                     "  ~x         Quit composing. Don't send. Discard current progress.\n"
-                    "  ~pgpsign   Sign the message with a PGP key (toggle)"
-                    "  ~pgpenc    Encrypt the message with PGP (toggle)"
+                    "  ~pgpsign   Sign the message with a PGP key (toggle)\n"
+                    "  ~pgpenc    Encrypt the message with PGP (toggle)\n"
                     )
                 #     Commands from heirloom-mailx:
                 # ~!command    = execute shell command
