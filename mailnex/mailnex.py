@@ -2179,7 +2179,10 @@ class Cmd(cmdprompt.CmdPrompt):
         l = lambda: print("fetch received:", msg, data)
         if self.cli._is_running and self.C.settings.debug.general:
             self.cli.run_in_terminal(l)
-        if 'FLAGS' in data:
+        # NOTE: data is often raw, can't always be made unicode, so trying to
+        # search for a (unicode) string in it can cause conversion errors to
+        # do the comparison. Better to search for a bytestring instead.
+        if b'FLAGS' in data:
             flags = getResultPart('FLAGS', data)
             p = '{}.FLAGS'.format(msg)
             if p in self.C.cache:
