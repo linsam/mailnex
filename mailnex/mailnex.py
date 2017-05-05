@@ -1601,7 +1601,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # the cache
         assert args.startswith('(')
         assert args.endswith(')')
-        if isinstance(msgset,int):
+        if isinstance(msgset,int) or isinstance(msgset, long):
             # Convert to list
             msgset = [msgset]
         argsList = args[1:-1].split()
