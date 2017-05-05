@@ -107,6 +107,7 @@ from prompt_toolkit.completion import Completer, Completion
 
 confFile = xdg.BaseDirectory.load_first_config("linsam.homelinux.com","mailnex","mailnex.conf")
 cacheDir = xdg.BaseDirectory.save_cache_path("linsam.homelinux.com","mailnex")
+defDbFile = os.sep.join((cacheDir, "searchdb"))
 histFile = os.sep.join((cacheDir, "histfile"))
 
 # Enums
@@ -5002,7 +5003,11 @@ class Cmd(cmdprompt.CmdPrompt):
     def search(self, terms, offset=0, pagesize=10):
         C = self.C
         dbpath = C.dbpath
-        db = xapian.Database(dbpath)
+        try:
+            db = xapian.Database(dbpath)
+        except:
+            print("Error opening database. Try running 'index' first.")
+            return [],[]
 
         queryparser = xapian.QueryParser()
         queryparser.set_stemmer(xapian.Stem("en"))
@@ -5817,7 +5822,7 @@ def instancemethod(func, obj, cls):
 def interact(invokeOpts):
     cmd = Cmd(prompt="mailnex> ", histfile=histFile)
     C = Context()
-    C.dbpath = "./maildb1/" # TODO: get from config file or default to XDG data directory
+    C.dbpath = defDbFile # TODO: allow get from config file
     C.lastcommand=""
     # Setup some functions for outputting info. Ideally these would be
     # configurable by our settings; e.g. should usage/error messages from
