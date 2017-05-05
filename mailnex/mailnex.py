@@ -4714,6 +4714,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("FETCH {} {}".format(messageList.imapListStr(), args))
         data = self.cacheFetch(messageList, args)
         #data = normalizeFetch(data)
+        resset = []
         for d in data:
             envelope = getResultPart("ENVELOPE", d[1])
             internaldate = getResultPart("INTERNALDATE", d[1])
@@ -4789,7 +4790,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     headline = self.C.settings.headlinevf.value
                 else:
                     headline = self.C.settings.headline.value
-                print(headline.format(**{
+                resset.append((num, headline.format(**{
                         'attr': attr,
                         'this': '>' if this else ' ',
                         'num': num,
@@ -4799,9 +4800,12 @@ class Cmd(cmdprompt.CmdPrompt):
                         'flags': " ".join(flags),
                         'from': froms[0],
                         't': self.C.t,
-                    }))
+                    })))
             except Exception as ev:
                 print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d))
+        resset.sort()
+        for n,s in resset:
+            print(s)
 
     @shortcut("f")
     @showExceptions
