@@ -1438,7 +1438,14 @@ class Cmd(cmdprompt.CmdPrompt):
 
         return sorted(list(s))
 
-    
+    def precmd(self, line):
+        # We set lastcommand in some cases to repeat the last command instead
+        # of the default implicit 'next'. When running commands that aren't
+        # special, we should return to the default behavior. So, as long as we
+        # see any command, we'll reset here.
+        if line.strip():
+            self.C.lastcommand = ''
+        return line
     def default(self, args):
         c,a,l = self.parseline(args)
         #TODO Simulate the tokenizer of mailx a bit better. For example,
@@ -5026,8 +5033,24 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @optionalNeeds(haveXapian, "Needs python-xapian package installed")
     def do_search(self, args):
-        """Search emails for given query"""
-        self.search2(args)
+        """Search emails for given query
+
+        With no query, extend last search (load 10 more results)
+
+        This command creates a virtual folder consisting of the (so far)
+        loaded results of the search, in order of search relevance.
+
+        Run the 'virtfolder' ('vf') without arguments to exit the view
+        and return to the folder view.
+        """
+        if args.strip():
+            self.search2(args)
+        else:
+            if not hasattr(self.C, 'lastsearch') or self.C.lastsearch is None:
+                print("no previous search") # or "no match"? No match would look more like trying to resume an exhausted search.
+                return
+            self.C.lastsearchpos += 10
+            self.search2(self.C.lastsearch, offset=self.C.lastsearchpos)
     def search2(self, args, offset=0, pagesize=10):
         # This is a separate function from do_search as it is called from more
         # than one place, so we can't wrap it as a base command.
@@ -5036,9 +5059,11 @@ class Cmd(cmdprompt.CmdPrompt):
         C.lastsearchpos = offset
         C.lastcommand="search"
         data, matches = self.search(args, offset, pagesize)
+        res = []
         for i in range(len(data)):
             fname = data[i]
             match = matches[i]
+            res.append(match.docid)
             fname = fname.split('\r\n')
             fname = filter(lambda x: x.lower().startswith("subject: "), fname)
             if len(fname) == 0:
@@ -5053,6 +5078,26 @@ class Cmd(cmdprompt.CmdPrompt):
                     'weight': match.weight,
                     }
                     )
+        if len(res) == 0:
+            print("No match") # TODO: Better message
+        else:
+            # TODO: How to handle if the user was in a non-search virtfolder?
+            # TODO: Or, when the virtfolder is exited, but the user asks for
+            # more results (currently, creates a new virtfolder starting with
+            # the next results; the first results are forgotten entirely).
+            #
+            # Should we just document this as expected behavior, or try to
+            # handle it in some intelligent manner?
+            if not self.C.virtfolder:
+                self.C.virtfolderSavedSelection = (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList)
+                self.C.currentMessage = 1
+                self.C.nextMessage = 1
+                self.C.prevMessage = None
+                self.C.lastList = []
+                self.C.virtfolder=[]
+                self.setPrompt("mailnex (vf-search)> ")
+            self.C.virtfolder.extend(res)
+
 
     @showExceptions
     def do_unset(self, args):
