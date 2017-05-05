@@ -5086,8 +5086,12 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(res) == 0:
             print("No match") # TODO: Better message
         else:
-            # TODO: How to handle if the user was in a non-search virtfolder?
-            # TODO: Or, when the virtfolder is exited, but the user asks for
+            if offset == 0:
+                # This is a new search, so clear any existing virtfolder and
+                # start fresh. This prevents appending to a previous search or
+                # previous manually set virtfolder
+                self.do_virtfolder("")
+            # TODO: How to handle when the virtfolder is exited, but the user asks for
             # more results (currently, creates a new virtfolder starting with
             # the next results; the first results are forgotten entirely).
             #
