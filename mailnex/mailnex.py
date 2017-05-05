@@ -2296,6 +2296,25 @@ class Cmd(cmdprompt.CmdPrompt):
         i = 1
         seen=0
 
+        # TODO: store based on location (connection and mbox)
+        lastMessageFile = os.sep.join((C.dbpath, "lastMessage"))
+        try:
+            with open(lastMessageFile) as f:
+                i = int(f.read())
+        except:
+            pass
+
+        # TODO: Use location + UIDVALIDITY and UIDs in messages, else things
+        # will go awry when messages are deleted or someone tries to search in
+        # a different folder or connection.
+        # TODO: Should we have one large combined database, or a separate
+        # database per indexed location?
+        # Having a single database means we can search across all indexed
+        # messages no matter where they are. If we store the location as a
+        # key, we should even be able to filter so that we can also search
+        # just one location.
+        # However, having separate dabases means we can store more messages
+        # (xapian has a max record limit).
         db = xapian.WritableDatabase(C.dbpath, xapian.DB_CREATE_OR_OPEN)
         termgenerator = xapian.TermGenerator()
         termgenerator.set_stemmer(xapian.Stem("en"))
@@ -2360,10 +2379,21 @@ class Cmd(cmdprompt.CmdPrompt):
                 # that would be good to consume somehow; otherwise we later
                 # get a warning about receiving data for an unknown request.
                 print("\n\nCanceled")
+                try:
+                    with open(lastMessageFile, "w") as f:
+                        # Store the previous index, in case we didn't actually
+                        # write the current one TODO: Verify this logic
+                        f.write(str(i - 1))
+                except Exception as ev:
+                    print("Failed to store lastMessage", ev)
                 return
             finally:
                 pass
         print()
+        with open(lastMessageFile, "w") as f:
+            # Store the previous index, in case we didn't actually
+            # write the current one TODO: Verify this logic
+            f.write(str(i))
         print("Done!")
 
     def getTextPlainParts(self, index, allParts=False):
