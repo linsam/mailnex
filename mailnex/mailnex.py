@@ -1913,6 +1913,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # the cache
                     del self.C.cache
                     self.C.cache = {}
+                    c.mailnexBox = box
             else:
                 print("disconnecting")
                 C.connection.close()
@@ -2296,8 +2297,28 @@ class Cmd(cmdprompt.CmdPrompt):
         i = 1
         seen=0
 
+        # TODO: We are assuming that a user+host combo is sufficient to
+        # identify a mail account (set of mail boxes/folders). This breaks if
+        # using a custom port number or a different protocol connects to a
+        # different set of boxes (e.g. imap vs imaps, or port 143 vs 12345)
+        # OTOH, keeping separate databases for the same boxes just because the
+        # user connected slightly differently would also be a nuisance. Other
+        # clients seem to deal with this by requiring such things be managed
+        # by configuring accounts before doing anything, which we don't do.
+        boxid = "{}@{}.{}".format(
+                self.C.connection.mailnexUser,
+                self.C.connection.mailnexHost,
+                self.C.connection.mailnexBox.replace('/','.'),
+                )
+        dbpath="{}.{}".format(C.dbpath, boxid)
+
         # TODO: store based on location (connection and mbox)
-        lastMessageFile = os.sep.join((C.dbpath, "lastMessage"))
+        lastMessageFile = os.sep.join((dbpath, "lastMessage"))
+        print("Indexing box {} in {}@{}".format(
+                repr(self.C.connection.mailnexBox),
+                self.C.connection.mailnexUser,
+                self.C.connection.mailnexHost,
+                ))
         try:
             with open(lastMessageFile) as f:
                 i = int(f.read())
@@ -2315,7 +2336,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # just one location.
         # However, having separate dabases means we can store more messages
         # (xapian has a max record limit).
-        db = xapian.WritableDatabase(C.dbpath, xapian.DB_CREATE_OR_OPEN)
+        db = xapian.WritableDatabase(dbpath, xapian.DB_CREATE_OR_OPEN)
         termgenerator = xapian.TermGenerator()
         termgenerator.set_stemmer(xapian.Stem("en"))
 
@@ -2327,6 +2348,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 #print(typ)
                 #print(data)
                 # TODO: use BODYSTRUCTURE to find text/plain subsection and fetch that instead of guessing it will be '1'.
+                # TODO: Could also store the structure for quicker reference
+                # when reading search data, for things like attachements or
+                # whatever
+                # TODO: Add attachment file names (when available) to search
+                # data for method, so that they can be found.
                 data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
                 #print(typ)
                 #print(data)
@@ -2369,7 +2395,12 @@ class Cmd(cmdprompt.CmdPrompt):
                 # Support full document retrieval but without reference info
                 # (we'll have to fully rebuild the db to get new stuff. TODO:
                 # store UID and such)
-                doc.set_data(headertext)
+                doc.set_data("x-mailnex-location: {}@{}\r\nx-mailnex-box: {}\r\n{}".format(
+                    self.C.connection.mailnexUser,
+                    self.C.connection.mailnexHost,
+                    self.C.connection.mailnexBox,
+                    headertext,
+                    ))
                 idterm = u"Q" + str(i)
                 doc.add_boolean_term(idterm)
                 db.replace_document(idterm, doc)
@@ -5032,9 +5063,13 @@ class Cmd(cmdprompt.CmdPrompt):
 
     def search(self, terms, offset=0, pagesize=10):
         C = self.C
-        dbpath = C.dbpath
+        boxid = "{}@{}.{}".format(
+                self.C.connection.mailnexUser,
+                self.C.connection.mailnexHost,
+                self.C.connection.mailnexBox.replace('/','.'),
+                )
         try:
-            db = xapian.Database(dbpath)
+            db = xapian.Database("{}.{}".format(C.dbpath, boxid))
         except:
             print("Error opening database. Try running 'index' first.")
             return [],[]
