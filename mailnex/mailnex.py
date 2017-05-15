@@ -2171,8 +2171,8 @@ class Cmd(cmdprompt.CmdPrompt):
         self.C.lastMessage -= 1
         # was the message unseen? If so, decrement self.status['unread']
         p = '{}.FLAGS'.format(msg)
-        if p in self.cache:
-            if '\\Seen' not in self.cache[p]:
+        if p in self.C.cache:
+            if '\\Seen' not in self.C.cache[p]:
                 self.status['unread'] -= 1
             else:
                 # Wasn't part of unread count. Nothing to do.
