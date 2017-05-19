@@ -9,6 +9,9 @@ from pygments.token import Token
 from pygments.styles.tango import TangoStyle
 from prompt_toolkit.styles import style_from_pygments
 from pygments.lexers import HtmlLexer
+from prompt_toolkit.key_binding.manager import KeyBindingManager
+from prompt_toolkit.keys import Keys
+
 import pygments.style
 
 import signal
@@ -258,6 +261,22 @@ class CmdPrompt(cmd.Cmd):
                     (Token, self.prompt),
                     ]
         self.ptkevloop = ptk_pyuv_wrapper(eventloop)
+        registry = KeyBindingManager.for_prompt().registry
+        @registry.add_binding(Keys.ControlZ)
+        def _(event):
+            """Support backrounding ourselves."""
+            # I'm surprised this isn't part of the default maps.
+            #
+            # Ideally, we shouldn't actually have to handle this ourselves; the
+            # terminal should handle it for us. However, we are putting the
+            # terminal into raw mode, so it won't. The next best thing would be
+            # to try to get the actual background character the terminal would
+            # use and use that. It is controlZ by default on every Unix system
+            # I've used, but it is adjustable, with the 'stty' utility for
+            # example.
+            # TODO: Figure out how to use an appropriate key here, or allow it
+            # to be customized.
+            event.cli.suspend_to_background()
         self.cli = prompt_toolkit.interface.CommandLineInterface(
                 application = prompt_toolkit.shortcuts.create_prompt_application(
                     u"",
@@ -269,6 +288,7 @@ class CmdPrompt(cmd.Cmd):
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
                     get_title = self.get_title,
                     get_bottom_toolbar_tokens=self.toolbar,
+                    key_bindings_registry=registry,
                     ),
                 eventloop = self.ptkevloop,
                 output = prompt_toolkit.shortcuts.create_output(true_color = False),
