@@ -47,6 +47,54 @@ from __future__ import unicode_literals
 # BINARY: rfc 3516 (fetch BINARY vs fetch BODY, saves on base64 encoding
 #     transfers, for example.)
 # COMPRESS: rfc 4978
+# ESEARCH: rfc 4731
+# SEARCHRES: rfc 5182. requires ESEARCH capability. Adds "SAVE" to search
+#     results option. Adds '$' as a search criteria (meaning the contents of
+#     the last save list). Adds "NOTSAVED" response code to indicate that the
+#     server refuses to save the results of a particular search.
+#     Contains a contradiction: section 2.1 states that a search that returns
+#     a BAD response or a search that returns NO but doesn't have a save
+#     option MUST NOT change the search result variable, yet section 2.2.4
+#     example 5 comments that the failure due to the bad charset in the
+#     unsaving search that uses the saved search resets the saved search to
+#     empty.
+# WITHIN: rfc 5032. Adds capability 'WITHIN'. Adds "YOUNGER" and "OLDER"
+#     search criteria, where the time is given as the number of seconds
+#     relative to the server's concept of now (current time). Results are
+#     based on a message's INTERNALDATE.
+# MULTISEARCH: rfc 7377. Allows searches to span multiple mailboxes in a
+#     single go. Not supported yet by any server I test against.
+#     Adds ESEARCH command (even as ESEARCH capability doesn't), and a bunch
+#     of other things.
+# SORT and THREAD: rfcs 5256 and 5957. Adds server-side sorting and threading
+#     for online clients (not so useful for offline clients). Adds
+#     capabilities starting with "SORT" and "THREAD=". Requires I18NLEVEL=1
+#     capability, desires I18NLEVEL=2 or better.
+#     Adds "SORT" and "THREAD" commands
+#     This RFC also includes procedures for calculating the threading of
+#     messages based on subject line, and requires disconnected clients to use
+#     (at least parts of) the same algorithm, so this is what we will use, at
+#     least by default. It even has instructions on what to do when multiple
+#     messages in a box have the same message-id (but not handling message-ids
+#     of sub-messages, that is, attached emails aka forward-as-attachment).
+#     I'm also not sure I agree with their rules for references threading
+#     model. In particular, 'references' headers of earlier messages have
+#     complete priority over later messages. The reasoning is that the header
+#     may be truncated by a MUA (in practice, I've also seen it truncated by
+#     MTAs trying to fix MUA bugs), however it feels like this provides an
+#     oportunity for malicious thread info corruption. An attacker would
+#     probably have to be lucky to guess message ids to corrupt the list, but
+#     could also send a later message with the hope that the message order on
+#     the server will be adjusted by the user moving messages out of INBOX
+#     into other boxes out of order. Ideally, this is corrected in step B, so
+#     this probably isn't a real issue. I should delete this comment. FIXME
+#     Some of this is also called out in the Security Considerations section.
+#
+#     The threading algorithms also sort the messages the way most email
+#     clients do that I find infuriating, which is by date of the thread
+#     leader. I almost always want the sorting to be by the most recent child,
+#     like KMail could do or gmail does. Otherwise, it can be difficult in
+#     many situations to notice that an old thread has come alive again.
 #
 #
 
