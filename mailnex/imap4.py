@@ -632,6 +632,32 @@ class imap4ClientConnection(object):
         if res != 'OK':
             raise imap4Exception("Failed to fetch: %s %s" % (res, string))
         return fetchlist
+    def uidfetch(self, message, what):
+        """Generic fetcher. Given an IMAP spec of UIDs, fetch the 'what' from them.
+
+        message: IMAP message list. E.g. '4:10' will get messages 4, 5, 6, 7,
+        8, 9, and 10, if they exist. UIDs are not necessarily contiguous.
+        Non-existent UIDs will simply not be returned.
+        what: Set of what to fetch. E.g. '(ENVELOPE)' will get info about the sender, date, and subject
+            The 'what' must be wrapped in parenthesis and be a space separated
+            list of fetchable items in IMAP format. This is really a simple
+            passthrough.
+        """
+        oldcb = self.cb_fetch
+        fetchlist = []
+        # TODO: I think unsolicited fetch messages are allowed to come in
+        # during UID FETCH. We should verify. If so, this needs to somehow
+        # check that the message was actually part of our fetch before adding
+        # it to the list, and probably also forward the messages to the
+        # original CB.
+        def fetch_cb(message, data):
+            fetchlist.append((message, data))
+        self.cb_fetch = fetch_cb
+        res, code, string = self.doSimpleCommand("uid fetch %s %s" % (message, what))
+        self.cb_fetch = oldcb
+        if res != 'OK':
+            raise imap4Exception("Failed to uid fetch: %s %s" % (res, string))
+        return fetchlist
     def getCapabilities(self):
         res, code, string = self.doSimpleCommand("CAPABILITY")
         if res != "OK":
