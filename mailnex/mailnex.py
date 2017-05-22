@@ -5131,19 +5131,19 @@ class Cmd(cmdprompt.CmdPrompt):
         data, matches = self.search(args, offset, pagesize)
         res = []
         for i in range(len(data)):
-            fname = data[i]
+            headers = data[i]
             match = matches[i]
             res.append(match.docid)
-            fname = fname.split('\r\n')
-            fname = filter(lambda x: x.lower().startswith("subject: "), fname)
-            if len(fname) == 0:
-                fname = "(no subject)"
+            headers = headers.split('\r\n')
+            subject = filter(lambda x: x.lower().startswith("subject: "), headers)
+            if len(subject) == 0:
+                subject = "(no subject)"
             else:
-                fname = fname[0]
+                subject = subject[0]
             print(u"%(rank)i (%(perc)3s %(weight)s): #%(docid)3.3i %(title)s" % {
                     'rank': match.rank + 1,
                     'docid': match.docid,
-                    'title': fname,
+                    'title': subject,
                     'perc': match.percent,
                     'weight': match.weight,
                     }
