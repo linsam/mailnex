@@ -280,6 +280,7 @@ class CmdPrompt(cmd.Cmd):
         self.cli = prompt_toolkit.interface.CommandLineInterface(
                 application = prompt_toolkit.shortcuts.create_prompt_application(
                     u"",
+                    #multiline = True,
                     get_prompt_tokens = gpt,
                     style = prompt_style,
                     lexer = PygmentsLexer(PromptLexerFactory(self)),
@@ -316,6 +317,14 @@ class CmdPrompt(cmd.Cmd):
         self.cli.application.buffer.completer = completer
         # TODO: Interpret titlefunc!
         tmphistory = prompt_toolkit.history.InMemoryHistory()
+        # FIXME: This doesn't stop the up-arrow from seeing previously entered
+        # text!
+        # The reason is, up-arrow/down-arrow doesn't walk the History, it
+        # walks the _working_lines of the Buffer, which aren't supposed to be
+        # accessible outside. We can clear it by calling Buffer.reset(), but
+        # then it cannot be restored when we are done here. Probably we should
+        # be creating a new temporary Buffer object and attaching it to the
+        # application instead!
         self.cli.application.buffer.history = tmphistory
         self.lexerEnabled = False
         self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
