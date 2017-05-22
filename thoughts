@@ -1,0 +1,537 @@
+Where we are, where we should go, etc.
+
+
+Right now, we are a basicly functional mailx replacement. We can do
+OpenPGP-MIME email (send and receive), though some clients don't display our
+messages correctly in this case (e.g. MS Outlook with GPG4Win OL plugin).
+
+We neither send nor receive inline OpenPGP (which is what MS Outlook wants to
+send). However, the user can fake that by setting their editor (e.g. using vim
+to edit a message can filter parts to gpg) for sending, or writing the part to
+gpg for receiving.
+
+
+We are somewhat lacking in performance for slow connections, due to several
+things. Firstly, we primarily act as an online IMAP client, which means
+everything is actively asked for on the server. We sped some of this up (quite
+a bit) by having a session cache, but we only trust it for unchanging data
+(e.g. message content), so every time we want to list messages, we re-fetch
+flags, for example. We also poll the server to get new messages instead of
+going IDLE when the server supports it. This means we have a bit of a delay in
+seeing messages, and also that we round-trip more.
+
+The delays aren't usually noticable in a LAN, unless the server is busy. The
+main reason I did the session cache was to simplify message decryption and
+signature verification, not to improve general performance.
+
+However, move to a dial-up connection, or VPN over cellular network, and
+things get pretty painful pretty quickly.
+
+
+
+The first things we can do to speed some stuff up are to support IDLE and let
+the server tell us when flags change, and cache that. Not having to re-fetch
+flags for every list will help a lot.
+
+The second thing to do would be to cache (some) things to disk. This would
+require us to switch from being an on-line client to an offline client. This
+has many drawbacks, so it needs some evaluation. In particular, we would need
+to keep track of UIDVALIDITY and message UIDs. Initial connections will become
+slower as we need to synchronize the UID to message ID lists at a minimum.
+Code also becomes more complicated, because all of the network optimizations
+to synchronize quicker are optional extensions, so the code would have to have
+fallbacks for servers that don't support the extensions (or, we'd have to fail
+connecting to some servers).
+
+The biggest problem with that is we lose our connect-and-go feature inherited
+from mailx. Heirloom-mailx did have some offline imap support, but I never
+played with it. IIRC it consisted of saving selected messages for later
+viewing. We could default to connect-and-go and have a command to switch to
+caching or offline mode for the given connection (where offline is the same as
+caching except we fill the whole cache at connect/sync instead of on-demand).
+In offline mode, we'd need a way to *be* offline, that is, accept a connection
+string with the folder command but not actually connect, just look at the
+cache. Worse, we'd probably need to handle delayed message sending. That's
+easy if local sendmail is used (we can let it do the queueing for us), but
+we'd need to queue for SMTP accounts. We'd also need to handle queued commands
+that involve changing flags (seen, deleted) expunging, copying, etc.
+
+We could probably forgo some of that by not actually supporting the full
+offline mode, and just do on-demand caching.
+
+This is actually also needed for our search index; basing it on message ID
+goes very awry if any messages are removed, causing the handles used in the DB
+to become very wrong. Also, searches will find messages that don't exist
+anymore, and thus cannot be displayed.
+
+
+
+A third thing to do (possibly before the second) is to tie in the IMAP lib
+with the event handler. This might also be needed in order to support IDLE.
+
+
+A fourth thing to do would be to become a tad more asynchronous (having IMAP
+lib tie into event handler will help). For example, there can be a noticable
+delay after viewing a message before the prompt is displayed, because we are
+waiting for the IMAP server to acknowledge that we set the \Seen flag.
+
+Waiting is convenient (we can display an immediate error, and the code is
+simpler). Not waiting would probably also require us to implement some of the
+queueing needed for offline support, since during the wait we are
+desynchronized.
+
+
+
+Some other thoughts
+-------------------
+
+We could parse through the headline string to decide what parts we actually
+need to fetch. For example, maybe the user isn't even showing flags in the
+headline. Or additional things could be shown (such as the first N characters
+of the main body of the message). Fetching only the parts that are actually
+used would make things faster.
+
+Several mail systems now show a simple preview (the first N characters
+referenced above). For examples: K-9, Gmail, sup.
+
+Sorting and Threading: the RFCs have some thoughts on sorting and threading.
+If we cache enough metadata, we can do those and more. My personal ideal is
+the full reference threading with most-recent-child sorting at the root (ala
+kmail, sup, and gmail). Observationally, k-9 doesn't do full aggregation on
+connect, but rather updates its aggregation as messages are loaded in. This
+makes their connection fast and mostly still relevant.
+
+The RFCs seem to combine threading with sorting, which I find odd. Sometimes
+it is related. How do you sort the list of conversations by subject when a
+thread changes subject part-way through? How do you sort the conversations
+list by author? A potential answer is by showing the conversation in multiple
+spots. For example, when sorting by author, a conversation by Bob, Sally and
+Zelda could show up under all 3's headers.
+
+KMail handled this by sepparating sorting and aggregation.
+
+
+
+Another useful thing would be to stop switching into and out of
+prompt_toolkit. It would be better to make it a long-running UI (like in full
+screen mode), but with the single-prompt layout (so that terminal scroll
+buffer and such still works).
+
+
+To peruse a conversation, I'd like to use an internal viewer instead of 'less'
+or 'more' so that messages and quoted blocks can be collapsed (for example,
+gmail's Inbox collapses \Seen messages in a conversation by default. Sup
+allows collapsing messages and block quotes for quickly navigating a
+conversation.). Mailnex should switch to full-screen alternate-screen mode to
+do that. I don't know yet if prompt_toolkit can do that on-the-fly, or if it
+can be via a sub-application, or if we need a whole new instance. I want to
+avoid the new instance bit, to reduce trouble we have with the eventloop
+getting keyboard input with no where to send it.
+
+
+Anatomy of the default prompt
+-----------------------------
+
+prompt_toolkit allows for fancy(ish) layouts to be created and customized. For
+the convenience of the common case (simple prompt), it wraps all the advanced
+stuff for you. We would like to do some advanced stuff, so we have to set it
+up ourselves. Here's how thats to be done:
+
+First, some processors are created. HighlightSearchProcessor (if search buffer
+has focus), HighlightSelectionProcessor, AppendAutoSuggestion (if
+default_buffer has focus and not isDone), and PasswordProcessor if the prompt
+was created with is_password (or is_password is a filter, can enable/disable
+this on-the-fly, e.g. via key binding). Additional processors may be appended
+upon invokation, but the above set cannot be replaced. Finally, a
+DefaultPrompt filter is created that shows either the prompt
+(prompt_tokens_2), 'arg', or 'reverse-i-search', when not in multiline)
+
+Second, a tollbars list is made with a conditional container with a window for
+the tokens passed to the function, set for a height of 1 row. Only renders if
+not isDone and RenderHeightIsKnown.
+
+Finally, the main layout is built. It is an hslpit with a floatContainer,
+ValidationToolar, SystemToolbar, ArgToolbar (if multiline), SearchToolbar (if
+multiline), then the toolbars list from above.
+
+The floatContainer has an HSplit, then a list of items, consisting of a
+CompletionsMenu, a MultiColumnCompletionsMenu, and a right prompt. The HSplit
+has 2 Windows, one for the prompt (prompt_tokens_1), and one for the actual
+buffer. Both Windows do some magic-ish stuff. The prompt doesn't extend
+height, and the main buffer does something fancy with left_margins.
+
+Note the difference between prompt_tokens_1 and prompt_tokens_2. The user only
+passes one set of tokens. The _1 and _2 are built from a splitting function on
+the single passed set. prompt_tokens_1 is all of the lines of the prompt
+except the first, and prompt_tokens_2 is just the first line, only.
+
+This means that the first line of the prompt is prepended to the text via a
+processor, and the remaining lines are done by an explicit window.
+
+I don't understand the point of it, though. Observationally, in not-multiline
+mode, the text entered wraps around the window to below the prompt. Even with
+a multiline prompt, the text starts at the end of the prompt and wraps to
+underneath. In multiline mode, the text entered does not wrap below the
+prompt, but rather stays aligned with the first non-prompt character, making
+it look like it is actually in its own window. Interestingly, in this case the
+window starts after the last character of the prompt, which isn't necessarily
+the longest line of the prompt.
+
+Singleline mode (prompt in english, characters typed as '.'s):
+ -----------------------------------------
+|Sample prompt with a long line           |
+|your command?  ..... .. ...... .... .....|
+|... .... .......... ... .....            |
+ -----------------------------------------
+
+Multiline mode
+ -----------------------------------------
+|Sample prompt with a long line           |
+|your command?  ..... .. ...... .... .....|
+|               ... .... .......... ... ..|
+|               ...                       |
+ -----------------------------------------
+
+OH, I misread. It does the iteration and insertion backwards. Thus,
+prompt_tokens_1 is all except the last line, and prompt_tokens_2 is just the
+last line.
+
+When not multiline, the last line of the prompt is a processor to prepend the
+prompt to the screen. When in multiline, the processor is inactive, but the
+window gets a PromptMargin containing the last line of the prompt.
+
+Part of my interpretation problem is HSplit and VSplit being different than HStack and VStack.
+
+Thus, the stack is roughly this:
+
+------------------------------------------------------------------
+ Float                                                  <rprompt>
+   ------------------------------------------------
+   prompt_start tokens
+   ------------------------------------------------
+   command window
+     (margin or processor to display prompt end)
+   ------------------------------------------------
+   <completions>
+------------------------------------------------------------------
+ Validation TB
+------------------------------------------------------------------
+ System TB
+------------------------------------------------------------------
+ Arg TB
+------------------------------------------------------------------
+ Search TB
+------------------------------------------------------------------
+ <custom TBs>
+------------------------------------------------------------------
+
+
+This is very featureful.
+
+The next question is, do we try to modify it, duplicate it, or go our own way.
+Modifying would probably involve tweaking the buffer after the object is
+created such that the AcceptAction calls our command handler, rather than
+returning a value we pass to the command handler. Duplicating it would be
+copying all the creation code to accomplish the same thing. I don't *think* we
+need all the features, so we could go our own way a bit and make a simpler
+prompt layout.
+
+The crux of this is, can we have it keep the layout and call us rather than us
+calling them, and not destroy the old prompts. (that is, terminal history
+should be readable)
+
+
+One of the other things I originally wanted to accomplish was to have the
+completions pop-up above the prompt instead of below. We could only redraw
+what was under the popup if we knew what was there already, so having some
+minimal number of output lines during startup would be neccessary. However,
+I'm no longer certain that this is feasible.
+
+
+Doing our own viewer will probably require us to make our own UIControl.
+Otherwise, handling scrolling and selections might be difficult or impossible.
+
+
+Another issue that is annoying to see is that free-flow output (e.g. when first connecting) doesn't maintain the prompt height (we are using 9 rows of the terminal right now). This is distracting to the user (mostly me) because usually my eye is in the output section, and now has to go to the input section briefly. We might be able to maintain a top-side window to put such stuff in, but it probably would be painful.
+
+Additional info on the event loops
+----------------------------------
+
+The eventloop that comes with prompt_toolkit allows for other event loops to
+be run so long as its loop is idle. It then expects your loop to return to its
+loop when you see something ready for it. They have an example of this in
+examples/inputhook.py, where they call a gtk eventloop while idle. It might be
+more stable for us to do the same thing, except calling pyuv instead of gtk.
+
+
+Threading display.
+
+An example set of messages with the view most people do. Siblings are at the
+same indentation level under a parent.
+
+  1
+  \_ 2
+  |  \_ 3
+  |  \_ 4
+  |     \_ 5
+  \_ 6
+     \_ 7
+     |  \_ 8
+     \_ 9
+  10
+   \_ 11
+
+In the above example, there are 2 conversations (threaded message trees),
+rooted at 1 and 10.
+1 has two children, 2 and 6. 2 and 6 are siblings. 2 has two children as well,
+3 and 4. 6 likewise has two children, 7 and 9. 1 thus has 4 grandchildren: 3,
+4, 7, and 9.
+
+This often results in a list like this:
+
+
+ a
+ \_ b
+    \_ c
+       \_ d
+          \_ e
+             \_ f
+                \_ g
+                |  \_h
+                \_ i
+                   \_ j
+                      \_ k
+                         \_ l
+                            \_ m
+
+That is, the tree of messages is mostly a list of messages, an the severe
+indenting can be distracting. In the case of mailx, the indenting can make it
+hard to trace a message number to the message, since there is a LOT of white
+space. I have found myself resorting to the mouse to highlight a line to find
+the number of the message I wanted to view.
+
+I'd want an ordering that assumes the trees are mostly lists. Since most
+children are an only child, and rarely are there 2 or more siblings, I can
+think of a couple better ways to present the thread. We can maintain depth on
+first child, and increment depth for subsequent children for example. This
+results in lists that look like this:
+
+  1
+  \_ 6
+  |  \_ 9
+  |  7
+  |  8
+  2
+  \_ 4
+  |  5
+  3
+
+  10
+  11
+
+and
+
+ a
+ b
+ c
+ d
+ e
+ f
+ \_i
+   j
+   k
+   l
+   m
+ g
+ h
+
+There are a couple problems with this layout. First, there is no way to tell
+when a new conversation starts. If, like in kmail or thunderbird, we want to
+show individual message of all conversations in the same list, there isn't
+good separation between conversations (I show an empty line above message 10
+for this example). If we only show conversations in the list (like google's
+Inbox or sup), this isn't an issue, and we can show the conversation
+threadlist as a virtual folder style view when a conversation is selected. We
+could reserve the no-indentation slot for thread leaders, then follow this for
+first children on down.
+
+Second, the ordering feels weird. More recent messages end up being displayed
+first, and we can still get pretty deep on indentation depending on how the
+conversation flows.
+
+Another option would be to use the last sibling to be at the same level as the
+parent. That would help with date ordering, but probably wouldn't help the
+indentation issue; it relies on messages occurring a different order.
+
+A third option would be to keep the child with the deepest descendantry
+(opposite of ancestry) as the first. This still has the issue of date order
+oddness, but should keep the most messages shallow. A variant would be to use
+descendant count instead of max depth for this. I'm not sure yet which would
+be better. Either way, on a tie, try to maintain date/message ordering. 
+Also note, if the tree isn't doubly linked, when a new message comes in, we'll
+have to recursively recalculate every messages descendant depth and descendant
+count all over again. (If it is doubly linked, we can just walk up the tree to
+update the numbers, witch can be iterative instead)
+
+1
+\_ 2
+|  \_ 3
+|  4
+|  5
+\_ 6
+   \_ 9
+   7
+   8
+10
+\_ 11
+
+
+a
+\_ b
+   c
+   d
+   e
+   f
+   \_ g
+   |  h
+   i
+   j
+   k
+   l
+   m
+
+
+Other options include date/message order descendant ordering (most recent
+child stays left), most rescent descendant date ordering (child with the
+newest sub-conversation stays left). The issue with these is that the tree
+view can shift a bit more dramatically when a new message comes in, which
+could be disorienting for the user.
+
+Here's an example using real threads that I've been in, with the subjects and
+senders changed.  First in "standard" representation:
+
+110              Bob   Account locked
+ \_ 123          Joe   Re: Account locked
+     \_ 126      Bob   Re: Account locked 
+         \_  127 Bob   Re: Account locked
+
+1280        Bob     RE: project
+`1284       Joe     Re: project
+`1285       Joe     Re: project
+|`1287      Jack    Re: project
+| `1288     Joe     Re: project
+|  `1289    Jack    Re: project
+|   `1290   Sam     RE: project
+|    `1302  Josh    Re: project
+`1303       Josh    Re: project
+
+4905         Bob    project
+`4906        Bob    Fwd:project
+|`4907       Bob    Fwd: Fwd: project
+`4909        Bob    project
+ `4939       Bob    project
+  `4941      Joe    Re: project
+   `4947     Bob    project
+    `4950    Bob    Fwd: project
+     `4957   Jack   Re: Fwd: project
+      `4958  Sam    RE: Fwd: project
+       `4966 Bob    Re: Fwd: project
+
+316     bugzilla    Bug 1234
+ 319    bugzilla    Bug 1234
+ 323    bugzilla    Bug 1234
+ 349    bugzilla    Bug 1234
+ 350    bugzilla    Bug 1234
+
+(Note: The bugzilla emails (at least for the version checked here) use a
+custom message id for the first bug message, then reference that one in all
+subsequent correspondance. It seems to let sendmail assign message ids for
+those subsequent messages.
+
+  316
+  \_ 319
+  \_ 323
+  \_ 349
+  \_ 350
+
+(or, if not separating the thread leader):
+   316
+   \_ 319
+   \_ 323
+   \_ 349
+   350
+
+
+5239 (fun, with subject changes and such, and 2 sets of 4-child, 1 with full grandchildren!)
+
+  mid/struct        subject                depth            descendants + self
+  ---------------   ------------------     --------------   ------------------------
+  5239              hi there               11               33
+  `5244             Re: hi there           10               32
+   `5245            Re: hi there            9  1,5,8,1      31 1+1+10+18+1
+    `5246           RE: hi there            1                1
+    `5253           RE: hi there            5  2,3,4        10 1+2+3+4
+    |`5254          Re: hi there            2                2
+    ||`5276         Re: hi there            1                1
+    |`5257          RE: hi there            3                3
+    ||`5258         RE: hi there            2                2
+    || `5259        Re: hi there            1                1
+    |`5271          Re: hi there            4                4
+    | `5272         Re: hi there            3                3
+    |  `5282        Re: hi there            2                2
+    |   `5294       Re: hi there            1                1
+    `5260           Re: hi there            8  3,4,2,7      18 1+4+4+2+7
+    |`5270          new subject             3  1,2           4 1+1+2
+    ||`5279         Re: new subject         1                1
+    ||`5283         Re: new subject         2                2
+    || `5288        Re: new subject         1                1
+    |`5273          Re: hi there            4                4
+    ||`5303         Re: hi there            3                3
+    || `5305        Re: hi there            2                2
+    ||  `5309       Re: hi there            1                1
+    |`5274          Re: hi there            2                2
+    ||`5284         Re: hi there            1                1
+    |`5286          Re: hi there            7                7
+    | `5302         Re: hi there            6                6
+    |  `5306        Re: hi there            5                5
+    |   `5312       Re: hi there            4                4
+    |    `5315      Re: hi there            3                3
+    |     `5316     Re: hi there            2                2
+    |      `5341    Re: hi there            1                1
+    `5402           Re: hi there            1                1
+
+depth only ordering. Longest depth last and same column, shortest depth first. Then message order
+
+5239
+\_ 5244
+   5245
+   \_ 5246
+   \_ 5402                # This is the most recent message by message id (and by date)
+   \_ 5253
+   |  \_ 5254
+   |  |  5276
+   |  \_ 5257
+   |  |  5258
+   |  |  5259
+   |  5271
+   |  5272
+   |  5282
+   |  5294
+   5260
+   \_ 5274
+   |  5284
+   \_ 5270          new subject
+   |  \_ 5279       Re: new subject
+   |  5283          Re: new subject
+   |  5288          Re: new subject
+   \_ 5273
+   |  5303
+   |  5305
+   |  5309
+   5286
+   5302
+   5306
+   5312
+   5315
+   5316
+   5341
