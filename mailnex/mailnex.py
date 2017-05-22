@@ -2296,6 +2296,8 @@ class Cmd(cmdprompt.CmdPrompt):
         M = C.connection
         i = 1
         seen=0
+        uv = None
+        lastu = None
 
         # TODO: We are assuming that a user+host combo is sufficient to
         # identify a mail account (set of mail boxes/folders). This breaks if
@@ -2321,9 +2323,31 @@ class Cmd(cmdprompt.CmdPrompt):
                 ))
         try:
             with open(lastMessageFile) as f:
-                i = int(f.read())
+                uv, lastu = map(int,f.read().split())
         except:
             pass
+
+        if uv and lastu:
+            if self.C.connection.uidvalidity != uv:
+                # FIXME: Clear the database of this box; all history is no
+                # longer valid!
+                i = 1
+            else:
+                #search("uid %i" % lastu)
+                data = self.C.connection.search("UTF-8", "uid %i" % lastu)
+                # TODO: What if the last message we indexed was expunged? The
+                # search will be empty! We could try again with "uid %i:*". If
+                # that is also empty, then the last message we indexed is
+                # expunged, and there aren't any messages after that to index,
+                # so we are done.
+                # TODO: What to do about expunged messages in general? We
+                # don't want them contributing to search results. We should
+                # try to delete them from the search DB whenever we get an
+                # expunged message and during the initial connection to the
+                # box, if it is a box we are caching.
+                if len(data) == 0:
+                    return
+                i = map(int, data)[0]
 
         # TODO: Use location + UIDVALIDITY and UIDs in messages, else things
         # will go awry when messages are deleted or someone tries to search in
@@ -2340,7 +2364,21 @@ class Cmd(cmdprompt.CmdPrompt):
         termgenerator = xapian.TermGenerator()
         termgenerator.set_stemmer(xapian.Stem("en"))
 
+        lastuid = 1 # Safe first-message UID
+        # If starting with id 1, throw a dummy document into the DB. This makes the
+        # xapian docids not equivalent to the message IDs from the get-go, and
+        # should prevent accidental reliance on the equivalence
+        print("Id is", i)
+        if i == 1:
+            print("creating dummy initial")
+            doc = xapian.Document()
+            termgenerator.set_document(doc)
+            doc.set_data("dummy data")
+            db.replace_document("Q-1", doc)
+
         while True:
+            # TODO: This would be a bit faster (or a lot faster, depending on
+            # the connection) if we fetched multiple messages at once.
             if i > C.lastMessage:
                 break
             try:
@@ -2353,7 +2391,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # whatever
                 # TODO: Add attachment file names (when available) to search
                 # data for method, so that they can be found.
-                data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1])')
+                data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1] UID)')
                 #print(typ)
                 #print(data)
                 #print(data[0][1])
@@ -2363,8 +2401,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 data = processImapData(data[0][1], self.C.settings)
 
                 headertext = getResultPart('body[header]', data[0])
+                uid = int(getResultPart('UID', data[0]))
                 headers = processHeaders(headertext)
-                print("\r%i"%i, end='')
+                print("\r%i (%i)"% (i, uid), end='')
                 sys.stdout.flush()
                 doc = xapian.Document()
                 termgenerator.set_document(doc)
@@ -2390,21 +2429,41 @@ class Cmd(cmdprompt.CmdPrompt):
                     termgenerator.index_text(headers['in-reply-to'][-1],1,'P')
                 if 'message-id' in headers:
                     termgenerator.index_text(headers['message-id'][-1],1,'M')
+                # TODO: Decompose the message dates (sent and received, that
+                # is, message header "Date:" and IMAP's INTERNALDATE) and
+                # store as values to allow for ranged searches
 
                 termgenerator.index_text(getResultPart('body[1]', data[0]))
                 # Support full document retrieval but without reference info
                 # (we'll have to fully rebuild the db to get new stuff. TODO:
                 # store UID and such)
-                doc.set_data("x-mailnex-location: {}@{}\r\nx-mailnex-box: {}\r\n{}".format(
+                doc.set_data("x-mailnex-uid: {}\r\nx-mailnex-location: {}@{}\r\nx-mailnex-box: {}\r\n{}".format(
+                    uid,
                     self.C.connection.mailnexUser,
                     self.C.connection.mailnexHost,
                     self.C.connection.mailnexBox,
                     headertext,
                     ))
-                idterm = u"Q" + str(i)
+                # We will use the message UID (formerly we were using the
+                # MID) as the identifier. This will allow us to obtain this
+                # record via UID for updating or deletion, and doesn't hit
+                # xapian limits (UIDs can be 64bit I think, xapian document
+                # ids are limited to 32bit). However, this is stored as a
+                # term; retreiving a term from a search result requires
+                # iterating through all of the terms in a document, and Q (the
+                # recommended prefix for external ids) is pretty late in the
+                # sort order (though not terribly). As such, we'll ALSO store
+                # the UID in the document data (above). Note that
+                # http://getting-started-with-xapian.readthedocs.io/en/latest/concepts/indexing/values.html
+                # discusses storing values as well as terms and data. It
+                # specifically recommends against storing data needed to
+                # display a document in values. Since we need the UID to
+                # display our messages, we won't use values.
+                idterm = u"Q" + str(uid)
                 doc.add_boolean_term(idterm)
                 db.replace_document(idterm, doc)
                 i += 1
+                lastuid = uid
             except KeyboardInterrupt:
                 # TODO: There is usually an outstanding fetch at this point
                 # that would be good to consume somehow; otherwise we later
@@ -2414,7 +2473,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     with open(lastMessageFile, "w") as f:
                         # Store the previous index, in case we didn't actually
                         # write the current one TODO: Verify this logic
-                        f.write(str(i - 1))
+                        f.write(b"%i %i" % (self.C.connection.uidvalidity, lastuid))
                 except Exception as ev:
                     print("Failed to store lastMessage", ev)
                 return
@@ -2424,7 +2483,7 @@ class Cmd(cmdprompt.CmdPrompt):
         with open(lastMessageFile, "w") as f:
             # Store the previous index, in case we didn't actually
             # write the current one TODO: Verify this logic
-            f.write(str(i))
+            f.write(b"%i %i" % (self.C.connection.uidvalidity, uid))
         print("Done!")
 
     def getTextPlainParts(self, index, allParts=False):
@@ -5133,21 +5192,47 @@ class Cmd(cmdprompt.CmdPrompt):
         for i in range(len(data)):
             headers = data[i]
             match = matches[i]
-            res.append(match.docid)
             headers = headers.split('\r\n')
             subject = filter(lambda x: x.lower().startswith("subject: "), headers)
             if len(subject) == 0:
                 subject = "(no subject)"
             else:
                 subject = subject[0]
-            print(u"%(rank)i (%(perc)3s %(weight)s): #%(docid)3.3i %(title)s" % {
+            uid = filter(lambda x: x.lower().startswith("x-mailnex-uid: "), headers)
+            if len(uid) != 1:
+                # This should only happen if mailnex has been updated from a
+                # version that wasn't using UIDs, or the DB is somehow
+                # corrupted but working.
+                # TODO: Automatically update DB?
+                raise Exception("Database is bad. Please re-index it")
+            uid = int(uid[0].split(":")[1])
+            print(u"%(rank)i (%(perc)3s %(weight)s): #%(docid)3.3i ##%(uid)i %(title)s" % {
                     'rank': match.rank + 1,
                     'docid': match.docid,
                     'title': subject,
                     'perc': match.percent,
                     'weight': match.weight,
+                    'uid': uid,
                     }
                     )
+
+            # TODO: Should build up the list of UIDs, then search for all 10
+            # at once. Otherwise, the round-tripping is terrible on latent
+            # connections. NOTE: our list is in order of search relevance. The
+            # server prefers UID order requests, and can return results in any
+            # order, and most will return in MID/UID order, so we'll have to
+            # re-order the results when we are done. Of course, doing 1 at a
+            # time doesn't incur this (but is slower)
+            # TODO: A better alternative would be to store the UIDs to the
+            # virtfolder list directly. The global MIDs can be shown in the
+            # headers as a result of the fetch there. The user doesn't really
+            # get to see the MIDs until then, anyway.
+            fetch = self.C.connection.uidfetch(uid, "(UID)")
+            # example: fetch == [('81', '(UID 74997)')]
+            if len(fetch) == 0:
+                print("  ^ Message no longer exists")
+            mid = int(fetch[0][0])
+            res.append(mid)
         if len(res) == 0:
             print("No match") # TODO: Better message
         else:
