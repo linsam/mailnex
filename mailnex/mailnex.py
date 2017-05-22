@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+# -*- coding: utf-8 -*-
 
 # Ubuntu 14.04 doesn't have xapian for python3. Quite possibly other modules
 # aren't available as well.
@@ -141,6 +142,10 @@ class Context(object):
         self.lastList = None
         # list of messages making up the current virtual folder, if any
         self.virtfolder = None
+        # Extra info on messages in virtual folder. Used by things like thread
+        # views. TODO: Ought to be collapsed into the virtfolder list
+        # directly, but that will require some refactoring.
+        self.virtfolderExtra = None
         # Currently selected message. Should (must?) be in lastList
         self.currentMessage = None
         # lastMessage is the highest numbered message in the folder
@@ -2239,6 +2244,269 @@ class Cmd(cmdprompt.CmdPrompt):
             except:
                 self.C.connection = None
                 raise
+
+    @showExceptions
+    @needsConnection
+    def do_findrefs(self, args):
+        """Experimental command.
+
+        The basis of getting a threaded view.
+        """
+        #print(dir(self.C.connection))
+        print(self.C.connection.uidvalidity)
+        t1=time.time()
+        messageLeaders={}
+        messages={}
+        # TODO: Fixup when messages are out of order (e.g. a reply comes
+        # first)
+        def processMessage(i, uid, headers):
+            if not 'message-id' in headers:
+                print("Fail (no id):", i, uid)
+                return
+            mid = headers['message-id']
+            if len(mid) != 1:
+                print("Fail: multiple ids", i, uid)
+                return
+            head = mid[0]
+            this = [i, uid, []]
+            messages[head] = this
+            # MS Outlook (unknown version(s)) includes a blank 'in-reply-to'
+            # header sometimes, but a valid 'references' header.
+            # So, I suppose we'll parse references first, for now.
+            # really, we probbably need to look at both and make a heuristic
+            # decision.
+            #
+            # Also, I've seen Outlook include both 'in-reply-to' and
+            # 'references' that are both blank when someone replies to their
+            # own message. Can only guess that it is a reply by looking at the
+            # subject (has a 'RE:' leadstring, matches a leader without it),
+            # and possibly by comparing message contents to see what parts are
+            # in other messages (very costly if not doin subject comparison to
+            # limit the search, and difficult to get right given the
+            # inconsistent methods of including quoted text).
+            if 'references' in headers:
+                refs = headers['references']
+                #print("references something", i, uid, refs)
+                # Ok, so the reference list needs to be actually parsed. This
+                # quick-split method isn't valid, though it usually works.
+                # TODO FIXME
+                if len(refs) != 1:
+                    # There should (must?) be a single of this header, which
+                    # contains multiple message ids in a list
+                    #print("Fail: multiple references lines")
+                    return
+                refs = refs[0].split()
+                # First is supposed to be leader, last is direct reply, rest
+                # is (supposed to be) part of email chain in-between. Note
+                # that nothing stops a message from listing a reference
+                # out-of-chain, and parsing a reply-to-multiple-messages
+                # explicitly isn't possible, though implicitly this is a reply
+                # to all messages listed.
+                #
+                # For now, we'll just use our direct reply; listing missing
+                # intermediaries can be dealt with later.
+                if len(refs) == 0:
+                    # Wth? Empty header?
+                    #print("Fail: Empty references header", i, uid)
+                    return
+                repl = refs[-1]
+                try:
+                    m = messages[repl]
+                    m[2].append(this)
+                except KeyError as ev:
+                    print("Reply (refs) without leader", i, uid, type(ev),ev)
+                    return
+                return
+            elif 'in-reply-to' in headers:
+                replies = headers['in-reply-to']
+                if len(replies) != 1:
+                    print("Fail: multiple replies")
+                    # TODO: We could probably deal with this, though it might
+                    # not be pretty
+                    return
+                repl = replies[0]
+                #print("Reply to something", i, uid, repl)
+                try:
+                    m = messages[repl]
+                    m[2].append(this)
+                except KeyError as ev:
+                    print("Reply without leader", i, uid, type(ev), ev)
+                    return
+                return
+            else:
+                #print("leader", i, uid)
+                messageLeaders[head] = this
+
+        if 0:
+            t2 = None
+            # slow path, but interruptable
+            for i in range(1,self.C.lastMessage + 1):
+                res = self.C.connection.fetch(i, '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
+                data = processImapData(res[0][1], self.C.settings)
+                headertext = getResultPart('body[header.FIELDS (references in-reply-to message-id)]', data[0])
+                headers = processHeaders(headertext)
+                uid = getResultPart('uid', data[0])
+                processMessage(i, uid, headers)
+        else:
+            # fast path, but not so interruptable
+            res = self.C.connection.fetch('1:*', '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
+            t2=time.time()
+            for i in range(0,self.C.lastMessage):
+                data = processImapData(res[i][1], self.C.settings)
+                # FIXME: when we ask for HEADER.FIELDS we get back the same
+                # thing, but we only group on parenthesis, so we end up with
+                # something like:
+                #  [
+                #    'UID',
+                #    number,
+                #    'BODY.PEEK[HEADER.FIELDS',
+                #    [
+                #      'REFERENCES',
+                #      'IN-REPLY-TO',
+                #      'MESSAGE-ID',
+                #    ],
+                #    ']',
+                #    headers_text,
+                #  ]
+                #
+                # Which is a wrong interpretation of the results. However,
+                # since we know we only have one set of that, we'll use the
+                # ']' as the key.
+                headertext = getResultPart(']', data[0])
+                headers = processHeaders(headertext)
+                uid = getResultPart('uid', data[0])
+                processMessage(i + 1, uid, headers)
+        t3=time.time()
+        print("Done")
+        print("duration:", t3-t1)
+        if t2:
+            # Note: most of the fetch duration is parsing the IMAP response
+            # data
+            # E.G.
+            # duration: 4.20123004913
+            #   fetch duration: 2.41206598282
+            #   calc duration: 1.78916406631
+            #
+            # Of the fetch duration, less than 0.5 was getting the data over a
+            # slow-ish link where the server already had the data cached.
+            print("  fetch duration:", t2-t1)
+            print("  calc duration:", t3-t2)
+        if 0:
+            for m,d in messageLeaders.iteritems():
+                if len(d[2]) == 0:
+                    print("singleton", d[0], d[1])
+                elif len(d[2]) == 1:
+                    print("repl", d[0], d[1])
+                else:
+                    print("Multibeast", d[0], d[1])
+                    for i in d[2]:
+                        print("  ", i[0], i[1])
+        # Build virtfolder with thread ordering
+        msgleaderlist = []
+        for m,d in messageLeaders.iteritems():
+            msgleaderlist.append((m,d))
+        msgleaderlist.sort(cmp=lambda x,y: cmp(x[1][0],y[1][0]))
+        msglist = []
+        msglistextra = []
+        def expand(m, leader=False):
+            msglist.append(m[0])
+            msglistextra.append(leader)
+            #print(m)
+            for i in m[2]:
+                expand(i)
+        for i in msgleaderlist:
+            #print("Adding leader", i[0],i[1][0])
+            expand(i[1], True)
+        # Clear existing virt folder if any
+        self.do_virtfolder("")
+        self.C.virtfolderSavedSelection = (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList)
+        self.C.currentMessage = 1
+        self.C.nextMessage = 1
+        self.C.prevMessage = None
+        self.C.lastList = []
+        self.C.virtfolder=msglist
+        self.C.virtfolderExtra = msglistextra
+        self.setPrompt("mailnex (vf-threads)> ")
+        return
+
+        # Do some diagnostics and stuff
+        maxdepth = 0
+        maxmsg = None
+        maxChildren = 0
+        maxChildrenMsg = None
+        def countAllChildren(leader):
+            count = 1 # myself
+            for i in leader[2]:
+                count += countAllChildren(i)
+            return count
+        for m,d in messageLeaders.iteritems():
+            chldcnt = countAllChildren(d)
+            if chldcnt > maxChildren:
+                maxChildren=chldcnt
+                maxChildrenMsg = m
+            if len(d[2]) == 0:
+                continue
+            depth = 0
+            while True:
+                #print(depth, d[0], d[2])
+                if d[2]:
+                    d = d[2][0]
+                    depth += 1
+                else:
+                    break
+            if depth > maxdepth:
+                maxdepth = depth
+                maxmsg = m
+        def showReplList(leader, file=sys.stdout):
+            mlist = MessageList()
+            def info(m,depth, markers):
+                mlist.add(m[0])
+                #print("%s %s %s %s" % (" "*depth, m[0], m[1], repr(m)))
+                mstr=" "
+                mi = 0
+                # for box drawing characters, see
+                # https://en.wikipedia.org/wiki/Box-drawing_character
+                for i in markers:
+                    mstr += " "*(i-mi - 1) + "│"
+                    mi = i
+                mstr += " "*(depth - mi - 1)
+                if depth != mi:
+                    #mstr += "╰"
+                    mstr += "└"
+                elif depth != 0: # Don't do this for leaders
+                    mstr = mstr[:-1] + "├"
+                #print("%s %s %s   %s" % (" "*depth, m[0], m[1], markers), file=file)
+                print("%s%s %s   %s,%i" % (mstr, m[0], m[1], markers, depth), file=file)
+                for i in m[2][:-1]:
+                    info(i, depth+1, markers+[depth+1])
+                for i in m[2][-1:]:
+                    info(i, depth+1, markers)
+            info(leader, 0, [])
+            self.showHeadersNonVF(mlist, file=file)
+        print("----------- Max depth ----------")
+        print(maxdepth, maxmsg)
+        if maxmsg:
+            showReplList(messageLeaders[maxmsg])
+        print("----------- Max count ----------")
+        print(maxChildren, maxChildrenMsg)
+        if maxChildrenMsg:
+            showReplList(messageLeaders[maxChildrenMsg])
+        #return
+        import codecs
+        # NOTE: python3 has an encoding parameter directly in open, no need
+        # for codecs.open.
+        # See
+        # http://stackoverflow.com/questions/10971033/backporting-python-3-openencoding-utf-8-to-python-2
+        with codecs.open("/tmp/list.txt","w", encoding='utf-8') as f:
+            print("----------- all non 0 ----------", file=f)
+            for m,d in messageLeaders.iteritems():
+                if len(d[2]) == 0:
+                    continue
+                showReplList(d, file=f)
+                print("--", file=f)
+
+
+
 
     @showExceptions
     @needsConnection
@@ -4834,7 +5102,7 @@ class Cmd(cmdprompt.CmdPrompt):
             messageList = MessageList([self.C.virtfolder[x-1] for x in messageList.iterate()])
         self.showHeadersNonVF(messageList)
 
-    def showHeadersNonVF(self, messageList):
+    def showHeadersNonVF(self, messageList, file=sys.stdout):
         """Show headers, given a global message list only"""
         msgset = messageList.imapListStr()
         args = "(ENVELOPE INTERNALDATE FLAGS)"
@@ -4914,6 +5182,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     except:
                         newfroms.append(fr)
                 froms = newfroms
+                if self.C.virtfolderExtra:
+                    leader = self.C.virtfolderExtra[num - 1]
+                else:
+                    leader = False
                 if self.C.virtfolder and len(self.C.settings.headlinevf.value):
                     headline = self.C.settings.headlinevf.value
                 else:
@@ -4927,13 +5199,14 @@ class Cmd(cmdprompt.CmdPrompt):
                         'subject': subject,
                         'flags': " ".join(flags),
                         'from': froms[0],
+                        'leader': '+' if leader else ' ',
                         't': self.C.t,
                     })))
             except Exception as ev:
-                print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d))
+                print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d), file=file)
         resset.sort()
         for n,s in resset:
-            print(s)
+            print(s, file=file)
 
     @shortcut("f")
     @showExceptions
@@ -5437,6 +5710,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # We were in virtfolder mode, so restore selection
                 (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList) = self.C.virtfolderSavedSelection
             self.C.virtfolder = None
+            self.C.virtfolderExtra = None
             self.setPrompt("mailnex> ")
         else:
             self.C.virtfolder = args
