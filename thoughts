@@ -500,6 +500,8 @@ those subsequent messages.
     |      `5341    Re: hi there            1                1
     `5402           Re: hi there            1                1
 
+    worst indent: 11
+
 depth only ordering. Longest depth last and same column, shortest depth first. Then message order
 
 5239
@@ -535,3 +537,291 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
    5315
    5316
    5341
+
+    worst indent: 4
+
+4096 (somewhat flat in traditional order. Had subject change in the middle)
+
+ mid/struct        subject                depth            descendants + self
+ ---------------   ------------------     --------------   ------------------------
+ 4096              topic                  5  4,3           15  1+9+5
+ `4103             RE: topic              4                 9  1+8
+ |`4136            something else         3  2,1,2,2        8  1+2+1+2+2
+ | `4148           Re: something else     2                 2
+ | |`4150          Re: something else     1                 1
+ | `4152           RE: something else     1                 1
+ | `4785           Fwd: something else    2                 2
+ | |`4902          Re: Fwd: something else1                 1
+ | `5085           Re: something else     2                 2
+ |  `5086          Re: something else     1                 1
+ `4108             Re: topic              3  2,1            5  1+3+1
+  `4128            Re: topic              2  1,1            3  1+1+1
+  |`4130           Re: topic              1                 1
+  |`4135           Re: topic              1                 1
+  `4129            Re: topic              1                 1
+
+    worst indent: 5
+
+depth only ordering. Longest depth last and same column, shortest depth first. Then message order
+
+ 4096              topic
+ \_ 4108           Re: topic
+ |  \_ 4129
+ |  4128
+ |  \_ 4130
+ |  4135
+ \_ 4103           RE: topic        # could go on first line if single conversation or other separator
+    4136           something else
+    \_ 4152        RE: something else
+    \_ 4148        Re: something else
+    |  4150        Re: something else
+    \_ 4785        Fwd: something else
+    |  4902        Re: Fwd: something else
+    5085           Re: something else
+    5086           Re: something else
+
+    worst indent: 3
+
+
+4591 (weird curve, could be a good data set)
+
+ mid/struct        depth            descendants + self
+ ---------------   --------------   ------------------------
+ 4591              11               15
+ `4595             10               14
+  `4598             9               13
+   `4600            8               12
+    `4604           7               11
+     `4606          6               10
+      `4608         5                9
+       `4611        4  1,3,1         8  1+1+5+1
+        `4632       1                1
+        `4633       3  2,1           5  1+3+1
+        |`4637      2  1,1           3  1+1+1
+        ||`4642     1                1
+        ||`4689     1                1
+        |`4638      1                1
+        `4639       1                1
+
+    worst indent: 11
+
+depth only ordering. Longest depth last and same column, shortest depth first. Then message order
+
+ 4591
+ \_ 4595
+    4598
+    4600
+    4604
+    4606
+    4608
+    4611
+    \_ 4632
+    \_ 4639
+    4633
+    \_ 4638
+    4637
+    \_ 4642
+    4689
+
+    worst indent: 3
+
+
+4815 (fun depth jump backs)
+
+ mid/struct           depth            descendants + self
+ ---------------      --------------   ------------------------
+ 4815                 17               26
+ `4818                16  15,3         25  1+21+3
+  `4830               15               21
+  |`4832              14               20
+  | `4833             13               19
+  |  `4836            12  4,11         18  1+5+12
+  |   `4839            4  1,3           5  1+1+3
+  |   |`4841           1                1
+  |   |`4845           3                3
+  |   | `4846          2                2
+  |   |  `4850         1                1
+  |   `4844           11               12
+  |    `4851          10               11
+  |     `4859          9  1,8          10  1+1+8
+  |      `4860         1                1
+  |      `4978         8                8
+  |       `4979        7                7
+  |        `4980       6                6
+  |         `4981      5                5
+  |          `4985     4                4
+  |           `4986    3                3
+  |            `4990   2                2
+  |             `5000  1                1
+  `4835                3                3
+   `4837               2                2
+    `4838              1                1
+
+    worst indent: 17
+
+depth only ordering. Longest depth last and same column, shortest depth first. Then message order
+
+ 4815
+ \_ 4818
+    \_ 4835
+    |  4837
+    |  4838
+    4830
+    4832
+    4833
+    4836
+    \_ 4839
+       \_ 4841
+       4845
+       4846
+       4850
+    4844
+    4851
+    4859
+    \_ 4860
+    4978
+    4979
+    4980
+    4981
+    4985
+    4986
+    4990
+    5000
+
+    worst indent: 4
+
+1533 (pain chain)
+
+ mid/struct           depth            descendants + self
+ ---------------      --------------   ------------------------
+ 1533                  9               23
+ `1534                 8               22
+  `1537                7  1,4,6        21  1+1+7+12
+   `1539               1                1
+   `1542               4  3,1,1         7  1+4+1+1
+   |`1544              3  2,1           4  1+2+1
+   ||`1546             2                2
+   |||`1547            1                1
+   ||`1555             1                1
+   |`1545              1                1
+   |`1548              1                1
+   `1560               6               12
+    `1561              5  4,2          11  1+7+3
+     `1562             4  1,1,3         7  1+1+1+4
+     |`1565            1                1
+     |`1571            1                1
+     |`1572            3                4
+     | `1577           2  1,1           3  1+1+1
+     |  `1579          1                1
+     |  `1580          1                1
+     `1563             2  1,1           3  1+1+1
+      `1570            1                1
+      `1627            1                1
+
+    worst indent: 9
+
+ same old. Longest last, then MID (and as every example above, same as most descendants last, then MID)
+
+ 1533
+ \_ 1534
+    1537
+    \_ 1539
+    \_ 1542
+    |  \_ 1545
+    |  \_ 1548
+    |  1544
+    |  \_ 1555
+    |  1546
+    |  1547
+    1560
+    1561
+    \_ 1563
+    |  \_ 1570
+    |  1627
+    1562
+    \_ 1565
+    \_ 1571
+    1572
+    1577
+    \_ 1579
+    1580
+
+    worst indent: 4
+
+3779 (pretty complicated)
+
+ mid/struct           depth            descendants + self
+ ---------------      --------------   ------------------------
+ 3779                 10  1,1,1,1,9    33  1+1+1+1+1+28
+ `3781                 1                1
+ `3782                 1                1
+ `3789                 1                1
+ `3843                 1                1
+ `3844                 9               28
+  `3847                8  1,1,1,7      27  1+1+1+1+23
+   `3852               1                1
+   `3853               1                1
+   `3894               1                1
+   `3895               7  5,6          23  1+7+15
+    `3900              5  1,4           7  1+1+5
+    |`3902             1                1
+    |`3903             4                5
+    | `3910            3  1,2           4  1+1+2
+    |  `3918           1                1
+    |  `3919           2                2
+    |   `3921          1                1
+    `4330              6  2,1,5        15  1+2+1+11
+     `4333             2                2
+     |`4339            1                1
+     `4341             1                1
+     `4342             5  1,4,2        11  1+1+6+3
+      `4347            1                1
+      `4353            4  3,1,1         6  1+3+1+1
+      |`4356           3                3
+      ||`4358          2                2
+      || `4382         1                1
+      |`4365           1                1
+      |`4366           1                1
+      `4360            2  1,1           3  1+1+1
+       `4367           1                1
+       `4368           1                1
+
+    worst indent: 10
+
+ same old. Longest last, then MID (and as every example above, same as most descendants last, then MID)
+
+ 3779
+ \_ 3781
+ \_ 3782
+ \_ 3789
+ \_ 3843
+ \_ 3844
+    3847
+    \_ 3852
+    \_ 3953
+    \_ 3894
+    3895
+    \_ 3900
+       \_ 3902
+       3903
+       3910
+       \_ 3918
+       3919
+       3921
+    4330
+    \_ 4341
+    \_ 4333
+       4339
+    4342
+    \_ 4347
+    \_ 4360
+       \_ 4367
+       4368
+    4353
+    \_ 4365
+    \_ 4366
+    4356
+    4358
+    4382
+
+    worst indent: 4
