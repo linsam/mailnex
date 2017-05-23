@@ -2449,6 +2449,12 @@ class Cmd(cmdprompt.CmdPrompt):
                     print("Multibeast", d[0], d[1])
                     for i in d[2]:
                         print("  ", i[0], i[1])
+        def countAllChildren(leader):
+            count = 1 # myself
+            print(leader)
+            for i in leader[2]:
+                count += countAllChildren(i)
+            return count
         # Build virtfolder with thread ordering
         msgleaderlist = []
         for m,d in messageLeaders.iteritems():
@@ -2458,13 +2464,16 @@ class Cmd(cmdprompt.CmdPrompt):
         msglistextra = []
         def expand(m, leader=False):
             msglist.append(m[0])
-            msglistextra.append(leader)
+            msglistextra.append((leader, None, None))
             #print(m)
             for i in m[2]:
                 expand(i)
+        def collapse(m, _):
+            msglist.append(m[0])
+            msglistextra.append((None, countAllChildren(m), m))
         for i in msgleaderlist:
             #print("Adding leader", i[0],i[1][0])
-            expand(i[1], True)
+            collapse(i[1], True)
         # Clear existing virt folder if any
         self.do_virtfolder("")
         self.C.virtfolderSavedSelection = (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList)
@@ -2482,11 +2491,6 @@ class Cmd(cmdprompt.CmdPrompt):
         maxmsg = None
         maxChildren = 0
         maxChildrenMsg = None
-        def countAllChildren(leader):
-            count = 1 # myself
-            for i in leader[2]:
-                count += countAllChildren(i)
-            return count
         for m,d in messageLeaders.iteritems():
             chldcnt = countAllChildren(d)
             if chldcnt > maxChildren:
@@ -5231,9 +5235,14 @@ class Cmd(cmdprompt.CmdPrompt):
                         newfroms.append(fr)
                 froms = newfroms
                 if self.C.virtfolderExtra:
-                    leader = self.C.virtfolderExtra[num - 1]
+                    extra = self.C.virtfolderExtra[num - 1]
+                    leader = True if extra[0] is None else extra[0]
+                    tcount = 1 if extra[1] is None else extra[1]
+                    # TODO: What is probably more useful is, how many messages in
+                    # the thread are unread and/or flagged.
                 else:
                     leader = False
+                    tcount = 1
                 if self.C.virtfolder and len(self.C.settings.headlinevf.value):
                     headline = self.C.settings.headlinevf.value
                 else:
@@ -5248,6 +5257,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         'flags': " ".join(flags),
                         'from': froms[0],
                         'leader': '+' if leader else ' ',
+                        'tcount': tcount,
                         't': self.C.t,
                     })))
             except Exception as ev:
