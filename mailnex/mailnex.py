@@ -2765,7 +2765,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     headertext,
                     ))
                 # We will use the message UID (formerly we were using the
-                # MID) as the identifier. This will allow us to obtain this
+                # MSeq) as the identifier. This will allow us to obtain this
                 # record via UID for updating or deletion, and doesn't hit
                 # xapian limits (UIDs can be 64bit I think, xapian document
                 # ids are limited to 32bit). However, this is stored as a
@@ -5551,19 +5551,19 @@ class Cmd(cmdprompt.CmdPrompt):
             # at once. Otherwise, the round-tripping is terrible on latent
             # connections. NOTE: our list is in order of search relevance. The
             # server prefers UID order requests, and can return results in any
-            # order, and most will return in MID/UID order, so we'll have to
+            # order, and most will return in MSeq/UID order, so we'll have to
             # re-order the results when we are done. Of course, doing 1 at a
             # time doesn't incur this (but is slower)
             # TODO: A better alternative would be to store the UIDs to the
-            # virtfolder list directly. The global MIDs can be shown in the
+            # virtfolder list directly. The global MSeq can be shown in the
             # headers as a result of the fetch there. The user doesn't really
-            # get to see the MIDs until then, anyway.
+            # get to see the MSeq until then, anyway.
             fetch = self.C.connection.uidfetch(uid, "(UID)")
             # example: fetch == [('81', '(UID 74997)')]
             if len(fetch) == 0:
                 print("  ^ Message no longer exists")
-            mid = int(fetch[0][0])
-            res.append(mid)
+            mseq = int(fetch[0][0])
+            res.append(mseq)
         if len(res) == 0:
             print("No match") # TODO: Better message
         else:

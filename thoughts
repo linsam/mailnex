@@ -464,7 +464,7 @@ those subsequent messages.
 
 5239 (fun, with subject changes and such, and 2 sets of 4-child, 1 with full grandchildren!)
 
-  mid/struct        subject                depth            descendants + self
+  msq/struct        subject                depth            descendants + self
   ---------------   ------------------     --------------   ------------------------
   5239              hi there               11               33
   `5244             Re: hi there           10               32
@@ -542,7 +542,7 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
 
 4096 (somewhat flat in traditional order. Had subject change in the middle)
 
- mid/struct        subject                depth            descendants + self
+ msq/struct        subject                depth            descendants + self
  ---------------   ------------------     --------------   ------------------------
  4096              topic                  5  4,3           15  1+9+5
  `4103             RE: topic              4                 9  1+8
@@ -585,7 +585,7 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
 
 4591 (weird curve, could be a good data set)
 
- mid/struct        depth            descendants + self
+ msq/struct        depth            descendants + self
  ---------------   --------------   ------------------------
  4591              11               15
  `4595             10               14
@@ -628,7 +628,7 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
 
 4815 (fun depth jump backs)
 
- mid/struct           depth            descendants + self
+ msq/struct           depth            descendants + self
  ---------------      --------------   ------------------------
  4815                 17               26
  `4818                16  15,3         25  1+21+3
@@ -692,7 +692,7 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
 
 1533 (pain chain)
 
- mid/struct           depth            descendants + self
+ msq/struct           depth            descendants + self
  ---------------      --------------   ------------------------
  1533                  9               23
  `1534                 8               22
@@ -720,7 +720,7 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
 
     worst indent: 9
 
- same old. Longest last, then MID (and as every example above, same as most descendants last, then MID)
+ same old. Longest last, then MSeq (and as every example above, same as most descendants last, then MSeq)
 
  1533
  \_ 1534
@@ -750,7 +750,7 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
 
 3779 (pretty complicated)
 
- mid/struct           depth            descendants + self
+ msq/struct           depth            descendants + self
  ---------------      --------------   ------------------------
  3779                 10  1,1,1,1,9    33  1+1+1+1+1+28
  `3781                 1                1
@@ -788,7 +788,7 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
 
     worst indent: 10
 
- same old. Longest last, then MID (and as every example above, same as most descendants last, then MID)
+ same old. Longest last, then MSeq (and as every example above, same as most descendants last, then MSeq)
 
  3779
  \_ 3781
