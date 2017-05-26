@@ -825,3 +825,25 @@ depth only ordering. Longest depth last and same column, shortest depth first. T
     4382
 
     worst indent: 4
+
+
+-----------------------------------------------
+
+RFC 2822 specifies "Re: " prefix for replies. It mentions forwarding messages,
+but does not describe how to indicate such in the subject. Some email clients
+use "RE: ", "re: ", and the first two letters of the local word for
+"regarding"  in spite of RFC 2822 indicating "Re" is short for the latin "Res"
+meaining "in the matter of" or something like that.
+
+In spite of RFC 2822 specifying "Re: " be added as prefix, RFC 5256 only
+specifies removing "re: " (lower case) from the subject when forming a
+base-subject (and a bunch of forwarding and identifier texts). It does
+explicitly call out being case-sensitive when matching Message-IDs, so one
+might assume to be case insensitive for the "re: " prefix. Experience shows
+that when characters are used in ABNF, they are used insensitively (e.g. for
+IMAP, I can do 'uid search' or 'UID SEARCH' and the server doesn't care, even
+though it is in ABNF as ["UID" SP] "SEARCH". 
+
+Actually, RFC 5234 section 2.3 explicitly calls out that ABNF strings in
+quotes are US-ASCII encoded, case-insensitive strings. So, all of the "re" and
+"fwd" stuff must be matched insensitively as one would expect it should!

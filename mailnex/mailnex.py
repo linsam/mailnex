@@ -96,6 +96,21 @@ from __future__ import unicode_literals
 #     like KMail could do or gmail does. Otherwise, it can be difficult in
 #     many situations to notice that an old thread has come alive again.
 #
+#     Standard sorting criteria (rfc5256):
+#       * ARRIVAL
+#       * CC
+#       * DATE
+#       * FROM
+#       * SIZE
+#       * SUBJECT
+#       * TO
+#     Extended sorting criteria
+#       * DISPLAYFROM (rfc5957)
+#       * DISPLAYTO (rfc5957)
+#
+#     Standard thread algos (rfc5256)
+#       * ORDEREDSUBJECT
+#       * REFERENCES
 #
 
 # standard stuff
@@ -2296,17 +2311,206 @@ class Cmd(cmdprompt.CmdPrompt):
     @showExceptions
     @needsConnection
     def do_findrefs(self, args):
-        """Experimental command.
+        """Experimental command. Will eventually become the threaded view command.
 
-        The basis of getting a threaded view.
+        If given, the first argument should be the number of messages to
+        thread, starting from the end of the box. E.g. "100" will take that
+        last 100 messages in the current box, arrange them into threads, and
+        present them. Parents outside the range are not displayed. In a
+        mailbox with thousands or tens of thousands of messages, specifying
+        this number will speed things up significantly. The operation is
+        somewhat similar to email apps that only pull, say, the last 25
+        messages until you ask for more.
+
+        Eventually, the goal is to replace the number with a regular message
+        search, like given to the 'f' command. This is akin to how the IMAP
+        THREAD command itself works, if we were using it.
+
+        After the number, some flags can be specified to control the results.
+        Unknown flags are ignored. Currently used flags are:
+
+        modes. Pick one:
+         'e' - expanded view. All messages are shown. Currently the default.
+         'c' - collapsed view. Only message leaders are shown. Rest of
+               conversation is hidden and inaccessible.
+        Additional. Pick zero or more:
+         'd' - perform extra debugging (can be very slow; lots of IMAP traffic)
+         'l' - sort message leaders by the highest member sequence number.
+               Mostly equivalent to sorting by most recent receive date. This
+               keeps threads with recent activity towards the end of the
+               message list, just like recent unthreaded messages appear at
+               the end.
+
+        E.g.
+            findrefs 25 el
+            findrefs 100 c
         """
         #print(dir(self.C.connection))
-        print(self.C.connection.uidvalidity)
+        # If we cache threading information, we'll need to save off the
+        # uidvalidity to know if the cache is valid.
+        #print(self.C.connection.uidvalidity)
         t1=time.time()
         messageLeaders={}
         messages={}
-        # TODO: Fixup when messages are out of order (e.g. a reply comes
-        # first)
+        try:
+            msgcnt = int(args.split()[0])
+        except ValueError:
+            msgcnt = None
+        #
+        #
+        # RFC5256 procedures:
+        #
+        #
+        #   Base-Subject (used by ORDEREDSUBJECT and REFERENCES):
+        #     1: Convert subject to UTF-8, tabs and continuations to space,
+        #        and collapse multiple spaces into a single space.
+        #     2: Repeatedly remove postfix <subj-trailer> until none remain.
+        #        subj-trailer = "(fwd)" / WSP
+        #        WSP = SP / HTAB
+        #     3: Remove prefix <subj-leader> (says "all prefix text...that
+        #        matches", but doesn't say "repeat")
+        #        subj-leader = (*subj-blob subj-refwd) / WSP
+        #        subj-blob = "[" *BLOBCHAR "]" *WSP
+        #        subj-refwd = ("re" / ("fw" ["d"])) *WSP [subj-blob] ":"
+        #        BLOBCHAR = ;any char8 except '[' and ']'
+        #     4: if prefix matching <subj-blob>, remove it, unless that leaves a
+        #        empty <subj-base>.
+        #        subj-blob = "[" *BLOBCHAR "]" *WSP
+        #        BLOBCHAR = ;any char8 except '[' and ']', utf-8 encoded
+        #        subj-base = NONSWP *(*WSP NONWSP)
+        #             ; can match <subj-blob>
+        #        WSP = SP / HTAB
+        #        NONWSP = ; any char other than SP or HTAB
+        #     5: repeat 3 and 4 until no matches remain
+        #     6: if prefix matches <subj-fwd-hdr> and postfix matches
+        #        <subj-fwd-trl>, remove both and goto 2.
+        #        subj-fwd-hdr = "[fwd:"
+        #        subj-fwd-trl = "]"
+        #
+        #     re: [list] [list2] re [bob]: fwd: [list] [fwd: my subject] (fwd)
+        #                                                                2---2
+        #     3-3
+        #        ?
+        #   5     3----------------------3
+        #                                 ?
+        #   5                              3--3
+        #                                      ?
+        #   5                                   4----4
+        #                                              6---6           6
+        #
+        #
+        #   Sent Date:
+        #     1: If fully valid, convert to UTC.
+        #     2: If invalid TZ, assume it is UTC already (optional)
+        #     3: If invalid time, assume 00:00:00 (optional)
+        #     4: if invalid date, assume 00:00:00 on MININT (earliest possible
+        #        date) (optional)
+        #     5: If Sent Date can't be had (bad parse or missing header), use
+        #        INTERNALDATE
+        #     6: When doing ordering, matching dates fall back to message
+        #        sequence ordering.
+        #
+        #    I feel like rules 4 and 5 would be exclusive, but maybe there is
+        #    a case where you can successfully parse an invalid date or
+        #    something. Since 4 is optional ("SHOULD" in the spec), we can
+        #    just jump to step 5 if we want, I think, and still comply
+        #
+        #
+        #   ORDEREDSUBJECT:
+        #     1: sort by base subject, then sent date
+        #     2: separate into threads using base subject
+        #        first message is thread leader. All others in thread are
+        #        direct children of the leader
+        #     3: sort threads by sent date of thread leader
+        #
+        #   REFERENCES:
+        #     1: Parse and normalize message-ids (headers message-id,
+        #        in-reply-to, and references).
+        #     2: Extract valid messade-ids from references header. If none
+        #        (missingg header or no valid ids), extract first message-id
+        #        from in-reply-to if any valid. Else, references is NIL
+        #     3: if subject basification removes certain texts, consider this
+        #        message a reply/forward (subj-refwd, subj-trailer,
+        #        subj-fwd-hdr/trl).
+        #     4: Link the references list into parent child relationships,
+        #        unless a message already has a parent. The spec says to
+        #        create a unique message ID to messages without valid IDs, or
+        #        two messages with duplicate IDs (other than the first). This
+        #        can't be saved back to the IMAP server and the IMAP server
+        #        isn't allowed to change the header data it gives the client
+        #        (I don't think), so I don't know why they specify this; seems
+        #        like an opaque implementation detail.
+        #        If a reference ID doesn't (yet) exist, create a dummy message
+        #        for it and create the links.
+        #        Also, don't add a link if a loop would form.
+        #     5: Make the last reference parent to the current message,
+        #        replacing any existing parent reference (this cleans up
+        #        truncated reference headers found in other messages).
+        #        Except, don't do this if a loop would be formed. (I'd expect
+        #        the loop should be broken elsewhere to enforce this message's
+        #        parent, but I'm sure they have their reasons. We might be
+        #        able to do this in our own vendor-algorithm, just not the
+        #        standards compliant one)
+        #        Leave parentless if there was no reference list.
+        #     6: Repeat 1 through 5 for all messages, retaining a database of
+        #        the results.
+        #     7: Create a dummy 'root' message. Make it the parent of all
+        #        messages that do not yet have a parent.
+        #     8: Remove dummy messages, except for the root. If a dummy
+        #        message has children, reparent the children to the current
+        #        message's parent, unless that parent is the root, in which
+        #        case skip this step (unless there is only one child, in which
+        #        case do it anyway). Repeat recursively down the tree.
+        #     9: Sort the dummy root's children by sent date. When the child
+        #        is a dummy, use that dummy's first child. This is not
+        #        recursive; there can be no further dummies at this point.
+        #    10: Create a subject table mapping base-subjects to message
+        #        trees. Iterate through the dummy root's children. Get the
+        #        base-subject for each (either directly, or if a dummy, its
+        #        first child); skip if empty. Add this message to the subject
+        #        table if the subject doesn't exist yet. Else, if message in
+        #        table is not a dummy and (current is dummy OR message in
+        #        table is reply/forward and current isn't) then replace the
+        #        message in subject table with this one. (make it the most
+        #        leaderly it can be)
+        #    11: Merge threads with same subject. Re-iterate through the
+        #        dummy-root's children; for each regain the thread subject.
+        #        Skip if empty. Lookup the subject in the table. Skip if
+        #        message is current. Else, merge current in (if both dummies,
+        #        append current children to other's children and delete
+        #        current dummy. Else if table entry is dummy and current
+        #        isn't, make current a child of dummy. else if current is a
+        #        reply/forward and table entry is not, make the current a
+        #        child of the table entry. Else, create a new dummy message,
+        #        reparent both the table entry and current message to the new
+        #        dummy, and replace the table entry in the table with the new
+        #        dummy.
+        #    12: Sort all messages under the dummy root again using sent-date,
+        #        this time recursively, starting with the deepest part of the
+        #        tree first, then moving up. (sort grandchildren before
+        #        children). If a dummy (only possible for root's children),
+        #        use first child instead.
+        #
+        #    Note: This sorting is restrictive; we will extend it to support
+        #          other orderings. Also note that sent-date sorting requires
+        #          knowing the "Date: " header and the INTERNALDATE if the
+        #          "Date: " header doesn't exist (or possibly if it is
+        #          imparsible)
+        #
+        #          I expect we'll have sort orderings for thread-leaders
+        #          (children of dummy-root), and within-thread. Likely, we'll
+        #          have separate aggregation and thread arrangement (e.g. use
+        #          REFERENCES for aggregation, but then allow flat list or
+        #          hierarchy, with sorting for either.
+        #    Note: Step 8 can leave dummy thread leaders (dummy root children)
+        #          that don't get cleaned up later (step 12 even calls this
+        #          out as something to be aware of when sorting). The end of
+        #          section 4 has an example of this: "((3)(5))" showing that
+        #          messages 3 and 5 are siblings of a parent that doesn't
+        #          exist in the result (e.g. not in box, or didn't match
+        #          search criteria), but are the same thread. They are not
+        #          direct children of the dummy root, but a dummy child or
+        #          root.
         def processMessage(i, uid, headers):
             if not 'message-id' in headers:
                 print("Fail (no id):", i, uid)
@@ -2316,7 +2520,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("Fail: multiple ids", i, uid)
                 return
             head = mid[0]
-            this = [i, uid, []]
+            # mseq, muid, children, sort key
+            this = [i, uid, [], None]
             messages[head] = this
             # MS Outlook (unknown version(s)) includes a blank 'in-reply-to'
             # header sometimes, but a valid 'references' header.
@@ -2355,15 +2560,20 @@ class Cmd(cmdprompt.CmdPrompt):
                 # intermediaries can be dealt with later.
                 if len(refs) == 0:
                     # Wth? Empty header?
-                    #print("Fail: Empty references header", i, uid)
+                    print("Fail: Empty references header", i, uid)
                     return
                 repl = refs[-1]
-                try:
+                if repl not in messages:
+                    # mseq, muid, children, sort key
+                    m=[-1, -1, [], None]
+                    #print("Reply (refs) without leader", i, uid, type(ev),ev)
+                    messages[repl] = m
+                    messageLeaders[repl] = m
+                else:
                     m = messages[repl]
-                    m[2].append(this)
-                except KeyError as ev:
-                    print("Reply (refs) without leader", i, uid, type(ev),ev)
-                    return
+                m[2].append(this)
+                #else:
+                #    print("good", i, uid)
                 return
             elif 'in-reply-to' in headers:
                 replies = headers['in-reply-to']
@@ -2380,6 +2590,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 except KeyError as ev:
                     print("Reply without leader", i, uid, type(ev), ev)
                     return
+                print("inreply only")
                 return
             else:
                 #print("leader", i, uid)
@@ -2397,10 +2608,16 @@ class Cmd(cmdprompt.CmdPrompt):
                 processMessage(i, uid, headers)
         else:
             # fast path, but not so interruptable
-            res = self.C.connection.fetch('1:*', '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
+            if msgcnt:
+                start = self.C.lastMessage - (msgcnt - 1)
+                if start < 1:
+                    start = 1
+            else:
+                start = 1
+            res = self.C.connection.fetch('%i:*' % start, '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
             t2=time.time()
-            for i in range(0,self.C.lastMessage):
-                data = processImapData(res[i][1], self.C.settings)
+            for i in range(start-1,self.C.lastMessage):
+                data = processImapData(res[i-(start-1)][1], self.C.settings)
                 # FIXME: when we ask for HEADER.FIELDS we get back the same
                 # thing, but we only group on parenthesis, so we end up with
                 # something like:
@@ -2425,21 +2642,23 @@ class Cmd(cmdprompt.CmdPrompt):
                 uid = getResultPart('uid', data[0])
                 processMessage(i + 1, uid, headers)
         t3=time.time()
-        print("Done")
-        print("duration:", t3-t1)
-        if t2:
-            # Note: most of the fetch duration is parsing the IMAP response
-            # data
-            # E.G.
-            # duration: 4.20123004913
-            #   fetch duration: 2.41206598282
-            #   calc duration: 1.78916406631
-            #
-            # Of the fetch duration, less than 0.5 was getting the data over a
-            # slow-ish link where the server already had the data cached.
-            print("  fetch duration:", t2-t1)
-            print("  calc duration:", t3-t2)
+        if self.C.settings.debug.general:
+            print("Done")
+            print("duration:", t3-t1)
+            if t2:
+                # Note: most of the fetch duration is parsing the IMAP response
+                # data
+                # E.G.
+                # duration: 4.20123004913
+                #   fetch duration: 2.41206598282
+                #   calc duration: 1.78916406631
+                #
+                # Of the fetch duration, less than 0.5 was getting the data over a
+                # slow-ish link where the server already had the data cached.
+                print("  fetch duration:", t2-t1)
+                print("  calc duration:", t3-t2)
         if 0:
+            # More detailed stats
             for m,d in messageLeaders.iteritems():
                 if len(d[2]) == 0:
                     print("singleton", d[0], d[1])
@@ -2451,7 +2670,6 @@ class Cmd(cmdprompt.CmdPrompt):
                         print("  ", i[0], i[1])
         def countAllChildren(leader):
             count = 1 # myself
-            print(leader)
             for i in leader[2]:
                 count += countAllChildren(i)
             return count
@@ -2459,21 +2677,54 @@ class Cmd(cmdprompt.CmdPrompt):
         msgleaderlist = []
         for m,d in messageLeaders.iteritems():
             msgleaderlist.append((m,d))
-        msgleaderlist.sort(cmp=lambda x,y: cmp(x[1][0],y[1][0]))
+        if 'l' in args:
+            # Last child sort order
+            def findlast(m):
+                last = [0]
+                def iter(m):
+                    if m[0] > last[0]:
+                        last[0] = m[0]
+                    for i in m[2]:
+                        iter(i)
+                iter(m)
+                return last[0]
+            for _,d in messageLeaders.iteritems():
+                d[3] = findlast(d)
+        else:
+            # Default, first child sort order
+            for _,d in messageLeaders.iteritems():
+                # TODO: actually iterate children for first valid msq (message
+                # sequence number).
+                d[3] = d[0]
+        msgleaderlist.sort(cmp=lambda x,y: cmp(x[1][3],y[1][3]))
         msglist = []
         msglistextra = []
         def expand(m, leader=False):
-            msglist.append(m[0])
-            msglistextra.append((leader, None, None))
+            if m[0] > 0:
+                msglist.append(m[0])
+                msglistextra.append((leader, None, None))
             #print(m)
             for i in m[2]:
                 expand(i)
         def collapse(m, _):
-            msglist.append(m[0])
-            msglistextra.append((None, countAllChildren(m), m))
+            if m[0] > 0:
+                msglist.append(m[0])
+                mod = 0
+            else:
+                # This was a dummy leader. Use the first child for display
+                # and prep to remove the dummy leader from the thread count
+                msglist.append(m[2][0][0])
+                mod = -1
+            msglistextra.append((None, countAllChildren(m) + mod, m))
         for i in msgleaderlist:
             #print("Adding leader", i[0],i[1][0])
-            collapse(i[1], True)
+            if 'e' in args:
+                expand(i[1], True)
+            elif 'c' in args:
+                collapse(i[1], True)
+            else:
+                # Do some default.
+                expand(i[1], True)
         # Clear existing virt folder if any
         self.do_virtfolder("")
         self.C.virtfolderSavedSelection = (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList)
@@ -2484,7 +2735,8 @@ class Cmd(cmdprompt.CmdPrompt):
         self.C.virtfolder=msglist
         self.C.virtfolderExtra = msglistextra
         self.setPrompt("mailnex (vf-threads)> ")
-        return
+        if not 'd' in args:
+            return
 
         # Do some diagnostics and stuff
         maxdepth = 0
