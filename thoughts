@@ -847,3 +847,36 @@ though it is in ABNF as ["UID" SP] "SEARCH".
 Actually, RFC 5234 section 2.3 explicitly calls out that ABNF strings in
 quotes are US-ASCII encoded, case-insensitive strings. So, all of the "re" and
 "fwd" stuff must be matched insensitively as one would expect it should!
+
+-------------------------------------------------
+
+RFC 5256 specifies that a thread can exist without the thread leader, and
+immediately have siblings at the top level that /aren't/ siblinbs of root's
+other children. This happens when messages in a thread have the same parent,
+but the parent didn't make it into the message set (perhaps the user doesn't
+have a copy of the parent).
+
+E.G. Message 4 is the leader. Messages 7 and 9 are its children. Message 4
+gets deleted (so now messages 7 and 9 are 6 and 8). Messages 5, 6, and 8 (now
+4, 5, and 7) are single messages. The IMAP THREAD representation is
+(4)(5)((6)(8))(7) (before, it would have been (4 ((7)(9)))(5)(6)(8) )
+
+So, the question is... how do we display that in (semi)graphical tree style!?‽
+We might be able to do it with unicode line drawing for standard style. E.g.
+
+  ╶ 4
+  ╶ 5
+  ┌ 6
+  └ 8
+  ╶ 7
+
+before it would have been
+
+  ╶ 4
+    ├ 7
+    └ 9
+  ╶ 5
+  ╶ 6
+  ╶ 8
+
+but what about ASCII, and what about our condensed tree style?
