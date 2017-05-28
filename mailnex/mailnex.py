@@ -328,6 +328,62 @@ def attachFile(attachList, filename, pos=None, replace=False):
     else:
         attachList[pos] = filename
 
+def sanatize(data, condense=True, replace=False):
+    """Remove control characters and (optionally) condense space.
+
+    Most importantly, this removes escape and mode switching characters.
+
+    This makes a string suitable for writing to a terminal, for example,
+    without fear of inline codes corrupting the view.
+
+    Condensing the space is also useful for preventing tabs and newlines from
+    disrupting something expected to fit on a single line.
+    """
+
+    # TODO: these ought to be calculated just once during module load, not
+    # every time this function is called...
+
+    # ASCII control chars are 0-0x1f and 0x7f, called C0
+    c0 = range(0, 0x20) + [0x7f]
+    # ISO 6429 has additional, C1
+    c1 = range(0x80,0xa0)
+    # However, we'll leave gaps for whitespace generating chars, which will be
+    # handled by the condense option
+    # We will leave BS, Del, VT, and FF for regular removal here. VT and FF
+    # could arguably go either way (strip or condense).
+    c0.remove(0x9) # HTAB (horizontal tab)
+    c0.remove(0xa) # LF (line feed or Unix EOL (end of line)
+    c0.remove(0xd) # CR (carriage return. Part of Windows and Network new line (CR-LF))
+    c1.remove(0x85) # NEL (next line)
+    stripChars = map(unichr, c0 + c1)
+    condenseChars = map(unichr, [0x9, 0xa, 0xd, 0x20, 0x85])
+
+    res = []
+    lastChar = None
+    for i in data:
+        if condense and i in condenseChars:
+            if lastChar != ' ':
+                res.append(' ')
+                lastChar = ' '
+            continue
+        if i in stripChars:
+            if replace:
+                res.append('^')
+                if ord(i) == 0:
+                    res.append('@')
+                elif ord(i) < 0x20:
+                    res.append(unichr(ord('A') + ord(i) - 1))
+                else:
+                    # Must be a high (C1) character. This display is
+                    # non-standard. We'll use '^^A' to refer to the first.
+                    res.append('^')
+                    res.append(unichr(ord('A') + ord(i) - 0x80))
+            laseChar = None
+            continue
+        res.append(i)
+        lastChar = i
+    return "".join(res)
+
 def normalizePath(currentPath):
     if currentPath.startswith("~{}".format(os.path.sep)):
         if 'HOME' in os.environ:
@@ -5499,6 +5555,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     headline = self.C.settings.headlinevf.value
                 else:
                     headline = self.C.settings.headline.value
+                # Sanitize strings for display
+                subject = sanatize(subject)
+                froms = map(sanatize, froms)
+
                 resset.append((num, headline.format(**{
                         'attr': attr,
                         'this': '>' if this else ' ',
