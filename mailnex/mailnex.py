@@ -2599,14 +2599,14 @@ class Cmd(cmdprompt.CmdPrompt):
             if len(mid) != 1:
                 print("Fail: multiple ids", i, uid)
                 return
-            head = mid[0]
-            this = threadMessage(mid, i, uid)
-            messages[head] = this
+            mid = mid[0]
+            refs = []
             # MS Outlook (unknown version(s)) includes a blank 'in-reply-to'
             # header sometimes, but a valid 'references' header.
             # So, I suppose we'll parse references first, for now.
             # really, we probbably need to look at both and make a heuristic
             # decision.
+            # Update: RFC 5256 says to use references first.
             #
             # Also, I've seen Outlook include both 'in-reply-to' and
             # 'references' that are both blank when someone replies to their
@@ -2634,46 +2634,82 @@ class Cmd(cmdprompt.CmdPrompt):
                 # out-of-chain, and parsing a reply-to-multiple-messages
                 # explicitly isn't possible, though implicitly this is a reply
                 # to all messages listed.
-                #
-                # For now, we'll just use our direct reply; listing missing
-                # intermediaries can be dealt with later.
-                if len(refs) == 0:
-                    # Wth? Empty header?
-                    print("Fail: Empty references header", i, uid)
-                    return
-                repl = refs[-1]
-                if repl not in messages:
-                    m = threadMessage(repl)
-                    #print("Reply (refs) without leader", i, uid, type(ev),ev)
-                    messages[repl] = m
-                    messageLeaders[repl] = m
-                else:
-                    m = messages[repl]
-                m.children.append(this)
-                #else:
-                #    print("good", i, uid)
-                return
-            elif 'in-reply-to' in headers:
+            if len(refs) == 0 and 'in-reply-to' in headers:
                 replies = headers['in-reply-to']
-                if len(replies) != 1:
-                    print("Fail: multiple replies")
-                    # TODO: We could probably deal with this, though it might
-                    # not be pretty
-                    return
-                repl = replies[0]
-                #print("Reply to something", i, uid, repl)
-                try:
-                    m = messages[repl]
-                    m.children.append(this)
-                except KeyError as ev:
-                    print("Reply without leader", i, uid, type(ev), ev)
-                    return
-                print("inreply only")
-                return
+                # This is supposed to contain all of the messages this one
+                # replies to. In practice, apparently, this has rarely or
+                # never actually referred to more than one message, and has
+                # often enough contained the reply MID /and/ a reply email
+                # address, making hard or impossible to use reliably (see RFC
+                # 5256 for more info). As per the RFC, we'll use the first, if
+                # any.
+                # TODO FIXME proper mid parsing here as well
+                refs = replies[0].split()
+                del refs[1:]
+            # TODO: RFCs say to remove missing messages for display,
+            # though that is in the scope of listing search results over
+            # IMAP. Clients like "sup" show missing messages, which allows
+            # one to see approximately how much of a conversation is
+            # missing. We could do either or both.
+            c = None
+            def lookupOrCreate(mid):
+                if mid in messages:
+                    return messages[mid]
+                else:
+                    msg = threadMessage(mid)
+                    messages[mid] = msg
+                    return msg
+            if len(refs):
+                c = lookupOrCreate(refs[0])
+            for ref in refs[1:]:
+                p = c
+                c = lookupOrCreate(ref)
+                if not c.parent:
+                    c.parent = p
+                    p.children.append(c)
+            # TODO NEXT: change this so that we look for current message
+            # in list. If it already exists, we need to update mseq/muid
+            # (2 cases: this was a stub from a previously encountered
+            # reference list so we need to fill it out, or this is a
+            # duplicate mid to a previously seen message, in which case we
+            # are supposed to give it a new unique mid, but I don't think
+            # that is neccessary; we just need to keep it separate
+            # somehow, likee the mid could have a list of mseq/muids. If
+            # we support multibox at some point (like sup), we could have
+            # a list of box/muid) and, if it was a stub, break existing
+            # parent/child and form a new one.
+            # TODO: What if we had a parent listed, but this message lacks
+            # a stated parent (e.g. references got stripped)? RFC might
+            # have guidance.
+            p = c # The parent of this message is the last child dealt with above, if any.
+            if mid in messages:
+                this = messages[mid]
+                print("update mid",mid)
+                if this.mseq == -1:
+                    # found a placeholder. Update its info
+                    this.mseq = i
+                    this.muid = uid
+                    if this.parent:
+                        # had a parent. Replace it with this message's
+                        # parent
+                        if not this.parent.mid == p.mid:
+                            this.parent.children.remove(this)
+                            this.parent = p
+                            # TODO: Could we already be listed as a child?
+                            # might want to not be in the list multiple
+                            # times
+                            p.children.append(this)
+                else:
+                    # found a duplicate mid.
+                    print("Duplicate mid!", mid, "at", this.mseq, "and", i)
+                    # TODO: handle it?
             else:
-                #print("leader", i, uid)
-                messageLeaders[head] = this
-
+                #print("new mid", mid)
+                this = threadMessage(mid, i, uid)
+                messages[mid] = this
+                if p:
+                    this.parent = p
+                    p.children.append(this)
         if 0:
             t2 = None
             # slow path, but interruptable
@@ -2718,7 +2754,19 @@ class Cmd(cmdprompt.CmdPrompt):
                 headertext = getResultPart(']', data[0])
                 headers = processHeaders(headertext)
                 uid = getResultPart('uid', data[0])
+                # TODO: Not part of the RFC, but a useful extension would be
+                # to also scan for attached messages (e.g. message/rfc822
+                # parts) and process those as well.
+                # TODO: What about encrypted attachments? We don't want to
+                # have to prompt for decryption a bunch of times while
+                # threading. At some point, we'll be caching threads to disk;
+                # should we cache the relationship of encrypted messages to
+                # disk as well?
                 processMessage(i + 1, uid, headers)
+        # step 7, make dummy root, parent of all parentless messages
+        for m in messages.values():
+            if not m.parent:
+                messageLeaders[m.mid] = m
         t3=time.time()
         if self.C.settings.debug.general:
             print("Done")
