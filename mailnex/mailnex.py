@@ -271,6 +271,30 @@ class nodate(object):
         return self
     tzinfo="??"
 
+class threadMessage(object):
+    __slots__ = ['mid', 'mseq', 'muid', 'children', 'parent', 'sortKey']
+    def __init__(self, mid, mseq=-1, uid=-1):
+        super(threadMessage, self).__init__()
+        # Message-id. Unique per message version. A string
+        self.mid = mid
+        # Message sequence number. Message sequence numbers are contiguous
+        # starting with 1, are per-mailbox, and can change during run-time, if
+        # for example a message in the middle gets expunged.
+        self.mseq = mseq
+        # Message UID (unique identifier). UIDs are not contiguous, are
+        # per-mailbox, and are stable across sessions, so long as the
+        # UIDVALIDITY value doesn't change between sessions.
+        self.muid = uid
+        # Link to parent message. There is no current mechanism for a message
+        # to unambiguously have more than one parent.
+        self.parent = None
+        # sortKey is assigned at the sorting phase, currently placing the
+        # message globally against all other messages.
+        self.sortKey = None
+        # List of other threadMessages that consider this to be their parent
+        self.children = []
+
+
 def getResultPart(part, data):
     """Retrieve part's value from data.
 
@@ -2576,8 +2600,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("Fail: multiple ids", i, uid)
                 return
             head = mid[0]
-            # mseq, muid, children, sort key
-            this = [i, uid, [], None]
+            this = threadMessage(mid, i, uid)
             messages[head] = this
             # MS Outlook (unknown version(s)) includes a blank 'in-reply-to'
             # header sometimes, but a valid 'references' header.
@@ -2620,14 +2643,13 @@ class Cmd(cmdprompt.CmdPrompt):
                     return
                 repl = refs[-1]
                 if repl not in messages:
-                    # mseq, muid, children, sort key
-                    m=[-1, -1, [], None]
+                    m = threadMessage(repl)
                     #print("Reply (refs) without leader", i, uid, type(ev),ev)
                     messages[repl] = m
                     messageLeaders[repl] = m
                 else:
                     m = messages[repl]
-                m[2].append(this)
+                m.children.append(this)
                 #else:
                 #    print("good", i, uid)
                 return
@@ -2642,7 +2664,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 #print("Reply to something", i, uid, repl)
                 try:
                     m = messages[repl]
-                    m[2].append(this)
+                    m.children.append(this)
                 except KeyError as ev:
                     print("Reply without leader", i, uid, type(ev), ev)
                     return
@@ -2716,17 +2738,17 @@ class Cmd(cmdprompt.CmdPrompt):
         if 0:
             # More detailed stats
             for m,d in messageLeaders.iteritems():
-                if len(d[2]) == 0:
-                    print("singleton", d[0], d[1])
-                elif len(d[2]) == 1:
-                    print("repl", d[0], d[1])
+                if len(d.children) == 0:
+                    print("singleton", d.mseq, d.muid)
+                elif len(d.children) == 1:
+                    print("repl", d.mseq, d.muid)
                 else:
-                    print("Multibeast", d[0], d[1])
-                    for i in d[2]:
-                        print("  ", i[0], i[1])
+                    print("Multibeast", d.mseq, d.muid)
+                    for i in d.children:
+                        print("  ", i.mseq, i.muid)
         def countAllChildren(leader):
             count = 1 # myself
-            for i in leader[2]:
+            for i in leader.children:
                 count += countAllChildren(i)
             return count
         # Build virtfolder with thread ordering
@@ -2738,38 +2760,38 @@ class Cmd(cmdprompt.CmdPrompt):
             def findlast(m):
                 last = [0]
                 def iter(m):
-                    if m[0] > last[0]:
-                        last[0] = m[0]
-                    for i in m[2]:
+                    if m.mseq > last[0]:
+                        last[0] = m.mseq
+                    for i in m.children:
                         iter(i)
                 iter(m)
                 return last[0]
             for _,d in messageLeaders.iteritems():
-                d[3] = findlast(d)
+                d.sortKey = findlast(d)
         else:
             # Default, first child sort order
             for _,d in messageLeaders.iteritems():
                 # TODO: actually iterate children for first valid msq (message
                 # sequence number).
-                d[3] = d[0]
-        msgleaderlist.sort(cmp=lambda x,y: cmp(x[1][3],y[1][3]))
+                d.sortKey = d.mseq
+        msgleaderlist.sort(cmp=lambda x,y: cmp(x[1].sortKey,y[1].sortKey))
         msglist = []
         msglistextra = []
         def expand(m, leader=False):
-            if m[0] > 0:
-                msglist.append(m[0])
+            if m.mseq > 0:
+                msglist.append(m.mseq)
                 msglistextra.append((leader, None, None))
             #print(m)
-            for i in m[2]:
+            for i in m.children:
                 expand(i)
         def collapse(m, _):
-            if m[0] > 0:
-                msglist.append(m[0])
+            if m.mseq > 0:
+                msglist.append(m.mseq)
                 mod = 0
             else:
                 # This was a dummy leader. Use the first child for display
                 # and prep to remove the dummy leader from the thread count
-                msglist.append(m[2][0][0])
+                msglist.append(m.children[0].mseq)
                 mod = -1
             msglistextra.append((None, countAllChildren(m) + mod, m))
         for i in msgleaderlist:
