@@ -5558,22 +5558,31 @@ class Cmd(cmdprompt.CmdPrompt):
             # Or I could look at mailx source code, but so far I've done
             # neither.
             uflags = map(lambda x: x.upper(), flags)
-            if '\FLAGGED' in uflags:
-                attr = self.C.settings.attrlist.value[ATTR_FLAGGED]
-            elif '\DRAFT' in uflags:
-                attr = self.C.settings.attrlist.value[ATTR_DRAFT]
-            elif '\ANSWERED' in uflags:
-                attr = self.C.settings.attrlist.value[ATTR_ANSWERED]
-            elif '\RECENT' in uflags:
+            if '\RECENT' in uflags:
                 if '\SEEN' in uflags:
-                    attr = self.C.settings.attrlist.value[ATTR_NEWREAD]
+                    nuro = self.C.settings.attrlist.value[ATTR_NEWREAD]
                 else:
-                    attr = self.C.settings.attrlist.value[ATTR_NEW]
+                    nuro = self.C.settings.attrlist.value[ATTR_NEW]
             else:
                 if '\SEEN' in uflags:
-                    attr = self.C.settings.attrlist.value[ATTR_OLD]
+                    nuro = self.C.settings.attrlist.value[ATTR_OLD]
                 else:
-                    attr = self.C.settings.attrlist.value[ATTR_UNREAD]
+                    nuro = self.C.settings.attrlist.value[ATTR_UNREAD]
+            attr=None
+            flagged = draft = answered = False
+            if '\FLAGGED' in uflags:
+                attr = self.C.settings.attrlist.value[ATTR_FLAGGED]
+                flagged = True
+            if '\DRAFT' in uflags:
+                if attr is None:
+                    attr = self.C.settings.attrlist.value[ATTR_DRAFT]
+                draft = True
+            if '\ANSWERED' in uflags:
+                if attr is None:
+                    attr = self.C.settings.attrlist.value[ATTR_ANSWERED]
+                answered = True
+            if attr is None:
+                attr = nuro
 
             try:
                 gnum = int(d[0])
@@ -5640,6 +5649,10 @@ class Cmd(cmdprompt.CmdPrompt):
                         'from': froms[0],
                         'leader': '+' if leader else ' ',
                         'tcount': tcount,
+                        'flagged': 'F' if flagged else ' ',
+                        'answered': 'A' if answered else  ' ',
+                        'draft': 'D' if draft else ' ',
+                        'nuro': nuro,
                         't': self.C.t,
                     })))
             except Exception as ev:
