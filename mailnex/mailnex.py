@@ -2680,6 +2680,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 if not c.parent:
                     c.parent = p
                     p.children.append(c)
+                else:
+                    if c.parent is not p and self.C.settings.debug.general:
+                        print("At message %i, Would have set %i as parent to %i, but already had parent %i" % (i, p.mseq, c.mseq, c.parent.mseq))
             # TODO NEXT: change this so that we look for current message
             # in list. If it already exists, we need to update mseq/muid
             # (2 cases: this was a stub from a previously encountered
@@ -2697,7 +2700,8 @@ class Cmd(cmdprompt.CmdPrompt):
             p = c # The parent of this message is the last child dealt with above, if any.
             if mid in messages:
                 this = messages[mid]
-                print("update mid",mid)
+                if self.C.settings.debug.general:
+                    print("update mid",mid)
                 if this.mseq == -1:
                     # found a placeholder. Update its info
                     this.mseq = i
@@ -2706,6 +2710,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         # had a parent. Replace it with this message's
                         # parent
                         if not this.parent.mid == p.mid:
+                            if self.C.settings.debug.general:
+                                print("Reparenting %i from %i to %i" % (this.mseq, this.parent.mseq, p.mseq))
                             this.parent.children.remove(this)
                             this.parent = p
                             # TODO: Could we already be listed as a child?
