@@ -392,7 +392,20 @@ def sanatize(data, condense=True, replace=False):
             continue
         if i in stripChars:
             if replace:
+                # Two common(ish) styles. We can do caret notation, which is
+                # most common in terminal programs, or we can use Unicode
+                # Control Pictures, which is more common in GUIS like in web
+                # browsers. The latter assumes a unicode terminal and font
+                # support, but that has gotten somewhat more common. Still, a
+                # user toggle would probably be nice.
+                # The Unicode Control Pictures block is 0x2400 to 0x243f. It
+                # includes characters for 0x00 to 0x1f, 0x7f, and a couple of
+                # C1 characters.
                 res.append('^')
+                # Note: in ASCII and Unicode, '@' comes just before 'A', so
+                # calling it out separately is wasteful, unless we aren't
+                # assuming character encodings, but we are assuming, otherwise
+                # we wouldn't be hardcoding the range of control characters.
                 if ord(i) == 0:
                     res.append('@')
                 elif ord(i) < 0x20:
