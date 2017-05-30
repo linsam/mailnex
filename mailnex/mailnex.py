@@ -2887,13 +2887,13 @@ class Cmd(cmdprompt.CmdPrompt):
             if chldcnt > maxChildren:
                 maxChildren=chldcnt
                 maxChildrenMsg = m
-            if len(d[2]) == 0:
+            if len(d.children) == 0:
                 continue
             depth = 0
             while True:
                 #print(depth, d[0], d[2])
-                if d[2]:
-                    d = d[2][0]
+                if d.children:
+                    d = d.children[0]
                     depth += 1
                 else:
                     break
@@ -2903,7 +2903,8 @@ class Cmd(cmdprompt.CmdPrompt):
         def showReplList(leader, file=sys.stdout):
             mlist = MessageList()
             def info(m,depth, markers):
-                mlist.add(m[0])
+                if m.mseq > 0:
+                    mlist.add(m.mseq)
                 #print("%s %s %s %s" % (" "*depth, m[0], m[1], repr(m)))
                 mstr=" "
                 mi = 0
@@ -2919,12 +2920,18 @@ class Cmd(cmdprompt.CmdPrompt):
                 elif depth != 0: # Don't do this for leaders
                     mstr = mstr[:-1] + "├"
                 #print("%s %s %s   %s" % (" "*depth, m[0], m[1], markers), file=file)
-                print("%s%s %s   %s,%i" % (mstr, m[0], m[1], markers, depth), file=file)
-                for i in m[2][:-1]:
+                if m.mseq != -1:
+                    print("%s%s %s   %s,%i" % (mstr, m.mseq, m.muid, markers, depth), file=file)
+                else:
+                    print("%sMissing message %s   %s,%i" % (mstr, m.mid, markers, depth), file=file)
+                for i in m.children[:-1]:
                     info(i, depth+1, markers+[depth+1])
-                for i in m[2][-1:]:
+                for i in m.children[-1:]:
                     info(i, depth+1, markers)
             info(leader, 0, [])
+            if not mlist:
+                print("[no real messages?]", file=file)
+                return
             self.showHeadersNonVF(mlist, file=file)
         print("----------- Max depth ----------")
         print(maxdepth, maxmsg)
@@ -2943,7 +2950,7 @@ class Cmd(cmdprompt.CmdPrompt):
         with codecs.open("/tmp/list.txt","w", encoding='utf-8') as f:
             print("----------- all non 0 ----------", file=f)
             for m,d in messageLeaders.iteritems():
-                if len(d[2]) == 0:
+                if len(d.children) == 0:
                     continue
                 showReplList(d, file=f)
                 print("--", file=f)
