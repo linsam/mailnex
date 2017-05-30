@@ -2847,6 +2847,8 @@ class Cmd(cmdprompt.CmdPrompt):
         def expand(m, leader=False):
             if m.mseq > 0:
                 msglist.append(m.mseq)
+                if leader and not m.children:
+                    leader = 2
                 msglistextra.append((leader, None, None))
             #print(m)
             for i in m.children:
@@ -2860,7 +2862,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 # and prep to remove the dummy leader from the thread count
                 msglist.append(m.children[0].mseq)
                 mod = -1
-            msglistextra.append((None, countAllChildren(m) + mod, m))
+            l = None
+            if not m.children:
+                l = 2
+            msglistextra.append((l, countAllChildren(m) + mod, m))
         for i in msgleaderlist:
             #print("Adding leader", i[0],i[1][0])
             if 'e' in args:
@@ -5649,7 +5654,16 @@ class Cmd(cmdprompt.CmdPrompt):
                 froms = newfroms
                 if self.C.virtfolderExtra:
                     extra = self.C.virtfolderExtra[num - 1]
-                    leader = True if extra[0] is None else extra[0]
+                    if extra[0] is None:
+                        leader = '+'
+                    elif extra[0] is False:
+                        leader = ' '
+                    elif extra[0] is True:
+                        leader = '+'
+                    elif extra[0] == 2:
+                        leader = '-'
+                    else:
+                        leader = '?'
                     tcount = 1 if extra[1] is None else extra[1]
                     # TODO: What is probably more useful is, how many messages in
                     # the thread are unread and/or flagged.
@@ -5673,7 +5687,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         'subject': subject,
                         'flags': " ".join(flags),
                         'from': froms[0],
-                        'leader': '+' if leader else ' ',
+                        'leader': leader,
                         'tcount': tcount,
                         'flagged': 'F' if flagged else ' ',
                         'answered': 'A' if answered else  ' ',
