@@ -240,7 +240,9 @@ class Context(object):
         # the value is the text content. E.G. mime headers for message 123
         # part 4 would be key '123.4.MIME'
         self.cache = {}
-
+        # Last IMAP criteria search. Used when specifying '()' as a message
+        # list
+        self.lastCriSearch = "()"
         # Some parts of the program might put other stuff in here. For
         # example, the exception trace wrapper.
 
@@ -1391,46 +1393,79 @@ class Cmd(cmdprompt.CmdPrompt):
 
         The full list of specials, according to the man page, are:
 
-            :n      All new messages
-            :o      All old messages (not read or new)
+            :n      All new messages (TODO)
+            :o      All old messages (not read or new) (TODO)
             :u      All unread messages
-            :d      All deleted messages (used in undelete command)
-            :r      All read messages
+            :d      All deleted messages (used in undelete command) (TODO)
+            :r      All read messages (TODO)
             :f      All flagged messages
-            :a      All answered messages (replied)
-            :t      All messages marked as draft
-            :k      All killed messages
-            :j      All junk messages
+            :a      All answered messages (replied) (TODO)
+            :t      All messages marked as draft (TODO)
+            :k      All killed messages (TODO)
+            :j      All junk messages (TODO)
             .       The current message
             ;       The previously current message (using ; over and over
-                    bounces between the last 2 messages)
+                    bounces between the last 2 messages) (TODO)
             ,       The parent of the current message (looking for the message
                     with the Message-Id matching the current In-Reply-To or
-                    last References entry
+                    last References entry (TODO)
             -       (hyphen) The next previous undeleted message for regular
                     commands or the next previus deleted message for undelete.
+                    (Currently, selects previous message, deleted or not; this is different from mailx)
             +       The next undeleted message, or the next deleted message
                     for undelete.
+                    (Currently, selects next message, deleted or not; this is different from mailx)
             ^       The first undeleted message, or first deleted for the
                     undelete command.
+                    (Currently, selects first message, deleted or not; this is different from mailx)
             $       The last message
             &x      The message 'x' and all messages from the thread that
                     begins at it (in thread mode only). X defaults to '.' if
-                    not given.
-            *       (asterisk) All messages.
+                    not given. (TODO)
+            *       (asterisk) All messages. (TODO)
             `       (back tick) All messages listed in the previous command
             /str    All messages with 'str' in the subject field, case
                     insensitive (ASCII). If empty, use last search "of that
-                    type", whatever that means
+                    type", whatever that means (TODO)
             addr    Messages from address 'addr', normally case sensitive for
                     complete email address. Some variables change the
-                    processing.
+                    processing. (TODO)
             (cri)   Messages matching an IMAP-style SEARCH criterion.
                     Performed locally if necesary, even when not on IMAP
                     connections.  if 'cri' is empty, reuse last search.
 
         (cri) is a complicated beasty, see the full documentation for details (from mailx until we have our own).
         As a simplification, we might just pass these literally to the IMAP server.
+
+        We'll do the following extensions:
+
+            gx      The 'x'th message by sequence number. This equivalent to
+                    just giving 'x' in a normal view, but gives you the real
+                    mailbox sequence numbered message when in a virtual folder
+                    view. The 'g' stands for 'global', meaning outside of any
+                    view of the mailbox. (TODO)
+            ux      The message with 'x' as a UID. Probably not very useful (TODO)
+            px      The 'x'th message on this page. Caution: the association
+                    of a px number to a message can change when the terminal
+                    resizes. (TODO)
+            -x      the 'x'th to the last message. For example, if there are
+                    500 messages in a box, '-10' would refer to message 490.
+                    Can be used as part of a range. For example, '-10-$' gives
+                    the last 11 messages (490 to 500 inclusive in the above
+                    example). There must be a space before the '-' to be
+                    interpreted this way. (TODO)
+            n--x    The result of 'n' subtracted by 'x'. 'x' must resolve to a
+                    single number. 'n' may be a message list, in which case
+                    the result is a message list where each member of 'n' was
+                    subtracted by 'x'
+                    e.g. '$--10' is equivalent to '-10'. '.--1' is the
+                    previous message (equivalent to '-'). '.--2' is the
+                    message before the previous message. (TODO)
+            n++x    The result of 'x' added to 'n'. 'x' must resolve to a
+                    single number. 'n' may be a message list. (TODO)
+
+
+        Notes and brainstorming:
 
         Some commands don't take a list, but set the list. For example, the
         implicit command only prints one message (usually the next message).
@@ -1582,7 +1617,10 @@ class Cmd(cmdprompt.CmdPrompt):
         if args.startswith("(") and args.endswith(")"):
             # Support IMAP search by being a passthrough for IMAP SEARCH
             # command.
+            if args == "()":
+                args = self.C.lastCriSearch
             data = self.C.connection.search("UTF-8", args)
+            self.C.lastCriSearch = args
             if self.C.settings.debug.general:
                 print(data)
             return map(int, data)
