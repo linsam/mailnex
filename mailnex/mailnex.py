@@ -2029,14 +2029,14 @@ class Cmd(cmdprompt.CmdPrompt):
                 args = self.C.settings.folder.value + args[1:]
             m = None
             if args.startswith("imap://"):
-                m = re.match(r'([^@]*@)?([^/]*)(/.*)', args[7:])
+                m = re.match(r'([^@]*@)?([^/]*)(/.*)?', args[7:])
                 if not m:
                     print("failed to parse")
                     return
                 port = 143
                 proto = 'imap'
             elif args.startswith("imaps://"):
-                m = re.match(r'([^@]*@)?([^/]*)(/.*)', args[8:])
+                m = re.match(r'([^@]*@)?([^/]*)(/.*)?', args[8:])
                 if not m:
                     print("failed to parse")
                     return
@@ -2056,6 +2056,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 if box:
                     # Remove single leading '/'
                     box = box[1:]
+                else:
+                    box = ""
         else:
             raise Exception("Unknown connect format")
         if C.connection:
