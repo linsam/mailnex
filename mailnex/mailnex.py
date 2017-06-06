@@ -1639,18 +1639,33 @@ class Cmd(cmdprompt.CmdPrompt):
                     return []
                 return messages
             def parseRange(i):
+                # Not a good place to test for this
+                if i[0] == '+':
+                    # Relative number to current place
+                    r = list(parseLow(i[1:]))
+                    if len(r) != 1:
+                        print("Error: '{}' refers to {} messages instead of 1".format(i[1:], len(r)))
+                        return []
+                    return [self.C.currentMessage + r[0]]
                 if '-' in i:
                     r = i.split('-')
                     if len(r) != 2:
                         print("Too many '-' in '{}'".format(i))
                         return []
-                    low = list(parseLow(r[0]))
+                    if r[0] == "":
+                        low = None
+                    else:
+                        low = list(parseLow(r[0]))
                     high = list(parseLow(r[1]))
-                    if len(low) != 1:
-                        print("Error: Bad range. '{}' refers to {} messages instead of 1".format(r[0], len(low)))
-                        return []
                     if len(high) != 1:
                         print("Error: Bad range. '{}' refers to {} messages instead of 1".format(r[1], len(high)))
+                        return []
+                    if low is None:
+                        # This is actually a relative motion to the current
+                        # message
+                        return [self.C.currentMessage - high[0]]
+                    if len(low) != 1:
+                        print("Error: Bad range. '{}' refers to {} messages instead of 1".format(r[0], len(low)))
                         return []
                     return list(range(low[0], high[0] + 1))
 
