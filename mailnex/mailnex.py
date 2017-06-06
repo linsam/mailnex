@@ -1457,7 +1457,8 @@ class Cmd(cmdprompt.CmdPrompt):
             n--x    The result of 'n' subtracted by 'x'. 'x' must resolve to a
                     single number. 'n' may be a message list, in which case
                     the result is a message list where each member of 'n' was
-                    subtracted by 'x'
+                    subtracted by 'x'. 'n' defaults to the current message (if
+                    not given).
                     e.g. '$--10' is equivalent to '-10'. '.--1' is the
                     previous message (equivalent to '-'). '.--2' is the
                     message before the previous message. (TODO)
@@ -1567,76 +1568,158 @@ class Cmd(cmdprompt.CmdPrompt):
             message by using :d or by giving the actual message number. You
             have to undelete it before it is accessible again.
         """
-
-        args = args.strip()
-        s=set()
-        # Second pass, read a few specials 
-        if args == '.':
-            return [self.C.currentMessage]
-        if args.startswith('+'):
-            if len(args) > 1:
-                distance = int(args[1:])
-            else:
-                distance = 1
-            target = self.C.currentMessage + distance
-            # allowing 1 past end causes commands like 'print' to show EOF
-            # instead of the last message. This prevents things like repeating
-            # 'p +' from showing the last message over and over
-            if target > self.C.lastMessage + 1:
-                target = self.C.lastMessage + 1
-            return [target]
-        if args.startswith('-'):
-            if len(args) > 1:
-                distance = int(args[1:])
-            else:
-                distance = 1
-            target = self.C.currentMessage - distance
-            # allowing 1 past end causes commands like 'print' to show EOF
-            # instead of the last message. This prevents things like repeating
-            # 'p +' from showing the last message over and over
-            if target <= 0:
-                target = 0
-            return [target]
-        if args == '`':
-            # TODO: print "No previously marked messages" if the list is empty
-            return self.C.lastList
-        if args == '^':
-            return [1]
-        if args == '$':
-            return [self.C.lastMessage]
-        if args == ":u":
-            data = self.C.connection.search("UTF-8", "unseen")
-            if self.C.settings.debug.general:
-                print(data)
-            return map(int, data)
-        if args == ":f":
-            data = self.C.connection.search("UTF-8", "flagged")
-            if self.C.settings.debug.general:
-                print(data)
-            return map(int, data)
-        if args.startswith("(") and args.endswith(")"):
+        # Tokenize and walk through the args
+        args = args.strip().split()
+        cri = []
+        messages = MessageList()
+        # TODO: Will probably need to make this a formal grammer and write a
+        # proper parser for it
+        incri = False
+        def doCriSearch(messages, cri):
             # Support IMAP search by being a passthrough for IMAP SEARCH
             # command.
-            if args == "()":
-                args = self.C.lastCriSearch
-            data = self.C.connection.search("UTF-8", args)
-            self.C.lastCriSearch = args
+            if cri == "()":
+                cri = self.C.lastCriSearch
+            data = self.C.connection.search("UTF-8", cri)
+            self.C.lastCriSearch = cri
             if self.C.settings.debug.general:
                 print(data)
-            return map(int, data)
-        # First pass, lets just handle numbers.
-        for r in args.split():
-            # Note, we won't be able to keep the simple split once we include
-            # quoting and parenthesis
-            if '-' in r:
-                r2 = r.split('-')
-                if len(r2) != 2:
-                    raise Exception("Invalid range '%s'" % r)
-                s=s.union(range(int(r2[0]), int(r2[1]) + 1))
-            else:
-                s.add(int(r))
+            map(messages.add, map(int, data))
+        for i in args:
+            if i.startswith('('):
+                cri = [i]
+                incri = True
+                if i.endswith(')'):
+                    # Whole cri search in one token
+                    doCriSearch(messages, " ".join(cri))
+                    incri = False
+                continue
+            if i.endswith(')'):
+                if incri:
+                    cri.append(i)
+                    doCriSearch(messages, " ".join(cri))
+                    incri = False
+                else:
+                    print("Parse error: close parenthesis without open")
+                    return []
+                continue
+            if incri:
+                cri.append(i)
+                continue
+            def parseLow(i):
+                messages = MessageList()
+                if i.startswith(":"):
+                    i = i[1:]
+                    if i == 'u':
+                        data = self.C.connection.search("UTF-8", "unseen")
+                        if self.C.settings.debug.general:
+                            print(data)
+                        map(messages.add, map(int, data))
+                    elif i == 'f':
+                        data = self.C.connection.search("UTF-8", "flagged")
+                        if self.C.settings.debug.general:
+                            print(data)
+                        map(messages.add, map(int, data))
+                    else:
+                        print("Error: Unrecognized message class :{}".format(i))
+                        return []
+                elif i.isdigit():
+                    messages.add(int(i))
+                elif i == '.':
+                    messages.add(self.C.currentMessage)
+                elif i == '`':
+                    # TODO: print "No previously marked messages" if the list is empty
+                    map(messages.add, self.C.lastList)
+                elif i == '^':
+                    messages.add(1)
+                elif i == '$':
+                    messages.add(self.C.lastMessage)
+                else:
+                    print("Error: didn't understand '{}'".format(i))
+                    return []
+                return messages
+            def parseRange(i):
+                if '-' in i:
+                    r = i.split('-')
+                    if len(r) != 2:
+                        print("Too many '-' in '{}'".format(i))
+                        return []
+                    low = list(parseLow(r[0]))
+                    high = list(parseLow(r[1]))
+                    if len(low) != 1:
+                        print("Error: Bad range. '{}' refers to {} messages instead of 1".format(r[0], len(low)))
+                        return []
+                    if len(high) != 1:
+                        print("Error: Bad range. '{}' refers to {} messages instead of 1".format(r[1], len(high)))
+                        return []
+                    return list(range(low[0], high[0] + 1))
 
-        return sorted(list(s))
+                return parseLow(i)
+            def parseMath(i):
+                if '--' in i:
+                    i = i.split('--')
+                    if i[0] == "":
+                        i[0] = "."
+                    # We'll allow multiple subtractions; no good reason not to,
+                    # apart from no obvious use case right now. Very first element
+                    # may be a list, every other element must be a single number
+                    # (or list of length 1, containint a number).
+                    # Might be confusing, since we also allow addition, but cannot
+                    # subtract and add in the same entry.
+                    res = list(parseRange(i[0]))
+                    for sub in i[1:]:
+                        subres = list(parseRange(sub))
+                        if len(subres) > 1:
+                            print("Error: '{}' is more than one number".format(sub))
+                            return []
+                        if len(subres) == 0:
+                            print("Error: '{}' is empty".format(sub))
+                            return []
+                        res = map(lambda x: x-subres[0], res)
+                    return res
+                if '++' in i:
+                    i = i.split('++')
+                    if i[0] == "":
+                        i[0] = "."
+                    # We'll allow multiple additions; no good reason not to,
+                    # apart from no obvious use case right now. Very first element
+                    # may be a list, every other element must be a single number
+                    # (or list of length 1, containint a number).
+                    # Might be confusing, since we also allow subtraction, but cannot
+                    # subtract and add in the same entry.
+                    res = list(parseRange(i[0]))
+                    for sub in i[1:]:
+                        subres = list(parseRange(sub))
+                        if len(subres) > 1:
+                            print("Error: '{}' is more than one number".format(sub))
+                            return []
+                        if len(subres) == 0:
+                            print("Error: '{}' is empty".format(sub))
+                            return []
+                        res = map(lambda x: x+subres[0], res)
+                    return res
+            # TODO
+            # What kind of precedance to we want to have? If I allow a list to
+            # be subtracted from, indicating that you could do a range, like:
+            #   3-6++10  would give 13 14 15 16
+            # but I also wanted to be able to use the result of math for one
+            # end of the range. like:
+            #    $--4-$   to show the last 5 messages  ($-4, $-3, $-2, $-1, $)
+            # which would make 3-6++10 be 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+            #
+            # We could pick one and have parenthesis force order, except
+            # parenthesis are used for IMAP CRI search.
+            #
+            # Another note: to me, '-' looks like subtraction and '--' looks
+            # like range (must be from using LaTeX), so visually the above
+            # feels backwards.
+            #
+            # At this point, I feel the weight of mailx compatibility might be
+            # too heavy. I think this must be what Vim felt like trying to be
+            # compatible with vi. Maybe we do like them, have a compatibility
+            # flag to parse (sortof) like mailx, or use a better syntax
+            map(messages.add, parseRange(i))
+        return list(messages)
 
     def precmd(self, line):
         # We set lastcommand in some cases to repeat the last command instead
