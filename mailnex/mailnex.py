@@ -2572,24 +2572,15 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     @needsConnection
-    def do_findrefs(self, args):
+    @argsToMessageList
+    def do_findrefs(self, msglist):
         """Experimental command. Will eventually become the threaded view command.
 
-        If given, the first argument should be the number of messages to
-        thread, starting from the end of the box. E.g. "100" will take that
-        last 100 messages in the current box, arrange them into threads, and
-        present them. Parents outside the range are not displayed. In a
-        mailbox with thousands or tens of thousands of messages, specifying
-        this number will speed things up significantly. The operation is
-        somewhat similar to email apps that only pull, say, the last 25
-        messages until you ask for more.
+        Takes a message list. To do the full mailbox, give '1-$' as the
+        message list.
 
-        Eventually, the goal is to replace the number with a regular message
-        search, like given to the 'f' command. This is akin to how the IMAP
-        THREAD command itself works, if we were using it.
-
-        After the number, some flags can be specified to control the results.
-        Unknown flags are ignored. Currently used flags are:
+        Flags are currently hardcoded to 'el'.
+        Currently used flags are:
 
         modes. Pick one:
          'e' - expanded view. All messages are shown. Currently the default.
@@ -2602,10 +2593,6 @@ class Cmd(cmdprompt.CmdPrompt):
                keeps threads with recent activity towards the end of the
                message list, just like recent unthreaded messages appear at
                the end.
-
-        E.g.
-            findrefs 25 el
-            findrefs 100 c
         """
         #print(dir(self.C.connection))
         # If we cache threading information, we'll need to save off the
@@ -2614,10 +2601,6 @@ class Cmd(cmdprompt.CmdPrompt):
         t1=time.time()
         messageLeaders={}
         messages={}
-        try:
-            msgcnt = int(args.split()[0])
-        except ValueError:
-            msgcnt = None
         #
         #
         # RFC5256 procedures:
@@ -2898,6 +2881,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 if p:
                     this.parent = p
                     p.children.append(this)
+        args = 'el'
         if 0:
             t2 = None
             # slow path, but interruptable
@@ -2909,17 +2893,32 @@ class Cmd(cmdprompt.CmdPrompt):
                 uid = getResultPart('uid', data[0])
                 processMessage(i, uid, headers)
         else:
-            # fast path, but not so interruptable
-            if msgcnt:
-                start = self.C.lastMessage - (msgcnt - 1)
-                if start < 1:
-                    start = 1
-            else:
-                start = 1
-            res = self.C.connection.fetch('%i:*' % start, '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
+            print("list:",msglist)
+            m = MessageList(msglist)
+            res = self.C.connection.fetch(m.imapListStr(), '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
             t2=time.time()
-            for i in range(start-1,self.C.lastMessage):
-                data = processImapData(res[i-(start-1)][1], self.C.settings)
+            for i,data in res:
+                i = int(i)
+                # TODO: Since we didn't go through our caching fetch, we
+                # should perhaps try to add some relevant data to the cache?
+                # Actually, we should probably try to read relevant data from
+                # the cache as well
+                # TODO: The server MAY send us unsolicited fetch data while we
+                # were asking for specific data. We could check the mseq ('i'
+                # in this case) of the message to ensure it was in the set we
+                # asked for, but the server may send the message twice. E.g.
+                # from dovecot:
+                #   c: A3 FETCH 123:125 (body)
+                #   s: * 123 FETCH (BODY...)
+                #   s: * 124 FETCH (BODY...)
+                #   s: * 125 FETCH (BODY...)
+                #   s: * 125 FETCH (FLAGS (\Seen))
+                #   s: A3 OK Fetch completed
+                # Therefore, we really need to check that the response was for
+                # the data we requested. Ideally, this should be handled in
+                # the imap4 library, not by us (even though both are part of
+                # this project).
+                data = processImapData(data, self.C.settings)
                 # FIXME: when we ask for HEADER.FIELDS we get back the same
                 # thing, but we only group on parenthesis, so we end up with
                 # something like:
@@ -2950,7 +2949,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # threading. At some point, we'll be caching threads to disk;
                 # should we cache the relationship of encrypted messages to
                 # disk as well?
-                processMessage(i + 1, uid, headers)
+                processMessage(i, uid, headers)
         # step 7, make dummy root, parent of all parentless messages
         for m in messages.values():
             if not m.parent:
