@@ -189,6 +189,7 @@ ATTR_KILLED = 10
 ATTR_THREAD_START = 11
 ATTR_THREAD = 12
 ATTR_JUNK = 13
+ATTR_DELETED = 14
 
 class Context(object):
     """Holding place for runtime data.
@@ -5738,9 +5739,21 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     nuro = self.C.settings.attrlist.value[ATTR_UNREAD]
             attr=None
-            flagged = draft = answered = False
+            deleted = flagged = draft = answered = False
+            if '\DELETED' in uflags:
+                if attr is None:
+                    try:
+                        attr = self.C.settings.attrlist.value[ATTR_DELETED]
+                    except:
+                        # Originally, we didn't require this value to be in
+                        # the set; assume 'D' for backwards compatibility
+                        # TODO: Make a general getter? Allow fallback of any
+                        # of these to the default setting's value maybe
+                        attr = 'D'
+                deleted = True
             if '\FLAGGED' in uflags:
-                attr = self.C.settings.attrlist.value[ATTR_FLAGGED]
+                if attr is None:
+                    attr = self.C.settings.attrlist.value[ATTR_FLAGGED]
                 flagged = True
             if '\DRAFT' in uflags:
                 if attr is None:
@@ -5803,6 +5816,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     else:
                         leader = '?'
                     tcount = 1 if extra[1] is None else extra[1]
+                    if tcount is False:
+                        tcount = 1
                     # TODO: What is probably more useful is, how many messages in
                     # the thread are unread and/or flagged.
                 else:
@@ -5816,6 +5831,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 subject = sanatize(subject)
                 froms = map(sanatize, froms)
 
+                attrlist = self.C.settings.attrlist.value
+
                 resset.append((num, headline.format(**{
                         'attr': attr,
                         'this': '>' if this else ' ',
@@ -5827,14 +5844,22 @@ class Cmd(cmdprompt.CmdPrompt):
                         'from': froms[0],
                         'leader': leader,
                         'tcount': tcount,
-                        'flagged': 'F' if flagged else ' ',
-                        'answered': 'A' if answered else  ' ',
-                        'draft': 'D' if draft else ' ',
+                        'flagged': attrlist[ATTR_FLAGGED] if flagged else ' ',
+                        'answered': attrlist[ATTR_ANSWERED] if answered else  ' ',
+                        'draft': attrlist[ATTR_DRAFT] if draft else ' ',
+                        'deleted': attrlist[ATTR_DELETED] if deleted and len(attrlist) > ATTR_DELETED else ' ',
                         'nuro': nuro,
                         't': self.C.t,
                     })))
             except Exception as ev:
-                print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d), file=file)
+                if self.C.settings.debug.exception:
+                    print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d), file=file)
+                    import traceback
+                    traceback.print_exc(file=file)
+                elif self.C.settings.debug.general:
+                    print("  %s  (error displaying because %s '%s'. Data follows)" % (d[0], type(ev), ev), repr(d), file=file)
+                else:
+                    print("  %s  (error displaying because %s '%s')" % (d[0], type(ev), ev), file=file)
         resset.sort()
         for n,s in resset:
             print(s, file=file)
@@ -6616,12 +6641,12 @@ def getOptionsSet():
     # addresses that were culled from the to/cc lists from the default
     # identity to be able to put them back on an identity change.
 
-    options.addOption(settings.StringOption("attrlist", "NUROSPMFATK+-J", doc=
+    options.addOption(settings.StringOption("attrlist", "NUROSPMFATK+-JD", doc=
         """Character mapping for attribute in headline.
 
         Characters represent: new, unread but old, new but read, read and old,
         saved, preserved, mboxed, flagged, answered, draft, killed, thread
-        start, thread, and junk.
+        start, thread, junk, and deleted. (deleted is a mailnex extension)
 
         Currently, we don't support saved, preserved, mboxed, killed, threads,
         or junk.
@@ -6629,7 +6654,8 @@ def getOptionsSet():
         Default mailx (presumably POSIX) is "NUROSPMFATK+-J".
         BSD style uses "NU  *HMFATK+-J.", which is read messages aren't
         marked, and saved/preserved get different letters (presumably 'Held'
-        instead of 'Preserved')
+        instead of 'Preserved'). Neither POSIX nor BSD style represent deleted
+        messages in the headlines.
         """
         ))
     options.addOption(settings.StringOption("autobcc", None, doc="""Automatically populate the Bcc field of new messages (new, reply, etc).
