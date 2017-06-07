@@ -1449,12 +1449,11 @@ class Cmd(cmdprompt.CmdPrompt):
             px      The 'x'th message on this page. Caution: the association
                     of a px number to a message can change when the terminal
                     resizes. (TODO)
-            -x      the 'x'th to the last message. For example, if there are
-                    500 messages in a box, '-10' would refer to message 490.
-                    Can be used as part of a range. For example, '-10-$' gives
+            $x      the 'x'th to the last message. For example, if there are
+                    500 messages in a box, '$10' would refer to message 490.
+                    Can be used as part of a range. For example, '$10-$' gives
                     the last 11 messages (490 to 500 inclusive in the above
-                    example). There must be a space before the '-' to be
-                    interpreted this way. (TODO)
+                    example).
             n--x    The result of 'n' subtracted by 'x'. 'x' must resolve to a
                     single number. 'n' may be a message list, in which case
                     the result is a message list where each member of 'n' was
@@ -1664,6 +1663,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     messages.add(1)
                 elif i == '$':
                     messages.add(self.C.lastMessage)
+                elif i[0] == '$' and i[1:].isdigit():
+                    messages.add(self.C.lastMessage - int(i[1:]))
                 else:
                     print("Error: didn't understand '{}'".format(i))
                     return []
