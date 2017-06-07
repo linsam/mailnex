@@ -1581,11 +1581,24 @@ class Cmd(cmdprompt.CmdPrompt):
             # command.
             if cri == "()":
                 cri = self.C.lastCriSearch
-            data = self.C.connection.search("UTF-8", cri)
+            if self.C.virtfolder:
+                r = MessageList(self.C.virtfolder).imapListStr()
+                # Create a sub criteria search that is limited by the message
+                # list
+                subcri = '({} {})'.format(r, cri[1:-1])
+            else:
+                # Use original criteria
+                subcri = cri
+            data = self.C.connection.search("UTF-8", subcri)
+            # Store original criteria for future recall
             self.C.lastCriSearch = cri
             if self.C.settings.debug.general:
                 print(data)
-            map(messages.add, map(int, data))
+            data = map(int, data)
+            if self.C.virtfolder:
+                # Convert back to virtual indices
+                data = map(lambda x: self.C.virtfolder.index(x) + 1, data)
+            map(messages.add, data)
         for i in args:
             if i.startswith('('):
                 cri = [i]
@@ -1612,15 +1625,31 @@ class Cmd(cmdprompt.CmdPrompt):
                 if i.startswith(":"):
                     i = i[1:]
                     if i == 'u':
-                        data = self.C.connection.search("UTF-8", "unseen")
+                        if self.C.virtfolder:
+                            r = MessageList(self.C.virtfolder).imapListStr() + " "
+                        else:
+                            r = ""
+                        data = self.C.connection.search("UTF-8", "{}unseen".format(r))
                         if self.C.settings.debug.general:
                             print(data)
-                        map(messages.add, map(int, data))
+                        data = map(int, data)
+                        if self.C.virtfolder:
+                            # Convert back to virtual indices
+                            data = map(lambda x: self.C.virtfolder.index(x) + 1, data)
+                        map(messages.add, data)
                     elif i == 'f':
-                        data = self.C.connection.search("UTF-8", "flagged")
+                        if self.C.virtfolder:
+                            r = MessageList(self.C.virtfolder).imapListStr() + " "
+                        else:
+                            r = ""
+                        data = self.C.connection.search("UTF-8", "{}flagged".format(r))
                         if self.C.settings.debug.general:
                             print(data)
-                        map(messages.add, map(int, data))
+                        data = map(int, data)
+                        if self.C.virtfolder:
+                            # Convert back to virtual indices
+                            data = map(lambda x: self.C.virtfolder.index(x) + 1, data)
+                        map(messages.add, data)
                     else:
                         print("Error: Unrecognized message class :{}".format(i))
                         return []
@@ -6369,6 +6398,13 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.virtfolderExtra = None
             self.setPrompt("mailnex> ")
         else:
+            if self.C.virtfolder:
+                # Args consists of virtfolder numbers. So, create a new list
+                # based on the old list
+                newvf = []
+                for i in args:
+                    newvf.append(self.C.virtfolder[i - 1])
+                args = newvf
             self.C.virtfolder = args
             self.setPrompt("mailnex (vf-{})> ".format(len(args)))
             self.C.virtfolderSavedSelection = (self.C.currentMessage, self.C.nextMessage, self.C.prevMessage, self.C.lastList)
