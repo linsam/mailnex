@@ -2156,8 +2156,14 @@ class Cmd(cmdprompt.CmdPrompt):
         prepended to the target
 
         Currently supported protocols:
-            imap://     - IMAP4r1 with STARTTLS
-            imaps://    - IMAP4r1 over SSL
+            imap://       - IMAP4r1 with STARTTLS
+            imaps://      - IMAP4r1 over SSL
+            imap+plain:// - IMAP4r1 plain clear text. No protection of data.
+                            NOTE: This should only be used for testing, and
+                            only as a last resort. Your emails and username
+                            and password will be visible on the network, and
+                            there is no protection to ensure you connect to
+                            the server you specify (server is spoofable)!
 
         Examples:
             folder imap://john.smith@mail.example.com/Sent-Mail
@@ -2209,6 +2215,13 @@ class Cmd(cmdprompt.CmdPrompt):
                     return
                 port = 993
                 proto = 'imaps'
+            elif args.startswith("imap+plain://"):
+                m = re.match(r'([^@]*@)?([^/]*)(/.*)?', args[13:])
+                if not m:
+                    print("failed to parse")
+                    return
+                port = 143
+                proto = 'imap+plain'
             else:
                 pass
             if not m:
@@ -2272,6 +2285,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 c.connect(host, port=port)
                 if c.isTls():
                     print("Info: Connection already secure")
+                elif proto == "imap+plain":
+                        print(self.C.t.red("Warning: Connection is NOT secure! Login credentials are not protected!"))
                 else:
                     # TODO: if not c.caps, run capability command
                     if not c.caps or not 'STARTTLS' in c.caps:
@@ -2285,7 +2300,15 @@ class Cmd(cmdprompt.CmdPrompt):
                         raise Exception("Failed to secure connection!")
                 if not user:
                     user = getpass.getuser()
-                _, prompt_to_save, pass_ = getPassword(self.C.settings, proto, user, host, port)
+                if proto == "imap+plain":
+                    # When the user explicitly requests unsafe passage, don't
+                    # automatically get the password; require it to be typed.
+                    # This gives the user another chance to prevent their
+                    # credentials from being sent in-the-clear.
+                    prompt_to_save = False
+                    pass_ = getpass.getpass()
+                else:
+                    _, prompt_to_save, pass_ = getPassword(self.C.settings, proto, user, host, port)
                 print("Info: Logging in")
                 # TODO: Retry N times? Or at least, prompt for password entry
                 # if we got the password from an agent or keyring that didn't
