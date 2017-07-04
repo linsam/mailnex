@@ -627,10 +627,16 @@ class imap4ClientConnection(object):
         def fetch_cb(message, data):
             fetchlist.append((message, data))
         self.cb_fetch = fetch_cb
-        res, code, string = self.doSimpleCommand("fetch %s %s" % (message, what))
-        self.cb_fetch = oldcb
+        try:
+            res, code, string = self.doSimpleCommand("fetch %s %s" % (message, what))
+        except Exception:
+            #TODO: log, not print
+            print("Failed to fetch %s %s" % (what, message))
+            raise
+        finally:
+            self.cb_fetch = oldcb
         if res != 'OK':
-            raise imap4Exception("Failed to fetch: %s %s" % (res, string))
+            raise imap4Exception("Failed to fetch %s: %s %s" % (message, res, string))
         return fetchlist
     def uidfetch(self, message, what):
         """Generic fetcher. Given an IMAP spec of UIDs, fetch the 'what' from them.

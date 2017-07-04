@@ -314,7 +314,7 @@ def getResultPart(part, data):
     for i in range(0,len(data),2):
         if data[i].lower() == part:
             return data[i + 1]
-    # Raising an exception because, after an IMAP requiest, not having the key
+    # Raising an exception because, after an IMAP request, not having the key
     # you asked for is an exceptional case, and there isn't a good return
     # value that also couldn't be in the array itself without doing something
     # weird like returning a class or something.
