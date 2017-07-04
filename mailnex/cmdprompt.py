@@ -407,7 +407,7 @@ class CmdPrompt(cmd.Cmd):
         self.ttyBusy = False
         return res[0]
     def runAProgramAsFilter(self, args, data):
-        """Run a program with the given input. Leaves stdout/stderr alone.
+        """Run a program with the given input. Return the output. Leaves stderr alone.
 
         This should be run when the prompt is inactive."""
         res=[None, b""]
