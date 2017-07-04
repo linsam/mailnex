@@ -5528,16 +5528,24 @@ class Cmd(cmdprompt.CmdPrompt):
             # STARTTLS is used. If no protocol is given, we should probably
             # use SUBMISSION by default.
             constr = self.C.settings.smtp.value
-            if not constr.startswith("smtps://"):
-                raise Exception("Only support smtps for now")
             # TODO: handle SMTP URIs more formally. See at least RFC3986
             # (URI), RFC5092 (IMAP-URI) and draft-melnikov-smime-msa-to-mda-04
             # or draft-earhart-url-smtp for details of proposed URL schemes
             # and their basis
-            rem = re.match(r'smtps://([^@]*@)?([^:/]*)(:[^/]*)?/?', constr)
+            rem = re.match(r'([^:]*)://([^@]*@)?([^:/]*)(:[^/]*)?/?', constr)
             if not rem:
                 raise Exception("failed to match")
-            user, host, port = rem.groups()
+            scheme, user, host, port = rem.groups()
+            ssl = False
+            if scheme == "smtps":
+                defport = 465
+                ssl = True
+            elif style == "smtp+plain":
+                defport = 25
+            elif style == "submission":
+                defport = 587
+            else:
+                raise Exception("Uknown protocol: {}".format(style))
             print("user: {}\nhost: {}\nport: {}".format(user,host,port))
             if user:
                 # Strip off @
@@ -5549,13 +5557,37 @@ class Cmd(cmdprompt.CmdPrompt):
             if port:
                 port = int(port[1:])
             else:
-                port = 465
+                port = defport
             import smtplib
+            secure = False
             # TODO: Allow overriding CA somehow
             # TODO: Allow user certificates
-            s=smtplib.SMTP_SSL(host, port)
+            if ssl:
+                # TODO: Verify host cert!
+                s=smtplib.SMTP_SSL(host, port)
+                secure = True
+            else:
+                s=smtplib.SMTP(host, port)
+                if not scheme == "smtp+plain":
+                    # TODO: Verify host cert!
+                    # Like with imap, this appears not to be default behavior.
+                    # We might have to wrap the socket ourselves, and override
+                    # smtplib.
+                    try:
+                        s.starttls()
+                    except smtplib.SMTPResponseException as ev:
+                        print(self.C.t.red("Error: Failed to establish secure link"))
+                        print(ev.smtp_error)
+                        # TODO: Save message to dead.letter?
+                        return False
+                    secure = True
             if user:
+                if not secure:
+                    print(self.C.t.red("Error: Insecure link. Don't send your password lightly!"))
+                    # XXX TODO: Force prompt for password if insecure. DO NOT
+                    # auto fetch and auto send it
                 # TODO: Allow saving password to keyring
+                # TODO: Always smtps, or "smtp{}".format(style) ?
                 _, _, password = getPassword(self.C.settings, "smtps", user, host, port)
                 s.login(user, password)
             # TODO: What if multiple from? Should use sender. Or, should we
@@ -6938,8 +6970,10 @@ def getOptionsSet():
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
     options.addOption(settings.StringOption('smtp', None, doc="""Set to an smtp/submission URI to send messages via SMTP instead of local sendmail agent.
 
-        Supported URL schemes are "smtp://", "smtps://", and "submission://".
+        Supported URL schemes will be "smtp://", "smtps://", and "submission://".
         Of the three, 'submission' is recommended.
+
+        For now, only smtps:// and smtp+plain:// are implemented.
 
         The rest is similar to imap scheme URLs used in the folder setting and
         command. If a username isn't specified here, an attempt will be made
