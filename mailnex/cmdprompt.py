@@ -465,3 +465,23 @@ class CmdPrompt(cmd.Cmd):
         self.ptkevloop.realloop.run()
         self.ttyBusy = False
         return res[0]
+    def runAProgramGetOutput(self, args):
+        """Run a program obtaining standard output as a string. Leaves stdin/stderr alone.
+
+        This should be run when the prompt is inactive."""
+        res=[]
+        def finish(proc,status,signal):
+            proc.close()
+            proc.loop.stop()
+            res.append(status)
+        com = pyuv.Pipe(self.ptkevloop.realloop, True)
+        stdio = [
+                pyuv.StdIO(fd=sys.stdin.fileno(), flags=pyuv.UV_INHERIT_FD),
+                pyuv.StdIO(stream=com, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_WRITABLE_PIPE),
+                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                ]
+        self.ttyBusy = True
+        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        self.ptkevloop.realloop.run()
+        self.ttyBusy = False
+        return res[0]
