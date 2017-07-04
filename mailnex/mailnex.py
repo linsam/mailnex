@@ -4538,7 +4538,7 @@ class Cmd(cmdprompt.CmdPrompt):
         newmsg = email.mime.text.MIMEText("")
         newmsg['To'] = ", ".join(to)
         newmsg['Subject'] = subject
-        if self.C.settings.autobcc:
+        if self.C.settings.autobcc.value:
             newmsg['Bcc'] = self.C.settings.autobcc.value
         self.editMessage(newmsg)
 
@@ -4714,7 +4714,7 @@ class Cmd(cmdprompt.CmdPrompt):
             refs.append(hdrs['message-id'][0])
         if len(refs):
             newmsg['references'] = " ".join(refs)
-        if self.C.settings.autobcc:
+        if self.C.settings.autobcc.value:
             newmsg['Bcc'] = self.C.settings.autobcc.value
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
         sent = self.editMessage(newmsg)
