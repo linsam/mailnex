@@ -1,6 +1,4 @@
 env
-*.swp
-*.swo
-*.swn
+*.sw[mnop]
 *.egg-info
 *.pyc
