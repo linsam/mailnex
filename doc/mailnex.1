@@ -1,0 +1,54 @@
+.\" See <https://liw.fi/manpages/> and man-pages(7) for imformation on how to
+.\" edit this file
+.TH MAILNEX 1 2017-07-08
+.SH NAME
+mailnex \- an IMAP mail user agent (MUA) for text terminals
+.SH SYNOPSIS
+.B mailnex
+[\fB\--config\fR \fICONFIG_FILE\fR]
+[\fB\-A\fR \fIACCOUNT\fR]
+.SH DESCRIPTION
+.B mailnex
+is an email client (a MUA or Mail User Agent).
+It can connect to IMAP servers to view email, and can send email either via
+local sendmail or remote SMTP server.
+It tries to be reasonably secure about things (see section SECURITY).
+.SH OPTIONS
+.TP
+.BR \-A ", " \-\-account =\fIACCOUNT\fR
+Apply settings from given account name (as specified in the config file)
+before making a connection.
+This overrides an account command given in the config file itself.
+.TP
+.BR \-\-config =\fICONFIG_FILE\fR
+Use a different configuration file than the default (see FILES below).
+.SH SECURITY
+tbd
+.SH ENVIRONMENT
+tbd
+.SH FILES
+.TP
+.I ~/.config/linsam.homelinux.com/mailnex/mailnex.conf
+Default configuration file. (XDG location)
+.TP
+.I ~/.cache/linsam.homelinux.com/mailnex/histfile
+Command history file. Stores mailnex command history.
+.TP
+.I ~/.cache/linsam.homelinux.com/mailnex/searchdb.*
+Search databases for indexed mailboxes, used by the search and index commands.
+These can be safely deleted, and will be regenerated the next time the mailbox
+is indexed.
+.SH CONFORMING TO
+This implementation tries to have a user interface similar to the POSIX mail
+program in look and feel, but does not try to be actually compliant to that
+specification.
+Most of the usage is based on experience using the heirloom-mailx client.
+.PP
+The IMAP code tries to follow RFC3501.
+.PP
+The message code tries to follow RFC2822 and the MIME RFCs (TODO: which ones?)
+.SH NOTES
+tbd
+.SH BUGS
+There are many.
+Check for existing and report new bugs at <http://github.com/linsam/mailnex/issues/>
