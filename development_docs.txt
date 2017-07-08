@@ -1,0 +1,84 @@
+This is a place to hold thoughts on the internals of mailnex.
+
+Message Cache and Crypto
+------------------------
+
+Unchanging message data (data not able to be STOREd, which is basically just
+FLAGS) is cached in RAM when it is retrieved for the first time. Currently, it
+doesn't automatically clear, but is clearable via user command. The cache
+primarily allows for faster operation over slower links. For example, when
+replying to a message just read, there is no need to re-fetch it from the
+server; it will already be in the cache.
+
+The cache also enhances decryption operations: when parsing message strucutre,
+one must decrypt to know substructure, and it is useful to do verification at
+that stage as well. Since decryption is expensive, storing the results in the
+cache speeds up subsequent display or redisplay of the message. This is
+especially important in cases where a semi-paranoid user requires unlocking
+their key for every operation, since without the cache we would need to
+decrypt the message twice for the first display.
+
+On the downside for very paranoid users, the decrypted message data is kept in
+RAM, and it a possible target for writing to swap. This is also generally true
+of the data in the terminal's scrollback history (if any) and active display
+data. Our cache can clear just decrypted data or all data, but again needs
+manual invocation.
+
+The cache is implemented as a python dictionary. The key is composed of the
+message ID and parts. Currently, this is the IMAP message sequence number
+(which is bad, invalid cache hits will occur if a lower message is expunged
+and thus the sequence numbers change; we should either use UID or update the
+cache sequence numbers when we learn of an expunge, or at least wipe the cache
+on an expunge event). A dot separates the ID from the data about the ID. The
+format follows IMAP fetch representation:
+    123.BODYSTRUCTURE   - body structure of the message
+    123.BODY[2]         - MIME part 2
+    123.BODY[HEADERS]   - headers of the message
+
+We also store generated parts not from IMAP in the case of decryption:
+    123.d.SUBSTRUCTURE  - structure of a decrypted part from the main message
+    123.BODY[d]         - MIME contents of decrypted main part
+
+There may be parts before and after the d. Before indicates where the
+encrypted part was, after indicates a sub part. It is not currently
+symmetrical with IMAP representation (e.g. 123.BODY[d] ought to be
+123.BODY[1.d.1]
+
+The incorporation of d sections in the output is mostly handled by the
+getTextPlainParts function and not generically (e.g. the structure command
+doesn't show decrypted parts). This is problematic and should be fixed.
+
+Additionally, there isn't currently a way to mark an original part for
+non-display (e.g. a text/plain containing INLINE/PGP parts)
+
+For inline sig parts, I don't yet know if a different identifier should be
+used (like 's' maybe?) or to keep 'd'. Saying 'd' is for decrypted parts may
+then be missleading in the latter case.
+
+
+Security by default
+-------------------
+
+The intent here is to make it easy to do "the right thing" and hard to do "the
+wrong thing". For example, it is generally agreed that sending username and
+password as clear text is a "wrong thing". To that end, URLs like imap:// and
+smtp:// must use STARTTLS to get a secure (authenticity of server and
+confidentiality of session) link prior to transmitting credentials. 
+
+However, the "wrong thing" is sometimes needed, or is actually not wrong for
+some people, so it can be supported, just not as easily invoked. For example,
+if one needs an insecure IMAP connection, we'll allow "imap+plain://" to
+explicitly allow credentials over an insecure link (Though, to reduce risk, we
+will prompt for credentials every time in this case, no lookup of saved
+credential)
+
+Other topics are less well defined. For example, how bad is it if the sender
+and signer of a message don't match? What is right for some may be wrong for
+others in this case (e.g. a forwarded message might have From: as the person
+who did the forwarding instead of original composition and signature).
+
+Another example is validity requirements for multiply signed data. Does one
+require any 1 signature to validate in order to assume the message is valid,
+or does one require all? or a simple majority? This may depend on the
+situation, and there isn't a lot of user experience available to pick a
+sensible default setting.
