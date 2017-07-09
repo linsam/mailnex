@@ -136,6 +136,8 @@ class StringOption(Option):
 #        (python3 uses __bytes__ and __str__ rather than __str__ and __unicode__, so __str__ means different things between the two)"""
 #        return unicode(self).encode('utf-8')
     def __len__(self):
+        if self.value is None:
+            return 0
         return len(self.value)
 
 class FlagsOption(Option):

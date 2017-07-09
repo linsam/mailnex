@@ -4538,7 +4538,7 @@ class Cmd(cmdprompt.CmdPrompt):
         newmsg = email.mime.text.MIMEText("")
         newmsg['To'] = ", ".join(to)
         newmsg['Subject'] = subject
-        if self.C.settings.autobcc.value:
+        if self.C.settings.autobcc:
             newmsg['Bcc'] = self.C.settings.autobcc.value
         self.editMessage(newmsg)
 
@@ -4714,7 +4714,7 @@ class Cmd(cmdprompt.CmdPrompt):
             refs.append(hdrs['message-id'][0])
         if len(refs):
             newmsg['references'] = " ".join(refs)
-        if self.C.settings.autobcc.value:
+        if self.C.settings.autobcc:
             newmsg['Bcc'] = self.C.settings.autobcc.value
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
         sent = self.editMessage(newmsg)
@@ -5345,7 +5345,7 @@ class Cmd(cmdprompt.CmdPrompt):
             ctx = gpgme.Context()
             keys = []
             # TODO: What about sender vs from, etc.
-            if self.C.settings.pgpkey.value:
+            if self.C.settings.pgpkey:
                 keysearch = self.C.settings.pgpkey.value
             else:
                 keysearch = m['from']
@@ -5498,7 +5498,7 @@ class Cmd(cmdprompt.CmdPrompt):
         #print(fp.getvalue())
         #return False
 
-        if('smtp' in self.C.settings and self.C.settings.smtp.value):
+        if('smtp' in self.C.settings and self.C.settings.smtp):
             # Use SMTP
             # Note: port 25 is plain SMTP, 465 is TLS wrapped plain SMTP, and
             # 587 is SUBMIT (SUBMISSION). Both 25 and 587 are plain text until
