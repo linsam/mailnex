@@ -4,9 +4,10 @@
 .SH NAME
 mailnex \- an IMAP mail user agent (MUA) for text terminals
 .SH SYNOPSIS
-.B mailnex
-[\fB\--config\fR \fICONFIG_FILE\fR]
-[\fB\-A\fR \fIACCOUNT\fR]
+.SY mailnex
+.OP \-\-config CONFIG_FILE
+.OP \-A ACCOUNT
+.YS
 .SH DESCRIPTION
 .B mailnex
 is an email client (a MUA or Mail User Agent).
@@ -27,9 +28,10 @@ tbd
 .SH ENVIRONMENT
 tbd
 .SH FILES
+${XDG_CONFIG} is often ~/.config, but may be set elsewhere on your system.
 .TP
-.I ~/.config/linsam.homelinux.com/mailnex/mailnex.conf
-Default configuration file. (XDG location)
+.I ${XDG_CONFIG}/linsam.homelinux.com/mailnex/mailnex.conf
+Default configuration file.
 .TP
 .I ~/.cache/linsam.homelinux.com/mailnex/histfile
 Command history file. Stores mailnex command history.
@@ -38,17 +40,10 @@ Command history file. Stores mailnex command history.
 Search databases for indexed mailboxes, used by the search and index commands.
 These can be safely deleted, and will be regenerated the next time the mailbox
 is indexed.
-.SH CONFORMING TO
-This implementation tries to have a user interface similar to the POSIX mail
-program in look and feel, but does not try to be actually compliant to that
-specification.
-Most of the usage is based on experience using the heirloom-mailx client.
-.PP
-The IMAP code tries to follow RFC3501.
-.PP
-The message code tries to follow RFC2822 and the MIME RFCs (TODO: which ones?)
 .SH NOTES
 tbd
 .SH BUGS
 There are many.
-Check for existing and report new bugs at <http://github.com/linsam/mailnex/issues/>
+Check for existing and report new bugs at
+.UR http://github.com/linsam/mailnex/issues/
+.UE
