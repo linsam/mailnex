@@ -166,6 +166,11 @@ try:
     haveGpgme = True
 except ImportError:
     haveGpgme = False
+try:
+    import urlparse
+except ImportError:
+    # Python 3 moved this
+    from urllib import parse as urlparse
 import magic
 from prompt_toolkit.completion import Completer, Completion
 
@@ -2200,44 +2205,24 @@ class Cmd(cmdprompt.CmdPrompt):
         elif len(argss) == 1:
             if args.startswith("+"):
                 args = self.C.settings.folder.value + args[1:]
-            m = None
-            if args.startswith("imap://"):
-                m = re.match(r'([^@]*@)?([^/]*)(/.*)?', args[7:])
-                if not m:
-                    print("failed to parse")
-                    return
+            url = urlparse.urlparse(args)
+            proto = url.scheme
+            if url.scheme == "imap":
                 port = 143
-                proto = 'imap'
-            elif args.startswith("imaps://"):
-                m = re.match(r'([^@]*@)?([^/]*)(/.*)?', args[8:])
-                if not m:
-                    print("failed to parse")
-                    return
+            elif url.scheme == "imaps":
                 port = 993
-                proto = 'imaps'
-            elif args.startswith("imap+plain://"):
-                m = re.match(r'([^@]*@)?([^/]*)(/.*)?', args[13:])
-                if not m:
-                    print("failed to parse")
-                    return
+            elif url.scheme == "imap+plain":
                 port = 143
-                proto = 'imap+plain'
             else:
-                pass
-            if not m:
-                host = args
-                port = None
-                box = ""
-            else:
-                user, host, box = m.groups()
-                if user:
-                    # Remove '@' sign
-                    user = user[:-1]
-                if box:
-                    # Remove single leading '/'
-                    box = box[1:]
-                else:
-                    box = ""
+                # Don't recognize the protocol
+                proto = None
+            if url.port:
+                # User overrides port
+                port = url.port
+            host = url.hostname
+            # TODO: Handle percent escaping
+            box = url.path.lstrip("/")
+            user = url.username
         else:
             raise Exception("Unknown connect format")
         if C.connection:
