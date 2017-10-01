@@ -133,7 +133,6 @@ def PromptLexerFactory(cmd_obj):
         """Basic lexer for our command line."""
         def __init__(self, **options):
             self.options = options
-            print(options)
             Lexer.__init__(self, **options)
         def get_tokens_unprocessed(self, text):
             raise Exception("Just use get_tokens!")
