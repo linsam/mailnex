@@ -45,6 +45,8 @@ re_untagdat = re.compile(r'\* ([a-zA-Z]+) ?(.*)', re.DOTALL)
 
 class imap4Exception(Exception):
     """Root exception for all exceptions raised by this imap4 module"""
+class imap4NoConnect(imap4Exception):
+    """Exception for connection failure"""
 
 class imap4ClientConnection(object):
     # Connections can be happily in several states:
@@ -499,15 +501,38 @@ class imap4ClientConnection(object):
                 port = val
         if port == 993:
             useSsl = True
-        s = socket.socket()
-        if useSsl:
-            oldSock = s
-            s = ssl.SSLSocket(s, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
+        targets = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, 0)
+        # TODO: should we iterate through targets in order, randomly, or
+        # randomly by address family (that is, try IPv6 first, then IPv4, then
+        # whatever is left)?
+        for i in targets:
+            print "Trying", i[4][0],i[3] # address, canonical name (if available)
+            s = socket.socket(*i[:3])
+            if useSsl:
+                oldSock = s
+                s = ssl.SSLSocket(s, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
+            else:
+                oldSock = None
+            try:
+                s.connect(i[4])
+                self._negotiate(s, host)
+                break
+            except socket.error as ev:
+                print "  ", ev.strerror
+                continue
+            except imap4Exception as ev:
+                print "  error with imap negotiation"
+                continue
         else:
-            oldSock = None
-        try:
-            s.connect((host, port))
+            # TODO: Provide some more info. Ideally, we'd have some
+            # differentiation between, say, connection refused vs timed out vs
+            # no route, etc.
+            # May be difficult due to multiple connection attempts.
+            raise imap4NoConnect("unable to connect")
+        return
 
+    def _negotiate(self, s, host):
+        try:
             r = s.recv(1024)
             a = re.match(re_untagged, r)
             if a is None:
