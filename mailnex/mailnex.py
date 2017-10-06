@@ -6950,10 +6950,11 @@ def getOptionsSet():
     options.addOption(settings.BoolOption('showstructure', True, doc="Set to display the structure of the message between the headers and the body when printing."))
     options.addOption(settings.StringOption('smtp', None, doc="""Set to an smtp/submission URI to send messages via SMTP instead of local sendmail agent.
 
-        Supported URL schemes will be "smtp://", "smtps://", and "submission://".
+        Supported URL schemes are "smtp://", "smtps://", and "submission://".
         Of the three, 'submission' is recommended.
 
-        For now, only smtps:// and smtp+plain:// are implemented.
+        If you need an insecure connection, use "smtp+plain://" or
+        "submission+plain://".
 
         The rest is similar to imap scheme URLs used in the folder setting and
         command. If a username isn't specified here, an attempt will be made
@@ -6961,7 +6962,6 @@ def getOptionsSet():
         specified, password retrieval will ocur like with imap, but using
         smtp, smtps, or submission as the protocol part.
 
-        NOTE: This feature is in progress. Only 'smtps' is actually supported so far.
         """))
     options.addOption(settings.BoolOption('usekeyring', True, doc="Set to attempt to use system keyrings for password storage"))
     return options
