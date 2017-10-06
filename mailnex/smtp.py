@@ -159,7 +159,9 @@ class smtpClient(object):
         if not r.startswith('354'): raise Exception("Unexpected {}".format(r))
         # TODO: normalize line endings?
         # TODO: correct line length?
-        for line in message.split('\r\n'):
+        for line in message.split('\n'):
+            if line.endswith('\r'):
+                line = line[:-1]
             if line.startswith("."):
                 line = '.' + line
             s.send(line + '\r\n')
