@@ -5559,14 +5559,27 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: Allow user certificates
             s.connect(host, port, ssl)
             if user:
+                prompt_to_save = False
                 if ssl == smtp.SEC_NONE:
-                    print(self.C.t.red("Error: Insecure link. Don't send your password lightly!"))
-                    # XXX TODO: Force prompt for password if insecure. DO NOT
-                    # auto fetch and auto send it
-                # TODO: Allow saving password to keyring
-                # TODO: Always smtps, or "smtp{}".format(scheme) ?
-                _, _, password = getPassword(self.C.settings, "smtps", user, host, port)
+                    print(self.C.t.red("Warning: Insecure link. Don't send your password lightly!"))
+                    prompt_to_save = False
+                    password = getpass.getpass()
+                else:
+                    _, prompt_to_save, password = getPassword(self.C.settings, "smtp", user, host, port)
                 s.login(user, password)
+                if prompt_to_save:
+                    # TODO: Make a common function with the IMAP side
+                    while True:
+                        line = self.singleprompt("Save password to keyring (yes/no)? ").lower().strip()
+                        if line == 'y' or line == 'yes':
+                            print(" Saving...")
+                            try:
+                                keyring.set_password("smtp://%s" % host, user, password)
+                            except RuntimeError:
+                                print("Error: couldn't save password to keyring")
+                            break
+                        elif line == 'n' or line == 'no':
+                            break
 
             # TODO: What if multiple from? Should use sender. Or, should we
             # allow explicitly setting the smtp from value?
