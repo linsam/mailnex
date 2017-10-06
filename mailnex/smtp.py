@@ -147,7 +147,6 @@ class smtpClient(object):
         r = s.recv(1024)
         if r[0] != '2': raise Exception("bad from line: {}".format(r))
         for i in to:
-            print("RCPT TO:<{}>\r\n".format(i))
             s.send("RCPT TO:<{}>\r\n".format(i))
             r = s.recv(1024)
             # TODO: Collect failed recipients into a list to give caller.
