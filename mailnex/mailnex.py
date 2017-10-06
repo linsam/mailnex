@@ -5507,6 +5507,7 @@ class Cmd(cmdprompt.CmdPrompt):
         #return False
 
         if('smtp' in self.C.settings and self.C.settings.smtp):
+            import smtp
             # Use SMTP
             # Note: port 25 is plain SMTP, 465 is TLS wrapped plain SMTP, and
             # 587 is SUBMIT (SUBMISSION). Both 25 and 587 are plain text until
@@ -5517,70 +5518,64 @@ class Cmd(cmdprompt.CmdPrompt):
             # (URI), RFC5092 (IMAP-URI) and draft-melnikov-smime-msa-to-mda-04
             # or draft-earhart-url-smtp for details of proposed URL schemes
             # and their basis
-            rem = re.match(r'([^:]*)://([^@]*@)?([^:/]*)(:[^/]*)?/?', constr)
-            if not rem:
-                raise Exception("failed to match")
-            scheme, user, host, port = rem.groups()
+            url = urlparse.urlparse(constr)
+            scheme = url.scheme
+            user = url.username
+            host = url.hostname
+            port = url.port
             ssl = False
             if scheme == "smtps":
                 defport = 465
-                ssl = True
-            elif style == "smtp+plain":
+                ssl = smtp.SEC_SSL
+            elif scheme == "smtp+plain":
                 defport = 25
-            elif style == "submission":
+                ssl = smtp.SEC_NONE
+            elif scheme == "submission":
                 defport = 587
+                ssl = smtp.SEC_STARTTLS
+            elif scheme == "smtp":
+                defport = 25
+                ssl = smtp.SEC_STARTTLS
+            elif scheme == "submission+plain":
+                defport = 587
+                ssl = smtp.SEC_NONE
             else:
-                raise Exception("Uknown protocol: {}".format(style))
+                raise Exception("Uknown protocol: {}".format(scheme))
+            if not port:
+                port = defport
             print("user: {}\nhost: {}\nport: {}".format(user,host,port))
             if user:
-                # Strip off @
-                user = user[:-1]
                 if ':' in user:
                     raise Exception("Don't put passwords into the URL")
                 if ';' in user:
                     raise Exception("We don't yet support modifiers")
-            if port:
-                port = int(port[1:])
+            s = smtp.smtpClient()
+            if "cacertsfile_{}".format(host) in self.C.settings:
+                s.cacerts = (getattr(self.C.settings, "cacertsfile_{}".format(host)).value)
             else:
-                port = defport
-            import smtplib
-            secure = False
+                s.cacerts = self.C.settings.cacertsfile.value
             # TODO: Allow overriding CA somehow
+            s.cacerts="/etc/dovecot/dovecot.pem"
             # TODO: Allow user certificates
-            if ssl:
-                # TODO: Verify host cert!
-                s=smtplib.SMTP_SSL(host, port)
-                secure = True
-            else:
-                s=smtplib.SMTP(host, port)
-                if not scheme == "smtp+plain":
-                    # TODO: Verify host cert!
-                    # Like with imap, this appears not to be default behavior.
-                    # We might have to wrap the socket ourselves, and override
-                    # smtplib.
-                    try:
-                        s.starttls()
-                    except smtplib.SMTPResponseException as ev:
-                        print(self.C.t.red("Error: Failed to establish secure link"))
-                        print(ev.smtp_error)
-                        # TODO: Save message to dead.letter?
-                        return False
-                    secure = True
+            s.connect(host, port, ssl)
             if user:
-                if not secure:
+                if ssl == smtp.SEC_NONE:
                     print(self.C.t.red("Error: Insecure link. Don't send your password lightly!"))
                     # XXX TODO: Force prompt for password if insecure. DO NOT
                     # auto fetch and auto send it
                 # TODO: Allow saving password to keyring
-                # TODO: Always smtps, or "smtp{}".format(style) ?
+                # TODO: Always smtps, or "smtp{}".format(scheme) ?
                 _, _, password = getPassword(self.C.settings, "smtps", user, host, port)
                 s.login(user, password)
+
             # TODO: What if multiple from? Should use sender. Or, should we
             # allow explicitly setting the smtp from value?
+            # TODO: Handle failure. Either save the letter, or (better) allow
+            # editing to continue.
             res = s.sendmail(m['from'], recipients, fp.getvalue())
-            for addr in res.keys():
+            #for addr in res.keys():
                 # This could be done better. Also use error reporting
-                print("Error: Sending to {} failed".format(addr))
+                #print("Error: Sending to {} failed".format(addr))
             s.quit()
             return True
         s = subprocess.Popen([

@@ -499,6 +499,10 @@ class imap4ClientConnection(object):
             # instead of not passing it in the first place
             if val:
                 port = val
+        # TODO: This violates the scheme provided by the user. If they wanted
+        # imap at port 993, this breaks, and if they want imaps at a port
+        # other than 993, this breaks. Connection mode should be a kwarg, and
+        # default to starttls if not given.
         if port == 993:
             useSsl = True
         targets = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, 0)
