@@ -3020,15 +3020,33 @@ class Cmd(cmdprompt.CmdPrompt):
         msgleaderlist.sort(cmp=lambda x,y: cmp(x[1].sortKey,y[1].sortKey))
         msglist = []
         msglistextra = []
-        def expand(m, leader=False):
+        def expand(m, leader=False, level=0, markers=None):
+            if markers is None:
+                markers = []
+            mstr=""
+            mi = 0
+            # for box drawing characters, see
+            # https://en.wikipedia.org/wiki/Box-drawing_character
+            for i in markers:
+                mstr += " "*(i-mi - 1) + "│"
+                mi = i
+            mstr += " "*(level - mi - 1)
+            # TODO: Don't show upward line if parent isn't present.
+            if level != mi:
+                #mstr += "╰"
+                mstr += "└"
+            elif level != 0: # Don't do this for leaders
+                mstr = mstr[:-1] + "├"
             if m.mseq > 0:
                 msglist.append(m.mseq)
                 if leader and not m.children:
                     leader = 2
-                msglistextra.append((leader, None, None))
+                msglistextra.append((leader, None, None, level, mstr))
             #print(m)
-            for i in m.children:
-                expand(i)
+            for i in m.children[:-1]:
+                expand(i, level = level + 1, markers = markers+[level+1])
+            for i in m.children[-1:]:
+                expand(i, level = level + 1, markers = markers)
         def collapse(m, _):
             if m.mseq > 0:
                 msglist.append(m.mseq)
@@ -3041,7 +3059,7 @@ class Cmd(cmdprompt.CmdPrompt):
             l = None
             if not m.children:
                 l = 2
-            msglistextra.append((l, countAllChildren(m) + mod, m))
+            msglistextra.append((l, countAllChildren(m) + mod, m, None, None))
         for i in msgleaderlist:
             #print("Adding leader", i[0],i[1][0])
             if 'e' in args:
@@ -5882,6 +5900,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 froms = newfroms
                 if self.C.virtfolderExtra:
                     extra = self.C.virtfolderExtra[num - 1]
+                    # extra[0] is leader info. True for is leader, False for
+                    # is not leader, 2 for is leader without children
+                    # (unexpandable leader). None is if collapsed and has
+                    # children.
                     if extra[0] is None:
                         leader = '+'
                     elif extra[0] is False:
@@ -5897,9 +5919,17 @@ class Cmd(cmdprompt.CmdPrompt):
                         tcount = 1
                     # TODO: What is probably more useful is, how many messages in
                     # the thread are unread and/or flagged.
+
+                    level = extra[3]
+                    if extra[4]:
+                        mstr = extra[4]
+                    else:
+                        mstr = ""
                 else:
                     leader = False
                     tcount = 1
+                    level = None
+                    mstr = ""
                 if self.C.virtfolder and len(self.C.settings.headlinevf.value):
                     headline = self.C.settings.headlinevf.value
                 else:
@@ -5909,6 +5939,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 froms = map(sanatize, froms)
 
                 attrlist = self.C.settings.attrlist.value
+                if level:
+                    lindent = " "*level
+                else:
+                    lindent = ""
 
                 resset.append((num, headline.format(**{
                         'attr': attr,
@@ -5920,6 +5954,9 @@ class Cmd(cmdprompt.CmdPrompt):
                         'flags': " ".join(flags),
                         'from': froms[0],
                         'leader': leader,
+                        'level': level,
+                        'lindent': lindent,
+                        'lgraph': mstr,
                         'tcount': tcount,
                         'flagged': attrlist[ATTR_FLAGGED] if flagged else ' ',
                         'answered': attrlist[ATTR_ANSWERED] if answered else  ' ',
