@@ -5926,7 +5926,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     else:
                         mstr = ""
                 else:
-                    leader = False
+                    leader = ""
                     tcount = 1
                     level = None
                     mstr = ""
