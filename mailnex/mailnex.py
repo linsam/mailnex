@@ -3634,6 +3634,10 @@ class Cmd(cmdprompt.CmdPrompt):
                         else:
                             d = "Part %s: failed to decode as %s" % (o[0], charset)
                         realcharset = None
+                except LookupError as err:
+                    d = "Part %s: failed to decode as %s" % charset
+                    # TODO: Attempt to recover? Maybe the contents are just
+                    # ASCII anyway?
                 else:
                     if self.C.settings.debug.general:
                         print("Successfully decoded as", charset)
