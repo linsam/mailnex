@@ -210,7 +210,7 @@ class Completer(prompt_toolkit.completion.Completer):
             raise StopIteration
         start_words = document.current_line.split(None,1)
         command = start_words[0]
-        symbol = "compl_{}".format(command)
+        symbol = u"compl_{}".format(command)
         if symbol in dir(self.cmd):
             gen = getattr(self.cmd, symbol)(document, complete_event)
             while True:
