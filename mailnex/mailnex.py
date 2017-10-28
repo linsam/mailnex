@@ -1043,31 +1043,44 @@ def processImapData(text, options):
 
 def processHeaders(text):
     # TODO: Handle \n too?
-    lines = text.split('\r\n')
+    lines = text.split(b'\r\n')
     name = None
     value = ""
     headers = dict()
     for line in lines:
-        if line.startswith(" ") or line.startswith("\t"):
+        if line.startswith(b" ") or line.startswith(b"\t"):
             # continuation. Append to previous
             value += "\r\n" + line
             continue
         if name:
             if name not in headers:
                 headers[name] = list()
+            # Attempt to decode the header into unicode
+            try:
+                value = unicode(email.header.make_header(email.header.decode_header(value)))
+            except:
+                try:
+                    # TODO: Log warning about guessing?
+                    value = value.decode("utf-8")
+                except:
+                    # TODO: save an error as header value? drop header?
+                    # TODO: At least log about it
+                    value = None
             headers[name].append(value)
-        if not ': ' in line:
+        if not b': ' in line:
             if not ':' in line:
                 if line == "":
                     # end of headers
                     return headers
+                # Line had no colon and no indent
                 print("I don't like line", repr(line))
             else:
                 # poorly formed header, but I've seen it
+                # This line had a colon, but no space after it
                 name, value = line.split(':', 1)
                 name = name.lower()
         else:
-            name, value = line.split(': ', 1)
+            name, value = line.split(b': ', 1)
             name = name.lower()
     return headers
 
@@ -3365,7 +3378,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     self.C.connection.mailnexUser,
                     self.C.connection.mailnexHost,
                     self.C.connection.mailnexBox,
-                    headertext,
+                    "\r\n".join(["%s: %s" % x for x in headers.iteritems()])
                     ))
                 # We will use the message UID (formerly we were using the
                 # MSeq) as the identifier. This will allow us to obtain this
@@ -5893,14 +5906,19 @@ class Cmd(cmdprompt.CmdPrompt):
                 except:
                     subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
-                froms = [x[0] if not x[0] in [None, 'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
+                froms = [x[0] if not x[0] in [None, b'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
                 # Not great, but try to decode the froms fields
                 newfroms = []
                 for fr in froms:
                     try:
                         newfroms.append(unicode(email.header.make_header(email.header.decode_header(fr))))
                     except:
-                        newfroms.append(fr)
+                        try:
+                            # TODO: Log warning about guessing?
+                            newfroms.append(fr.decode("utf-8"))
+                        except:
+                            # TODO: Show error in listing, or drop the header?
+                            newfroms.append(u"<bad from>")
                 froms = newfroms
                 if self.C.virtfolderExtra:
                     extra = self.C.virtfolderExtra[num - 1]
