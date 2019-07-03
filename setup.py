@@ -16,7 +16,7 @@ setup(
             "keyring==9.0",
             "prompt-toolkit==1.0.0",
             "pyuv==1.3.0",
-            "pyxdg==0.25",
+            "pyxdg==0.26",
             "six==1.10.0",
             "wcwidth==0.1.6",
             "wsgiref==0.1.2",
