@@ -145,7 +145,7 @@ class editorCmds(object):
                     res = getattr(self, func)(line)
                     # TODO: Check if the function is supposed to allow args
                 else:
-                    res = editor.default(line)
+                    res = self.default(line)
                 if res == False:
                     return False
             else:
