@@ -1,4 +1,6 @@
 import magic
+import email.mime
+import string
 from . import cmdprompt
 from .pathcompleter import *
 try:
@@ -507,3 +509,73 @@ class editorCmds(object):
     # contents), and to add/edit arbitrary message parts. Should be
     # able to mark parts for signing, encryption, compression, etc.
 
+def doAttachments(editor, m):
+    """Given an editor instance and a message, apply the attachment list of the editor to the message.
+
+    Returns a message consisting of the given message with added attachments.
+    """
+    for attach in editor.attachlist:
+        try:
+            with open(attach, "rb") as f:
+                data = f.read()
+                mtype = magic.from_buffer(data, mime=True)
+        except KeyboardInterrupt:
+            print("Aborting read of %s" % attach)
+            # TODO: What do we do now? Ideall we'd go back to editing, but
+            # we aren't achitected well for that. We'll dead letter it, I
+            # guess
+            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+            ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
+            print("Message saved to dead.letter")
+            return False
+        except Exception as err:
+            print("Error reading file %s for attachment" % attach)
+            # TODO: What do we do now? Ideall we'd go back to editing, but
+            # we aren't achitected well for that. We'll dead letter it, I
+            # guess
+            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
+            ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
+            print("Message saved to dead.letter")
+            return False
+        # TODO: Allow the user to override the detected mime type
+        entity = email.mime.Base.MIMEBase(*mtype.split("/"))
+        entity.set_payload(data)
+
+        # Note: string.printable would be better, but it includes vertical
+        # tab and form-feed, which I'm not certain should be included in
+        # emails, so we'll construct our own without it for now.
+        printable = string.digits + string.letters + string.punctuation + ' \t\r\n'
+        if not all(c in printable for c in data):
+            # TODO: Allow user to override this (e.g. force base64 or quopri)
+            email.encoders.encode_base64(entity)
+        entity.add_header('Content-Disposition', 'attachment', filename=attach.split(os.sep)[-1])
+        if not isinstance(m, email.mime.Multipart.MIMEMultipart):
+            # Convert into multipart/mixed
+            n = email.mime.Multipart.MIMEMultipart()
+            o = email.mime.Text.MIMEText("")
+            o.set_payload(m.get_payload())
+            for key in m.keys():
+                vals = m.get_all(key)
+                if key in ['Content-Type','Content-Transfer-Encoding']:
+                    #print(" Migrating '%s' to new inner text part" % key)
+                    if key in o:
+                        o.replace_header(key, vals[0])
+                        vals = vals[1:]
+                    for val in vals:
+                        o[key] = val
+                elif key in ['MIME-Version']:
+                    #print(" Skipping '%s'" % key)
+                    pass
+                else:
+                    #print(" Migrating '%s' to new outer message" % key)
+                    if key in n:
+                        o.replace_header(key, vals[0])
+                        vals = vals[1:]
+                    for val in vals:
+                        n[key] = val
+            n.attach(o)
+            m = n
+        m.attach(entity)
+    if editor.tmpdir:
+        shutil.rmtree(editor.tmpdir)
+    return m
