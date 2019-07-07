@@ -100,6 +100,9 @@ class smtpClient(object):
             raise Exception("Failed to parse extensions")
         if security == SEC_STARTTLS :
             if 'STARTTLS' not in extensions:
+                # TODO: Try sending STARTTLS anyway; could be a downgrade
+                # attack attempt and we might get through, or it could be a
+                # misconfigured proxy, and the command might also get through
                 raise Exception("Server reports no TLS capability")
             s.send("STARTTLS\r\n")
             r = s.recv(1024)
