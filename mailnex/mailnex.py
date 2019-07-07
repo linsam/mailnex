@@ -4693,8 +4693,19 @@ class Cmd(cmdprompt.CmdPrompt):
 
         self.C.printInfo("Type your message. End with single '.' on a line, or EOF.\nUse '~?' on a line for help.")
         editor = composer.editorCmds(self.C, message, self.singleprompt, self.cli, self.getAddressCompleter, self.runAProgramStraight, composer.editorCompleter())
-        if editor.run() == False:
-            return False
+        while True:
+            if editor.run() == False:
+                return False
+            self.C.printInfo("Sending message...")
+
+            try:
+                self.sendMessage(editor, message)
+            except:
+                self.C.printInfo("There was an issue sending the message. Please make corrections to try again, or '~x' to abort")
+            else:
+                break
+
+    def sendMessage(self, editor, message):
 
         message.set_payload(quopri.encodestring(message.get_payload().encode('utf-8')))
         message.set_charset("utf-8")
@@ -4745,12 +4756,8 @@ class Cmd(cmdprompt.CmdPrompt):
         # TODO: Should also clean up the headers?
         recipients = filter(None, recipients)
         if len(recipients) == 0:
-            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
-            # This is probably not the right format for dead.letter
-            ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
-            print("Coudln't send message; no recipients were specified")
-            print("Message saved to dead.letter")
-            return False
+            print("There are no recipients for this message")
+            raise Exception("empty recipients list")
 
         # TODO: Allow user to select behavior:
         # 1) message content excludes Bcc list
@@ -4802,12 +4809,10 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: Filter on keys that can sign. Possibly filter out
             # expired/revoked keys.
             if len(keys) == 0:
-                ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
-                # This is probably not the right format for dead.letter
-                ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
-                print("Coudln't send message; No keys found for %s" % keysearch)
-                print("Message saved to dead.letter")
-                return False
+                self.C.printError("No keys found for '%s'." % keysearch)
+                self.C.printInfo("Try changing your 'from', disable pgpsigning, or add a key to gpg for '%s'." % keysearch)
+                raise Exception("No keys for '%s', can't sign." % keysearch)
+
             elif len(keys) > 1:
                 # TODO: Better key selection interface. E.g. should have a
                 # header line, allow showing more details for a key
@@ -4853,10 +4858,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 for r in recipients:
                     kl = list(ctx.keylist(r))
                     if len(kl) == 0:
-                        print("No key found for {}!".format(r))
-                        # TODO: Allow selection, re-edit, or at least save to
-                        # DEAD.LETTER
-                        return False
+                        self.C.printError("No key found for recipient {}!".format(r))
+                        self.C.printInfo("Try adding a key for {} to gpg, or disable pgpencrypt for this message".format(r))
+                        raise Exception("No recipient encryption key for {}".format(r))
                     if len(kl) > 1:
                         print("Multiple keys ({}) found for {}!".format(len(kl), r))
                         enumerateKeys(kl)
@@ -4900,6 +4904,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 sigs = ctx.sign(indat, outdat, gpgme.SIG_MODE_DETACH)
                 outdat = outdat.getvalue()
                 if len(sigs) != 1:
+                    self.C.printError("Issue with gpg signing: multiple signatures")
                     raise Exception("More than one sig found when only one requested!")
                 sig = sigs[0]
                 digests = {}
@@ -4908,6 +4913,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         digests[getattr(gpgme,sym)] = sym[3:]
 
                 if not sig.hash_algo in digests:
+                    self.C.printError("Issue with gpg signing: unknown hash algorithm")
                     raise Exception("Unknown hashing algorithm used!")
                 sigstr = "pgp-" + digests[sig.hash_algo].lower()
 
@@ -4980,14 +4986,19 @@ class Cmd(cmdprompt.CmdPrompt):
                 defport = 587
                 ssl = smtp.SEC_NONE
             else:
+                self.C.printError("'smtp' option is set, but we don't understand the '{}' URI scheme".format(scheme))
+                self.C.printInfo("See the help for option 'smtp' (command: set smtp??), or unset it to try local delivery")
                 raise Exception("Uknown protocol: {}".format(scheme))
             if not port:
                 port = defport
             print("user: {}\nhost: {}\nport: {}".format(user,host,port))
             if user:
                 if ':' in user:
+                    self.C.printError("Passwords in smtp URL aren't supported")
+                    self.C.printInfo("Instead of specifying a password in the URL of the 'smtp' setting, use one of the password handlers, such as agent-shell options, or a keyring")
                     raise Exception("Don't put passwords into the URL")
                 if ';' in user:
+                    self.C.printError("modifiers found in 'smtp' setting URI; these aren't suppoted yet")
                     raise Exception("We don't yet support modifiers")
             s = smtp.smtpClient()
             if "cacertsfile_{}".format(host) in self.C.settings:
@@ -5006,7 +5017,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     password = getpass.getpass()
                 else:
                     _, prompt_to_save, password = getPassword(self.C.settings, "smtp", user, host, port)
-                s.login(user, password)
+                res = s.login(user, password)
+                if res == False:
+                    self.C.printError("smtp login failed. Probably bad username or password")
+                    raise Exception("auth failure")
                 if prompt_to_save:
                     # TODO: Make a common function with the IMAP side
                     while True:
@@ -5023,8 +5037,8 @@ class Cmd(cmdprompt.CmdPrompt):
 
             # TODO: What if multiple from? Should use sender. Or, should we
             # allow explicitly setting the smtp from value?
-            # TODO: Handle failure. Either save the letter, or (better) allow
-            # editing to continue.
+            # Note: s.sendmail currently always returns None or raises and
+            # Exception, so we don't handle res here.
             res = s.sendmail(m['from'], recipients, fp.getvalue())
             #for addr in res.keys():
                 # This could be done better. Also use error reporting
@@ -5044,14 +5058,8 @@ class Cmd(cmdprompt.CmdPrompt):
         if res == 0:
             return True
         else:
-            # Try to save the message?
-            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
-            # This is probably not the right format for dead.letter
-            ofile.write("From user@localhost\r\n%s\r\n" % (message.as_string()))
-            print("Failed to send with error {}, messages {}".format(res, resstr))
-            print("Message saved to dead.letter")
-            return False
-
+            self.C.printError("Failed to send: sendmail proccess returned error {}, message: {}".format(res, resstr))
+            raise Exception("sendmail error")
 
     @showExceptions
     @needsConnection

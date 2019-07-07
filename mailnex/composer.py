@@ -521,22 +521,10 @@ def doAttachments(editor, m):
                 mtype = magic.from_buffer(data, mime=True)
         except KeyboardInterrupt:
             print("Aborting read of %s" % attach)
-            # TODO: What do we do now? Ideall we'd go back to editing, but
-            # we aren't achitected well for that. We'll dead letter it, I
-            # guess
-            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
-            ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
-            print("Message saved to dead.letter")
-            return False
+            raise Exception("read aborted")
         except Exception as err:
             print("Error reading file %s for attachment" % attach)
-            # TODO: What do we do now? Ideall we'd go back to editing, but
-            # we aren't achitected well for that. We'll dead letter it, I
-            # guess
-            ofile = open("%s/dead.letter" % os.environ['HOME'], "a")
-            ofile.write("From user@localhost\r\n%s\r\n" % (m.as_string()))
-            print("Message saved to dead.letter")
-            return False
+            raise err
         # TODO: Allow the user to override the detected mime type
         entity = email.mime.Base.MIMEBase(*mtype.split("/"))
         entity.set_payload(data)
