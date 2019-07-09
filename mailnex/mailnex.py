@@ -4040,10 +4040,22 @@ class Cmd(cmdprompt.CmdPrompt):
                 continue
             outname = os.path.join(pathname,name)
             # TODO: error handling
+            if os.path.exists(outname):
+                # Try to append a number, up to 1000, to make the name unique
+                for j in range(1000):
+                    newname = "{}.{}".format(outname, j)
+                    if not os.path.exists(newname):
+                        outname = newname
+                        break
+                else:
+                    self.C.printWarning("Failed to create unique name for '{}'; skipping".format(outname))
+                    continue
+
             with open(outname, 'w') as outfile:
                 self.C.printInfo("Writing '{}'".format(outname))
                 outfile.write(data)
                 outfile.flush()
+
         return
 
     def getStructure(self, index):
