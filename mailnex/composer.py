@@ -1,8 +1,10 @@
 import magic
 import email.mime
 import string
+import tempfile
 from . import cmdprompt
 from .pathcompleter import *
+
 try:
     import gpgme
     haveGpgme = True
