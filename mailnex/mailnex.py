@@ -3952,6 +3952,100 @@ class Cmd(cmdprompt.CmdPrompt):
             outfile.write(data)
             outfile.flush()
 
+    @showExceptions
+    @needsConnection
+    def do_saveAttachments(self, args):
+        """(experimental) Write all attachments from the given message(s) to a directory, using the suggested filenames when available.
+
+        e.g.:
+            saveAttachments 8321 8322 /tmp/attachments/
+
+
+        Doesn't update current message location or seen status.
+
+        If the directory given doesn't exist, will try to create it
+
+        See also the 'save' command (for writing the entire message (headers and all parts)
+        See also the 'write' command
+        See also the 'structure' command."""
+        # TODO (future): Support message sets, such that
+        #   saveAttachments (to john.doe@example.com since 1-jul-2018 before 15-jul-2018) /tmp/attachments/
+        # would work, too
+
+        arglist=args.split(' ')
+        if len(arglist) < 2:
+            print("Need a message and a directory name")
+            return
+        msglist = []
+        for index,val in enumerate(arglist):
+            if val.isdigit():
+                msglist.append(val)
+            else:
+                break
+        pathname = args.split(' ', index)[-1]
+        #print(msg, index, "path='{}'".format(pathname))
+
+        # TODO: should we see if there are any attachments to save before we
+        # try to create the directory? Or do we make sure the directory is
+        # good(ish) before we hit the network looking for attachments?
+        if not os.path.exists(pathname):
+            try:
+                os.mkdir(pathname)
+            except OSError as exc:
+                self.C.printError("Failed to make directory: {}".format(exc))
+                return
+        elif not os.path.isdir(pathname):
+            self.C.printError("Not a directory: {}".format(pathname))
+            return
+
+        savelist=[]
+
+        for msg in msglist:
+            struct = self.getStructure(int(msg))
+            #print(struct)
+            for key,val in struct.iteritems():
+                #print(key,val,dir(val))
+                #print((key,
+                #    val,
+                #    val.disposition,
+                #    val.parameters if hasattr(val,"parameters") else None,
+                #    val.subs if hasattr(val,"subs") else None,
+                #    val.tag if hasattr(val,"tag") else None,
+                #    val.encoding if hasattr(val,"encoding") else None,
+                #    val.description if hasattr(val,"description") else None,
+                #    val.attrs if hasattr(val,"attrs") else None,
+                #    val.bid if hasattr(val,"bid") else None,
+                #    val.lines if hasattr(val, "lines") else None
+                #    ))
+                #print()
+                if val.disposition and val.disposition[0] == "attachment":
+                    fname=None
+                    if "filename" in val.disposition[1]:
+                        fname = getResultPart('filename', val.disposition[1])
+                    savelist.append(("{}{}".format(msg,val.tag),val,fname))
+
+        #print(savelist)
+
+        for i in savelist:
+            msgid, part, name = i
+            if name is None:
+                name = msgid # any better ideas?
+            # convert path separators to underscores.
+            # TODO: Any other characters we should convert? Maybe let the user add some mappings (e.g. some people might not like explamation points or line feeds in their file names, even though Unix typically doesn't care)
+            name = name.replace("/","_")
+
+            data = self.fetchAndDecode(msgid.split('.'), part)
+            if data is None:
+                self.C.printWarning("Failed to decode '{}'; skipping".format(name))
+                continue
+            outname = os.path.join(pathname,name)
+            # TODO: error handling
+            with open(outname, 'w') as outfile:
+                self.C.printInfo("Writing '{}'".format(outname))
+                outfile.write(data)
+                outfile.flush()
+        return
+
     def getStructure(self, index):
         res = self.cacheFetch(index, '(BODYSTRUCTURE)')[0]
         struct = getResultPart('BODYSTRUCTURE', res[1])
