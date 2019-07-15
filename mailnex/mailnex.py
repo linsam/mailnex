@@ -3385,6 +3385,35 @@ class Cmd(cmdprompt.CmdPrompt):
         # type of message/rfc822, but *that* message has a header of
         # content-type text/plain or multipart/alternative or whatever.
         #
+        # An example message, type multipart/mixed
+        #
+        #  []           whole message
+        #  [HEADER]     headers (showing multipart/mixed)
+        #  [TEXT]       whole 'body'
+        #  [1.MIME]     mime headers of part 1 (showing text/plain)
+        #  [1]          data of part 1
+        #  [2.MIME]     mime headers of part 2 (showing application/octet-stream)
+        #  [2]          data of part 2
+        #  [3.MIME]     mime headers of part 3 (showing message/rfc822)
+        #  [3]          the entire inner message (rfc 2822)
+        #  [3.HEADER]   header of inner message, showing multipart/mixed
+        #  [3.TEXT]     whole 'body' of inner message
+        #  [3.1.MIME]   mime headers of part 1 of inner message (multipart/alternative)
+        #  [3.1]        whole of part 1 of inner message (part 3)
+        #  [3.1.1.MIME] mime header, text/plain
+        #  [3.1.1]      the text/plain data
+        #  [3.1.2.MIME] mime header, text/html
+        #  [3.1.2]      the text/html data
+        #  [3.2.MIME]   headers, application/octet-stream
+        #  [3.2]        the attachment 'binary' data
+        #
+        # In the example message, when we see in 3.MIME that it is a message,
+        # we can recurse for whole message processing, because we now have
+        # (after the 3) the same structure we started with. Nothing is whole
+        # message, HEADER is message headers, TEXT is whole body, and then
+        # numbered parts give us the parts.
+        #
+        #
         structstr = getResultPart('BODYSTRUCTURE', parts[1])
         struct = unpackStruct(structstr, self.C.settings, tag=str(index))
         structureStrings = []
@@ -3484,6 +3513,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if (allParts and struct.type_ == "text") or (not allParts and struct.type_ == "text" and struct.subtype == "plain"):
                 # TODO: write the following a bit more efficiently. Like,
                 # split only once, use second part of return only, perhaps?
+                # TODO: Is skip ever true?
                 if not skip:
                     # Default: Show each section's headers too
                     if innerTag != "":
@@ -3499,14 +3529,24 @@ class Cmd(cmdprompt.CmdPrompt):
 #                fetchParts.append((innerTag, struct))
             if isinstance(struct, structureMessage):
                 extra = ""
-                # Switch to the inner for further processing
-                struct = struct.subs[0]
+                innerstruct = struct.subs[0]
                 if hasattr(struct, "disposition") and struct.disposition not in [None, "NIL"]:
                     extra += " (%s)" % struct.disposition[0]
 
                 structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
+                fetchParts.append(("%s.MIME" % innerTag, None))
                 fetchParts.append(("%s.HEADER" % innerTag, struct))
+
+                if hasattr(innerstruct,'subs'):
+                    # Switch to the inner for further processing; will fall
+                    struct = innerstruct
+                else:
+                    # This is not a multipart message. Plan to fetch this
+                    # terminal, then end with no further processing
+                    fetchParts.append(("%s.TEXT" % innerTag, innerstruct))
+                    return
             if hasattr(struct, "subs"):
+                # This is a multipart, walk through the sub parts recursively
                 for i in struct.subs:
                     pickparts(i, allParts)
             if secondaryStruct:
@@ -3779,6 +3819,11 @@ class Cmd(cmdprompt.CmdPrompt):
         return headerstr
 
     def partsToString(self, parts, allHeaders=False):
+        # parts[0] is None or 'info' or the tag of the message part
+        # parts[1] is None or 'header' or the struct object for the message
+        # part
+        # parts[2] is the content as a unicode string (pre-decoded from the
+        # raw message)
         body = u''
         headerstr = u''
         for part in parts:
