@@ -4972,6 +4972,8 @@ class Cmd(cmdprompt.CmdPrompt):
             if self.C.settings.pgpkey:
                 keysearch = self.C.settings.pgpkey.value
             else:
+                # TODO: Search keys using just the email address without the
+                # full name part after doing the full search
                 keysearch = m['from']
             for k in ctx.keylist(keysearch, True):
                 keys.append(k)
@@ -4979,7 +4981,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # expired/revoked keys.
             if len(keys) == 0:
                 self.C.printError("No keys found for '%s'." % keysearch)
-                self.C.printInfo("Try changing your 'from', disable pgpsigning, or add a key to gpg for '%s'." % keysearch)
+                self.C.printInfo("Try changing your 'from', set the 'pgpkey' setting, disable pgpsigning, or add a key to gpg for '%s'." % keysearch)
                 raise Exception("No keys for '%s', can't sign." % keysearch)
 
             elif len(keys) > 1:
@@ -4991,6 +4993,11 @@ class Cmd(cmdprompt.CmdPrompt):
                     keysel = '1'
                 keys = [keys[int(keysel) - 1]]
             key = keys[0]
+            # TODO: Format this better
+            self.C.printInfo("Using key {} ({})".format(
+                key.subkeys[0].keyid,
+                tuple(x.uid for x in key.uids),
+                ))
             ctx.signers = (key,)
             ctx.armor = True
             # Convert all lines to have the same line ending, else signing
