@@ -5,6 +5,7 @@ import email.mime
 import string
 import tempfile
 from . import cmdprompt
+from .exceptions import MailnexException
 from .pathcompleter import *
 
 try:
@@ -525,7 +526,7 @@ def doAttachments(editor, m):
                 mtype = magic.from_buffer(data, mime=True)
         except KeyboardInterrupt:
             print("Aborting read of %s" % attach)
-            raise Exception("read aborted")
+            raise MailnexException("read aborted")
         except Exception as err:
             print("Error reading file %s for attachment" % attach)
             raise err

@@ -119,6 +119,7 @@ import sys
 import re
 import threading
 from . decorators import *
+from . exceptions import MailnexException
 # xapian search engine
 try:
     import xapian
@@ -303,7 +304,7 @@ class threadMessage(object):
         # List of other threadMessages that consider this to be their parent
         self.children = []
 
-class mailnexPartNotFound(Exception):
+class mailnexPartNotFound(MailnexException):
     pass
 
 def getResultPart(part, data):
@@ -4869,8 +4870,18 @@ class Cmd(cmdprompt.CmdPrompt):
 
             try:
                 self.sendMessage(editor, message)
-            except:
+            except Exception as ev:
                 self.C.printInfo("There was an issue sending the message. Please make corrections to try again, or '~x' to abort")
+                if not isinstance(ev, MailnexException):
+                    # If it was one of ours, we should have already displayed
+                    # friendly diagnostics to the user. If now, we should
+                    # display _something_ to give a clue as to what's going
+                    # on.
+                    if self.C.settings.debug.exception:
+                        import traceback
+                        traceback.print_exc()
+                    else:
+                        print(ev)
             else:
                 break
 
@@ -4925,8 +4936,8 @@ class Cmd(cmdprompt.CmdPrompt):
         # TODO: Should also clean up the headers?
         recipients = filter(None, recipients)
         if len(recipients) == 0:
-            print("There are no recipients for this message")
-            raise Exception("empty recipients list")
+            self.C.printError("There are no recipients for this message")
+            raise MailnexException("empty recipients list")
 
         # TODO: Allow user to select behavior:
         # 1) message content excludes Bcc list
@@ -4982,7 +4993,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if len(keys) == 0:
                 self.C.printError("No keys found for '%s'." % keysearch)
                 self.C.printInfo("Try changing your 'from', set the 'pgpkey' setting, disable pgpsigning, or add a key to gpg for '%s'." % keysearch)
-                raise Exception("No keys for '%s', can't sign." % keysearch)
+                raise MailnexException("No keys for '%s', can't sign." % keysearch)
 
             elif len(keys) > 1:
                 # TODO: Better key selection interface. E.g. should have a
@@ -5036,7 +5047,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     if len(kl) == 0:
                         self.C.printError("No key found for recipient {}!".format(r))
                         self.C.printInfo("Try adding a key for {} to gpg, or disable pgpencrypt for this message".format(r))
-                        raise Exception("No recipient encryption key for {}".format(r))
+                        raise MailnexException("No recipient encryption key for {}".format(r))
                     if len(kl) > 1:
                         print("Multiple keys ({}) found for {}!".format(len(kl), r))
                         enumerateKeys(kl)
@@ -5081,7 +5092,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 outdat = outdat.getvalue()
                 if len(sigs) != 1:
                     self.C.printError("Issue with gpg signing: multiple signatures")
-                    raise Exception("More than one sig found when only one requested!")
+                    raise MailnexException("More than one sig found when only one requested!")
                 sig = sigs[0]
                 digests = {}
                 for sym in dir(gpgme):
@@ -5090,7 +5101,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
                 if not sig.hash_algo in digests:
                     self.C.printError("Issue with gpg signing: unknown hash algorithm")
-                    raise Exception("Unknown hashing algorithm used!")
+                    raise MailnexException("Unknown hashing algorithm used!")
                 sigstr = "pgp-" + digests[sig.hash_algo].lower()
 
                 # Create the signing wrapper
@@ -5164,7 +5175,7 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 self.C.printError("'smtp' option is set, but we don't understand the '{}' URI scheme".format(scheme))
                 self.C.printInfo("See the help for option 'smtp' (command: set smtp??), or unset it to try local delivery")
-                raise Exception("Uknown protocol: {}".format(scheme))
+                raise MailnexException("Uknown protocol: {}".format(scheme))
             if not port:
                 port = defport
             print("user: {}\nhost: {}\nport: {}".format(user,host,port))
@@ -5172,10 +5183,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 if ':' in user:
                     self.C.printError("Passwords in smtp URL aren't supported")
                     self.C.printInfo("Instead of specifying a password in the URL of the 'smtp' setting, use one of the password handlers, such as agent-shell options, or a keyring")
-                    raise Exception("Don't put passwords into the URL")
+                    raise MailnexException("Don't put passwords into the URL")
                 if ';' in user:
                     self.C.printError("modifiers found in 'smtp' setting URI; these aren't suppoted yet")
-                    raise Exception("We don't yet support modifiers")
+                    raise MailnexException("We don't yet support modifiers")
             s = smtp.smtpClient()
             if "cacertsfile_{}".format(host) in self.C.settings:
                 s.cacerts = (getattr(self.C.settings, "cacertsfile_{}".format(host)).value)
@@ -5196,7 +5207,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 res = s.login(user, password)
                 if res == False:
                     self.C.printError("smtp login failed. Probably bad username or password")
-                    raise Exception("auth failure")
+                    raise MailnexException("auth failure")
                 if prompt_to_save:
                     # TODO: Make a common function with the IMAP side
                     while True:
