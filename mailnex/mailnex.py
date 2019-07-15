@@ -303,6 +303,8 @@ class threadMessage(object):
         # List of other threadMessages that consider this to be their parent
         self.children = []
 
+class mailnexPartNotFound(Exception):
+    pass
 
 def getResultPart(part, data):
     """Retrieve part's value from data.
@@ -324,7 +326,7 @@ def getResultPart(part, data):
     # you asked for is an exceptional case, and there isn't a good return
     # value that also couldn't be in the array itself without doing something
     # weird like returning a class or something.
-    raise Exception("Part %s not found" % part)
+    raise mailnexPartNotFound("Part %s not found" % part)
 
 def sanatize(data, condense=True, replace=False):
     """Remove control characters and (optionally) condense space.
@@ -3999,8 +4001,10 @@ class Cmd(cmdprompt.CmdPrompt):
             return
 
         savelist=[]
+        lacklist=[]
 
         for msg in msglist:
+            partsavelist=[]
             struct = self.getStructure(int(msg))
             #print(struct)
             for key,val in struct.iteritems():
@@ -4018,13 +4022,25 @@ class Cmd(cmdprompt.CmdPrompt):
                 #    val.lines if hasattr(val, "lines") else None
                 #    ))
                 #print()
-                if val.disposition and val.disposition[0] == "attachment":
+                if val.disposition and val.disposition[0].lower() == "attachment":
                     fname=None
-                    if "filename" in val.disposition[1]:
+                    #print("disp: {}".format(repr(val.disposition[1])))
+                    try:
                         fname = getResultPart('filename', val.disposition[1])
-                    savelist.append(("{}{}".format(msg,val.tag),val,fname))
+                    except mailnexPartNotFound:
+                        pass
+                    if val.tag == "":
+                        val.tag = ".TEXT"
+                    partsavelist.append(("{}{}".format(msg,val.tag),val,fname))
+                # TODO: Recursively search down the message structure
+            if len(partsavelist):
+                savelist.extend(partsavelist)
+            else:
+                lacklist.append(msg)
 
         #print(savelist)
+        if len(lacklist):
+            self.C.printWarning("Warning: the following messages didn't contain attachments: {}".format(" ".join(lacklist)))
 
         for i in savelist:
             msgid, part, name = i
@@ -4034,7 +4050,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: Any other characters we should convert? Maybe let the user add some mappings (e.g. some people might not like explamation points or line feeds in their file names, even though Unix typically doesn't care)
             name = name.replace("/","_")
 
-            data = self.fetchAndDecode(msgid.split('.'), part)
+            msgid = msgid.split('.')
+            #print("fetching {}, {}".format(repr(msgid), repr(part)))
+            data = self.fetchAndDecode(msgid, part)
             if data is None:
                 self.C.printWarning("Failed to decode '{}'; skipping".format(name))
                 continue
