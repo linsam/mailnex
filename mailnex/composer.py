@@ -536,7 +536,7 @@ def doAttachments(editor, m):
         # Note: string.printable would be better, but it includes vertical
         # tab and form-feed, which I'm not certain should be included in
         # emails, so we'll construct our own without it for now.
-        printable = string.digits + string.letters + string.punctuation + ' \t\r\n'
+        printable = string.digits + string.letters + string.punctuation + b' \t\r\n'
         if not all(c in printable for c in data):
             # TODO: Allow user to override this (e.g. force base64 or quopri)
             email.encoders.encode_base64(entity)
