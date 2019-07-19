@@ -405,87 +405,89 @@ class imap4ClientConnection(object):
                     return status, code, string
                 else:
                     # Process this line, but keep going
-                    # Note: Untagged can be more than just OK,NO,BAD, etc.
-                    #       Can also be results, e.g. * FLAGS (\Answered \Seen)
-                    #       or value results, e.g. * 6347 EXISTS
-                    #                              * 0 RECENT
-                    #print("notag",line)
-                    # Start by looking for response-cond-state
-                    r = re.match(re_untagged, line)
-                    if r is not None:
-                        status, code, string = r.groups()
-                        # TODO, look for content to cache and/or callback
-                        if self.debug:
-                            print("response",status,code,string)
-                        if code:
-                            self.processCodes(status, code, string)
-                    else:
-                        # Other format. Look for content to cache and/or callback
-                        # We'll start with message-data and mailbox-data that
-                        # have a numerical ID at the beginning. Note that
-                        # message-data and mailbox-data don't have codes
-                        r = re.match(re_numdat, line)
-                        if r is not None:
-                            num, typ, data = r.groups()
-                            # message-data
-                            if typ.upper() == "FETCH":
-                                if self.debug:
-                                    print("FETCH for %s" % num, data)
-                                if self.cb_fetch:
-                                    self.cb_fetch(num, data)
-                                if "fetch" in self.cbs:
-                                    self.cbs["fetch"](num, data)
-                            elif typ.upper() == "EXPUNGE":
-                                if self.debug:
-                                    print("EXPUNGE for %s" % num)
-                                if "expunge" in self.cbs:
-                                    self.cbs['expunge'](num, data)
-                            # numerical mailbox-data
-                            elif typ.upper() == "EXISTS":
-                                if self.debug:
-                                    print("Exists: %s" % num)
-                                self.exists = int(num, 10)
-                                if "exists" in self.cbs:
-                                    self.cbs["exists"](int(num, 10))
-                            elif typ.upper() == "RECENT":
-                                if self.debug:
-                                    print("Recent: %s" % num)
-                                self.recent = int(num, 10)
-                            else:
-                                print("uknown numerical '%s'" % typ.upper(), line)
-                        else:
-                            # Finally, we'll try mailbox-data, message-data,
-                            # or capability-data without the leading number.
-                            # Note that in the base spec, all of the
-                            # message-data have a leading nz-number
-                            r = re.match(re_untagdat, line)
-                            if r is not None:
-                                typ, data = r.groups()
-                                # capability-data
-                                if typ.upper() == "CAPABILITY":
-                                    self.caps = data.split()
-                                # mailbox-data
-                                elif typ.upper() == "FLAGS":
-                                    self.flags = data.split() #TODO should this be parsed for literals or quoted strings?
-                                elif typ.upper() == "LIST":
-                                    if "list" in self.cbs:
-                                        self.cbs["list"](line)
-                                elif typ.upper() == "LSUB":
-                                    if "lsub" in self.cbs:
-                                        self.cbs["lsub"](line)
-                                elif typ.upper() == "SEARCH":
-                                    if self.cb_search:
-                                        self.cb_search(typ, data)
-                                elif typ.upper() == "STATUS":
-                                    # TODO: callback
-                                    pass
-                                # message-data
-                                # (none)
-                                else:
-                                    print("Unknown non-numerical '%s'" % typ.upper(), line)
-                            else:
-                                print("nomatch",line)
+                    self.processUntagged(line)
                     line = ""
+    def processUntagged(self, line):
+        # Note: Untagged can be more than just OK,NO,BAD, etc.
+        #       Can also be results, e.g. * FLAGS (\Answered \Seen)
+        #       or value results, e.g. * 6347 EXISTS
+        #                              * 0 RECENT
+        #print("notag",line)
+        # Start by looking for response-cond-state
+        r = re.match(re_untagged, line)
+        if r is not None:
+            status, code, string = r.groups()
+            # TODO, look for content to cache and/or callback
+            if self.debug:
+                print("response",status,code,string)
+            if code:
+                self.processCodes(status, code, string)
+        else:
+            # Other format. Look for content to cache and/or callback
+            # We'll start with message-data and mailbox-data that
+            # have a numerical ID at the beginning. Note that
+            # message-data and mailbox-data don't have codes
+            r = re.match(re_numdat, line)
+            if r is not None:
+                num, typ, data = r.groups()
+                # message-data
+                if typ.upper() == "FETCH":
+                    if self.debug:
+                        print("FETCH for %s" % num, data)
+                    if self.cb_fetch:
+                        self.cb_fetch(num, data)
+                    if "fetch" in self.cbs:
+                        self.cbs["fetch"](num, data)
+                elif typ.upper() == "EXPUNGE":
+                    if self.debug:
+                        print("EXPUNGE for %s" % num)
+                    if "expunge" in self.cbs:
+                        self.cbs['expunge'](num, data)
+                # numerical mailbox-data
+                elif typ.upper() == "EXISTS":
+                    if self.debug:
+                        print("Exists: %s" % num)
+                    self.exists = int(num, 10)
+                    if "exists" in self.cbs:
+                        self.cbs["exists"](int(num, 10))
+                elif typ.upper() == "RECENT":
+                    if self.debug:
+                        print("Recent: %s" % num)
+                    self.recent = int(num, 10)
+                else:
+                    print("uknown numerical '%s'" % typ.upper(), line)
+            else:
+                # Finally, we'll try mailbox-data, message-data,
+                # or capability-data without the leading number.
+                # Note that in the base spec, all of the
+                # message-data have a leading nz-number
+                r = re.match(re_untagdat, line)
+                if r is not None:
+                    typ, data = r.groups()
+                    # capability-data
+                    if typ.upper() == "CAPABILITY":
+                        self.caps = data.split()
+                    # mailbox-data
+                    elif typ.upper() == "FLAGS":
+                        self.flags = data.split() #TODO should this be parsed for literals or quoted strings?
+                    elif typ.upper() == "LIST":
+                        if "list" in self.cbs:
+                            self.cbs["list"](line)
+                    elif typ.upper() == "LSUB":
+                        if "lsub" in self.cbs:
+                            self.cbs["lsub"](line)
+                    elif typ.upper() == "SEARCH":
+                        if self.cb_search:
+                            self.cb_search(typ, data)
+                    elif typ.upper() == "STATUS":
+                        # TODO: callback
+                        pass
+                    # message-data
+                    # (none)
+                    else:
+                        print("Unknown non-numerical '%s'" % typ.upper(), line)
+                else:
+                    print("nomatch",line)
     def connect(self, host, **kwargs):
         # TODO: Try base port with STARTTLS, then SSL port, then base port
         # without TLS? 
