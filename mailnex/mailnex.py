@@ -2185,6 +2185,9 @@ class Cmd(cmdprompt.CmdPrompt):
                     c.mailnexBox = box
             else:
                 print("disconnecting")
+                if C.connection.poller:
+                    C.connection.poller.stop()
+                    C.connection.poller.close()
                 C.connection.close()
                 #C.connection.logout()
                 C.connection = None
@@ -2195,6 +2198,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if not C.connection:
             print("Connecting to '%s'" % args)
             c = imap4.imap4ClientConnection()
+            c.poller = None
             c.debug = C.settings.debug.imap
 
             if "cacertsfile_{}".format(host) in self.C.settings:
@@ -2323,6 +2327,16 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.lastList = []
             self.C.virtfolder = None
             self.C.prevMessage = None
+
+            if 'IDLE' in c.caps:
+                self.C.bgtimer.stop()
+                self.C.bgtimer.start(self.bgcheck, 60*29, 60*29)
+                c.poller = pyuv.Poll(self.ptkevloop.realloop, c.socket.fileno())
+                c.poller.start(pyuv.UV_READABLE, self.checkData)
+                c.doIdle()
+            else:
+                self.C.bgtimer.stop()
+                self.C.bgtimer.start(self.bgcheck, 1, 5)
 
         except KeyboardInterrupt:
             print("Aborting")
@@ -2518,6 +2532,19 @@ class Cmd(cmdprompt.CmdPrompt):
             except:
                 self.C.connection = None
                 raise
+    def checkData(self, poll_handle, events, errno):
+        #print(poll_handle)
+        #print(events)
+        #print(errno)
+        #print()
+        if self.C.connection:
+            self.C.connection.doIdleData()
+        else:
+            # TODO: If we get here, things tend to hang. Is there a safe way
+            # to clean up?
+            # Sample path: connection has closed, but we forgot to stop the
+            # poller _before_ closing it
+            poll_handle.stop()
 
     @showExceptions
     @needsConnection
@@ -6686,10 +6713,11 @@ def interact(invokeOpts):
         if res:
             postConfFolder = res
     C.t = blessings.Terminal()
-    if postConfFolder:
-        cmd.do_folder(postConfFolder)
     t = pyuv.Timer(cmd.ptkevloop.realloop)
     t.start(cmd.bgcheck, 1, 5)
+    C.bgtimer = t
+    if postConfFolder:
+        cmd.do_folder(postConfFolder)
     try:
         cmd.cmdloop()
     except KeyboardInterrupt:
