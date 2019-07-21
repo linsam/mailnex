@@ -300,7 +300,10 @@ class imap4ClientConnection(object):
             raise Exception("IMAP connection lacks IDLE capability")
         self.tag += 1
         tagstr = "T{}".format(self.tag)
-        self.socket.send("{} idle\r\n".format(tagstr))
+        cmd = "{} idle\r\n".format(tagstr)
+        if self.debug:
+            print("Sending command: {}".format(repr(cmd)))
+        self.socket.send(cmd)
         self.idling = True
         while True:
             line = self.readFullLine()
@@ -387,19 +390,34 @@ class imap4ClientConnection(object):
         Does not support continuation commands (receipt of a continuation response will raise
         and exception)"""
         if self.idling:
-            # TODO: check for tagged completion of idle command after sending
-            # done?
+            if self.debug:
+                print("Sending: done")
             self.socket.send("done\r\n")
+            self.processUntilTag("T{}".format(self.tag))
         # TODO: Allow tags to be templated or something.
         self.tag += 1
         tagstr = "T%i" % self.tag
-        self.socket.send("%s %s\r\n" % (tagstr, cmd))
+        imapcmd = "%s %s\r\n" % (tagstr, cmd)
+        if self.debug:
+            print("Sending command: {}".format(repr(imapcmd)))
+        self.socket.send(imapcmd)
+        result = self.processUntilTag(tagstr)
+        if self.idling:
+            # TODO: maybe only return to idling after a delay?
+            # Could use a timer?
+            # If we go back to idling immediately, there's a lot
+            # of back-and-forth when the program using this lib
+            # does back-to-back simple commands, wasting bandwidth
+            # and time.
+            self.doIdle()
+        return result
+
+    def processUntilTag(self, tagstr):
         while True:
             line = self.readFullLine()
             if line.endswith('\r\n'):
                 if self.debug:
-                    print("doSimpleCommand recvline: {}".format(repr(line)))
-                # TODO: END: common code for get a line from the IMAP connection
+                    print("processUntilTag recvline: {}".format(repr(line)))
                 # Strip the line ending off
                 line = line[:-2]
                 # We got a whole line. Process it.
@@ -465,19 +483,11 @@ class imap4ClientConnection(object):
                         e.imap_code = code
                         e.imap_string = string
                         raise e
-                    if self.idling:
-                        # TODO: maybe only return to idling after a delay?
-                        # Could use a timer?
-                        # If we go back to idling immediately, there's a lot
-                        # of back-and-forth when the program using this lib
-                        # does back-to-back simple commands, wasting bandwidth
-                        # and time.
-                        self.doIdle()
                     return status, code, string
                 else:
                     # Process this line, but keep going
                     self.processUntagged(line)
-                    line = ""
+
     def processUntagged(self, line):
         # Note: Untagged can be more than just OK,NO,BAD, etc.
         #       Can also be results, e.g. * FLAGS (\Answered \Seen)
