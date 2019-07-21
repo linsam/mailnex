@@ -312,11 +312,14 @@ class imap4ClientConnection(object):
                 # TODO: timeout? limit number of lines we'll wait for?
                 continue
             break
+
     def doIdleData(self):
         # TODO: START: common code for get a line from the IMAP connection
         line = self.readFullLine()
         if self.debug:
             print("doIdleData recvline: {}".format(repr(line)))
+        # strip off ending cr/lf
+        line = line[:-2]
         self.processUntagged(line)
 
     def readLine(self):
