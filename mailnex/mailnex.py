@@ -4887,6 +4887,10 @@ class Cmd(cmdprompt.CmdPrompt):
             M.doSimpleCommand("STORE %s +FLAGS (\Answered)" % index)
 
     def editMessage(self, message):
+        """Run message composer until it is sent or the user aborts.
+
+        Returns True if sent, False if not sent
+        """
 
         self.C.printInfo("Type your message. End with single '.' on a line, or EOF.\nUse '~?' on a line for help.")
         editor = composer.editorCmds(self.C, message, self.singleprompt, self.cli, self.getAddressCompleter, self.runAProgramStraight, composer.editorCompleter())
@@ -4896,7 +4900,7 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.printInfo("Sending message...")
 
             try:
-                self.sendMessage(editor, message)
+                res = self.sendMessage(editor, message)
             except Exception as ev:
                 self.C.printInfo("There was an issue sending the message. Please make corrections to try again, or '~x' to abort")
                 if not isinstance(ev, MailnexException):
@@ -4911,6 +4915,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         print(ev)
             else:
                 break
+        return res
 
     def sendMessage(self, editor, message):
 
