@@ -325,6 +325,18 @@ class imap4ClientConnection(object):
         line = line[:-2]
         self.processUntagged(line)
 
+    def stopIdle(self):
+        """Leave idle mode.
+
+        Caller should not call doIdleData any more after calling this.
+
+        See also doIdle() and doIdleData()
+        """
+        if self.idling:
+            self.socket.send("done\r\n")
+            self.processUntilTag("T{}".format(self.tag))
+        self.idling = False
+
     def readLine(self):
         """Read a simple line from the IMAP socket"""
         line = ""

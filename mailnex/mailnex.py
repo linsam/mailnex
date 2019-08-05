@@ -2167,6 +2167,12 @@ class Cmd(cmdprompt.CmdPrompt):
         else:
             raise Exception("Unknown connect format")
         if C.connection:
+            # Stop idling if we were idling; keeps things cleaner.
+            # We'll idle again at the end if supported
+            if C.connection.poller:
+                C.connection.poller.stop()
+                C.connection.poller.close()
+            C.connection.stopIdle()
             if (
                     proto == C.connection.mailnexProto and
                     user == C.connection.mailnexUser and
