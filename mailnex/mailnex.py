@@ -2157,6 +2157,9 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 # Don't recognize the protocol
                 proto = None
+                port = None
+                self.C.printError("Unknown url scheme.")
+                return
             if url.port:
                 # User overrides port
                 port = url.port
