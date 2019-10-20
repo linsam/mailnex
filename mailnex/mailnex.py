@@ -4789,6 +4789,12 @@ class Cmd(cmdprompt.CmdPrompt):
             # to pick. Viable options are to pick the first, or pick the last,
             # or merge them all together. For now, we'll pick the first as a
             # probably reasonable interpretation of the spec.
+            # Update: RFC6378 section 5.4.2 indicates DKIM signatures process
+            # the last instance of a header. If the sender doesn't over-sign,
+            # and an attacker injects a new header, we're processing an
+            # attackers header instead of the legit one. TODO: use the last
+            # header on these grounds? Actually do some DKIM checks before
+            # picking a header?
             to[0:0] = [hdrs['reply-to'][0]]
         else:
             to[0:0] = [from_]
@@ -4832,6 +4838,22 @@ class Cmd(cmdprompt.CmdPrompt):
             newmsg.set_payload("Quoth {}\r\n{}".format(from_, body))
         me = email.utils.getaddresses([self.C.settings['from'].value] + self.C.settings.altfrom.value)
         addrs=[]
+
+        # Attempt to fix-up destination addresses before use
+        # TODO: clean this better; maybe implement our own parser.
+        # The python email library expects the message to use unix style
+        # end-of-line, but the raw emails use network new line format (like
+        # Windows). When there is a CR in a quoted name part of an address,
+        # the library's parser stops parsing and the address is corrupted.
+        # If we get rid of the CR, it parses better. However, we still get
+        # extra white-space in the name. Need to carefully read the spec to
+        # see if the whitespace should be there.
+        # Some mail clients seem to like to split headers on multiple lines to
+        # keep them short (as per spec) but do it in the middle of a quoted
+        # string, which I think is against spec.
+        to = map(lambda x: x.replace('\r', ''), to)
+        cc = map(lambda x: x.replace('\r', ''), cc)
+
         for addr in email.utils.getaddresses(to):
             for myaddr in me:
                 if addr[1] == myaddr[1]:
