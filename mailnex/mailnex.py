@@ -4909,8 +4909,14 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.printInfo("Sending message...")
 
             try:
+                origbcc = message.get_all('bcc',[])
+                print("origbcc",origbcc)
                 res = self.sendMessage(editor, message)
             except Exception as ev:
+                # First, reset the BCC field, as sendMessage removes it before
+                # trying to send
+                message['Bcc'] = ", ".join(origbcc)
+                # Next, show message and try to let user recover
                 self.C.printInfo("There was an issue sending the message. Please make corrections to try again, or '~x' to abort")
                 if not isinstance(ev, MailnexException):
                     # If it was one of ours, we should have already displayed
