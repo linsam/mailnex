@@ -4910,7 +4910,6 @@ class Cmd(cmdprompt.CmdPrompt):
 
             try:
                 origbcc = message.get_all('bcc',[])
-                print("origbcc",origbcc)
                 res = self.sendMessage(editor, message)
             except Exception as ev:
                 # First, reset the BCC field, as sendMessage removes it before
