@@ -1180,7 +1180,7 @@ def sigresToString(ctx, sig):
     if sig.validity == gpgme.VALIDITY_ULTIMATE:
         sigres += "(\033[34mu\033[0m)"
     keys = []
-    for k in ctx.keylist(sig.fpr, True):
+    for k in ctx.keylist(sig.fpr, False):
         keys.append(k)
     if len(keys) != 1:
         # TODO: What if we get multiple matches for
