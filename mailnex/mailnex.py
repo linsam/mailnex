@@ -164,11 +164,20 @@ import shutil
 from cStringIO import StringIO
 import io
 from io import BytesIO
+haveGpg = False
+haveGpgme = False
 try:
-    import gpgme
-    haveGpgme = True
+    import gpg
+    haveGpg = True
 except ImportError:
-    haveGpgme = False
+#if 1:
+    try:
+        import gpgme
+        haveGpgme = True
+        print("Warning: Using python-gpgme is deprecated. Please install python-gpg instead.")
+    except ImportError:
+        pass
+
 try:
     import urlparse
 except ImportError:
@@ -1139,6 +1148,77 @@ def normalizeSize(value, bi=False):
         unit += 'i'
     return (res, unit)
 
+def sigresToStringGpg(ctx, sig):
+    if sig.summary & gpg.constants.SIGSUM_VALID:
+        sigres = "\033[32mvalid\033[0m"
+    else:
+        sigres = "\033[31mbad\033[0m"
+        sigsum = []
+        if sig.summary & gpg.constants.SIGSUM_KEY_REVOKED:
+            sigsum.append("key revoked")
+        if sig.summary & gpg.constants.SIGSUM_KEY_EXPIRED:
+            sigsum.append("key expired")
+        if sig.summary & gpg.constants.SIGSUM_SIG_EXPIRED:
+            sigsum.append("sig expired")
+        if sig.summary & gpg.constants.SIGSUM_KEY_MISSING:
+            sigsum.append("key missing")
+        if sig.summary & gpg.constants.SIGSUM_CRL_MISSING:
+            sigsum.append("crl missing")
+        if sig.summary & gpg.constants.SIGSUM_CRL_TOO_OLD:
+            sigsum.append("crl too old")
+        if sig.summary & gpg.constants.SIGSUM_BAD_POLICY:
+            sigsum.append("bad policy")
+        if sig.summary & gpg.constants.SIGSUM_SYS_ERROR:
+            sigsum.append("sys error")
+        knownBits = gpg.constants.SIGSUM_VALID | gpg.constants.SIGSUM_GREEN | gpg.constants.SIGSUM_RED | gpg.constants.SIGSUM_KEY_REVOKED | gpg.constants.SIGSUM_KEY_EXPIRED | gpg.constants.SIGSUM_SIG_EXPIRED | gpg.constants.SIGSUM_KEY_MISSING | gpg.constants.SIGSUM_CRL_MISSING | gpg.constants.SIGSUM_CRL_TOO_OLD | gpg.constants.SIGSUM_BAD_POLICY | gpg.constants.SIGSUM_SYS_ERROR
+        remainBits = sig.summary & ~knownBits
+        if remainBits:
+            sigsum.append("%x" % remainBits)
+        if len(sigsum):
+            sigres += "(%s)" % ", ".join(sigsum)
+    if sig.validity == gpg.constants.VALIDITY_UNKNOWN:
+        sigres += "(?)"
+    if sig.validity == gpg.constants.VALIDITY_UNDEFINED:
+        sigres += "(q)"
+    if sig.validity == gpg.constants.VALIDITY_NEVER:
+        sigres += "(\033[31mn\033[0m)"
+    if sig.validity == gpg.constants.VALIDITY_MARGINAL:
+        sigres += "(\033[33mm\033[0m)"
+    if sig.validity == gpg.constants.VALIDITY_FULL:
+        sigres += "(\033[32mf\033[0m)"
+    if sig.validity == gpg.constants.VALIDITY_ULTIMATE:
+        sigres += "(\033[34mu\033[0m)"
+    keys = []
+    for k in ctx.keylist(sig.fpr, False):
+        keys.append(k)
+    if len(keys) != 1:
+        # TODO: What if we get multiple matches for
+        # the FPR? For now, we'll show the FPR raw if
+        # we can't find it or find it isn't unique
+        sigres += " from %s" % sig.fpr
+    else:
+        key = keys[0]
+        # TODO: Some kind of check between from and
+        # the sig. Some notes:
+        #   * The message isn't strictly bad if the
+        #     sender or froms don't match, but it is
+        #     possibly odd.
+        #   * The header check /should/ be against the
+        #     contained message. E.g., if this sig is
+        #     in a forward-as-attachment message, then
+        #     the sender is likely NOT the signer, but
+        #     the original sender of the inner message
+        #     SHOULD be the signer.
+        #   * While we are at it, we should check
+        #     signed headers against unsigned headers,
+        #     or at least some of the relevant ones.
+        #     For example, enigmail will copy the
+        #     recipients and originators headers, as
+        #     well as subject and date, into the
+        #     signed portion to allow verification
+        #     that those headers weren't tampered.
+        sigres += " from %s %s" % (sig.fpr[-8:], key.uids[0].uid)
+    return sigres
 def sigresToString(ctx, sig):
     if sig.summary & gpgme.SIGSUM_VALID:
         sigres = "\033[32mvalid\033[0m"
@@ -3477,7 +3557,30 @@ class Cmd(cmdprompt.CmdPrompt):
                     if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-encrypted':
                         # TODO: What if the message doesn't have the protocol
                         # parameter but otherwise follows the protocol?
-                        if haveGpgme:
+                        if haveGpg:
+                            inner = struct.tag.split('.')[1:]
+                            encpart = ".".join(inner + ['2'])
+                            data = self.cacheFetch(index, '(BODY.PEEK[%s])' % (encpart))[0]
+                            message = getResultPart("BODY[{}]".format(encpart), data[1])
+                            ctx = gpg.Context()
+                            skipEncrypted = False
+                            try:
+                                result, decrypt_info, verify_info = ctx.decrypt(message, verify=True)
+                            except gpg.errors.GPGMEError:
+                                skipEncrypted = True
+                            except gpg.errors.BadSignatures as ev:
+                                # We handle displaying bad signatures
+                                # ourselves. Extract the values we wanted
+                                # anyways.
+                                result, decrypt_info, verify_info = ev.results
+                            if not skipEncrypted:
+                                for sig in verify_info.signatures:
+                                    # TODO: Handle displaying multiple signatures
+                                    sigres = sigresToStringGpg(ctx, sig)
+                                m = email.message_from_string(result)
+                                secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + ".d")
+                                self.C.cache["{}.d.SUBSTRUCTURE".format(struct.tag)] = secondaryStruct
+                        elif haveGpgme:
                             inner = struct.tag.split('.')[1:]
                             encpart = ".".join(inner + ['2'])
                             data = self.cacheFetch(index, '(BODY.PEEK[%s])' % (encpart))[0]
@@ -3510,7 +3613,25 @@ class Cmd(cmdprompt.CmdPrompt):
                     # the protocol, it could be some other spec than we know
                     # how to handle, and we probably shouldn't give the user
                     # misleading information.
-                    if haveGpgme:
+                    if haveGpg:
+                        inner = struct.tag.split('.')[1:]
+                        messageTag = ".".join(inner + ['1'])
+                        signatureTag = ".".join(inner + ['2'])
+                        data = self.cacheFetch(index, '(BODY.PEEK[{}.MIME] BODY.PEEK[{}] BODY.PEEK[{}])'.format(messageTag, messageTag, signatureTag))[0]
+                        messageData = getResultPart('BODY[{}.MIME]'.format(messageTag), data[1]) + getResultPart('BODY[{}]'.format(messageTag), data[1])
+                        sigData = getResultPart('BODY[{}]'.format(signatureTag), data[1])
+
+                        ctx = gpg.Context()
+                        try:
+                            _, ret = ctx.verify(messageData, signature=sigData)
+                            ret = ret.signatures
+                        except gpg.errors.BadSignatures as ev:
+                            ret=ev.result # or '_, ret = ev.results'
+                            ret=ret.signatures
+                        for sig in ret:
+                            # TODO: Handle displaying multiple signatures
+                            sigres = sigresToStringGpg(ctx, sig)
+                    elif haveGpgme:
                         inner = struct.tag.split('.')[1:]
                         messageTag = ".".join(inner + ['1'])
                         signatureTag = ".".join(inner + ['2'])
@@ -5045,7 +5166,10 @@ class Cmd(cmdprompt.CmdPrompt):
         # can deal with encryption.
         # We'll handle Signature and Encryption at the same point
         if editor.pgpsign:
-            ctx = gpgme.Context()
+            if haveGpg:
+                ctx = gpg.Context()
+            else:
+                ctx = gpgme.Context()
             keys = []
             # TODO: What about sender vs from, etc.
             if self.C.settings.pgpkey:
@@ -5106,8 +5230,6 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     convlines.append(line)
             indat = b"\r\n".join(convlines)
-            indat = io.BytesIO(indat)
-            outdat = io.BytesIO()
             if editor.pgpencrypt:
                 rkeys = []
                 for r in recipients:
@@ -5128,8 +5250,15 @@ class Cmd(cmdprompt.CmdPrompt):
                 # TODO: If sender isn't also a recipient, but we are storing,
                 # should encrypt for sender as well. Should we encrypt to
                 # sender always anyway? Maybe make it an option.
-                res = ctx.encrypt_sign(rkeys, 0, indat, outdat)
-                outdat = outdat.getvalue()
+                if haveGpg:
+                    res = ctx.encrypt(indat, recipients=rkeys, sign=True, compress=False)
+                    outdat = res[0]
+                    res = (res[1],res[2])
+                else:
+                    indat = io.BytesIO(indat)
+                    outdat = io.BytesIO()
+                    res = ctx.encrypt_sign(rkeys, 0, indat, outdat)
+                    outdat = outdat.getvalue()
                 print("res:", res)
                 newmsg = email.mime.Multipart.MIMEMultipart("encrypted", protocol="application/pgp-encrypted")
                 pgppart = email.mime.Base.MIMEBase("application", "pgp-encrypted")
@@ -5149,6 +5278,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 # From are required, but could be faked (at least from
                 # probably can). The rest could be left out to hide the
                 # information.
+                # Note: From shouldn't be faked or would have to be faked
+                # carefully, as it is used in DMARC validation of messages.
                 for key in m.keys():
                     if key.lower() in ['to','from','cc','bcc','subject','date','message-id','user-agent','references','in-reply-to']:
                         newmsg[key] = m[key]
@@ -5156,16 +5287,27 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 # TODO: Handle case where signing fails (bad passphrase, cancelled
                 # operation, etc).
-                sigs = ctx.sign(indat, outdat, gpgme.SIG_MODE_DETACH)
-                outdat = outdat.getvalue()
+                if haveGpg:
+                    outdat, sigs = ctx.sign(indat, mode=gpg.constants.SIG_MODE_DETACH)
+                    sigs = sigs.signatures
+                else:
+                    indat = io.BytesIO(indat)
+                    outdat = io.BytesIO()
+                    sigs = ctx.sign(indat, outdat, gpgme.SIG_MODE_DETACH)
+                    outdat = outdat.getvalue()
                 if len(sigs) != 1:
                     self.C.printError("Issue with gpg signing: multiple signatures")
                     raise MailnexException("More than one sig found when only one requested!")
                 sig = sigs[0]
                 digests = {}
-                for sym in dir(gpgme):
-                    if sym.startswith('MD_'):
-                        digests[getattr(gpgme,sym)] = sym[3:]
+                if haveGpg:
+                    for sym in dir(gpg.constants):
+                        if sym.startswith('MD_'):
+                            digests[getattr(gpg.constants,sym)] = sym[3:]
+                else:
+                    for sym in dir(gpgme):
+                        if sym.startswith('MD_'):
+                            digests[getattr(gpgme,sym)] = sym[3:]
 
                 if not sig.hash_algo in digests:
                     self.C.printError("Issue with gpg signing: unknown hash algorithm")
