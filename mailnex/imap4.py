@@ -609,7 +609,24 @@ class imap4ClientConnection(object):
             s = socket.socket(*i[:3])
             if useSsl:
                 oldSock = s
-                s = ssl.SSLSocket(s, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
+                # See starttls about older python not supporting
+                # create_default_context. Once that version is no longer
+                # included in supported CentOS and Ubuntu, we should clean
+                # this up (TODO)
+                if not hasattr(ssl, "create_default_context"):
+                    if not hasattr(ssl, "SSLContext"):
+                        print("WARNING: old python SSL detected. Host checking is *NOT* occuring, and some best practices aren't followed!")
+                        s = ssl.wrap_socket(s, ca_certs=self.ca_certs, cert_reqs=ssl.CERT_REQUIRED if self.ca_certs else ssl.CERT_NONE)
+                    else:
+                        raise imap4Exception("TBD: SSLContext-able without default context")
+                else:
+                    if (self.ca_certs):
+                        # TODO: this appears to *add* the given certs file to
+                        # the default set instead of replacing it
+                        context = ssl.create_default_context(cafile=self.ca_certs)
+                    else:
+                        context = ssl.create_default_context()
+                    s = context.wrap_socket(s, server_hostname=host)
             else:
                 oldSock = None
             try:
