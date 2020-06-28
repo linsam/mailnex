@@ -1291,6 +1291,68 @@ def sigresToString(ctx, sig):
         sigres += " from %s %s" % (sig.fpr[-8:], key.uids[0].uid)
     return sigres
 
+def scanSec(mtas, headers):
+    # TODO: clean this up? Process headers using mail library first?
+
+    # Preprocess out just the headers we care about here
+    final = []
+    res = []
+    important = ['received', 'authentication-results']
+    headers = headers.split('\r\n')
+    this = ""
+    takeHeader = False
+    for h in headers:
+        if len(h) < 1:
+            break # or continue? if empty, that should indicate end of headers, so this should only ever happen as the last and final iteration
+        if takeHeader:
+            if not (h[0] == ' ' or h[0] == '\t'):
+                takeHeader = False
+                final.append(this)
+                this = ""
+            else:
+                this += " " + h.lstrip()
+                continue
+        if not takeHeader:
+            if h[0] == ' ' or h[0] == '\t':
+                # Continuation of a header we aren't interested in
+                continue
+            name = h.split(":", 1)[0]
+            if name.lower() in important:
+                takeHeader = True
+                this = h
+    for h in final:
+        # TODO: Proper parsing into parts?
+        name, val = h.split(':', 1)
+        if name.lower() == 'authentication-results':
+            parts = val.split(';')
+            mta_id = parts[0].strip()
+            if mta_id in mtas:
+                for i in parts[1:]:
+                    res.append(i.strip().split()[0]) # e.g. should be 'dkim=pass', 'dmarc=pass', etc.
+        elif name.lower() == 'received':
+            # TODO: this parsing is so bad.
+            # First we'll try to get the trusted MTA by looking for the first
+            # occurance of ' by ' and grabbing the token after that
+            if not ' by ' in val:
+                continue
+            # TODO: maybe we want to keep who it was from for display purposes
+            # (e.g. from example.net to trusted.example.com encrypted with TLS1_2)
+            _,rest = val.split(' by ', 1) #TODO: what if the whitespace around 'by' isn't regular space (e.g. \t)?
+            if not ' ' in rest:
+                continue
+            mta_id,rest = rest.split(' ', 1)
+            mta_id = mta_id.strip() # just in case there are extra spaces after 'by '
+            if not mta_id in mtas:
+                continue
+            if not '(version=' in rest:
+                continue
+            _,rest = rest.split('(version=', 1)
+            if not ')' in rest:
+                continue
+            encinfo,rest = rest.split(')', 1)
+            res.append("enc: {}".format(encinfo))
+    return res
+
 def enumerateKeys(keys):
     """Display a list of keys as for user selection."""
     for i, key in enumerate(keys, 1):
@@ -3535,6 +3597,16 @@ class Cmd(cmdprompt.CmdPrompt):
         struct = unpackStruct(structstr, self.C.settings, tag=str(index))
         structureStrings = []
         fetchParts = []
+        # Add an initial structure string about message security info (we've
+        # already fetched the header above)
+        if 'trusted-mta-ids' in self.C.settings and self.C.settings['trusted-mta-ids'].value:
+            mtas = self.C.settings['trusted-mta-ids'].value.split(',')
+            secinfo = scanSec(mtas, headers)
+            # TODO: better formatting. Also, perhaps this should be its own
+            # part instead of bundled in the structure? Or somehow tag it onto
+            # the end of the message itself? (that is, the normally first
+            # element of the structure)
+            structureStrings.append("SECINFO: {}".format(repr(secinfo)))
         def pickparts(struct, allParts=False):
             """Pick the parts we are going to use to produce a regular view of the message.
 
@@ -6845,6 +6917,25 @@ def getOptionsSet():
         smtp, smtps, or submission as the protocol part.
 
         """))
+    options.addOption(settings.StringOption("trusted-mta-ids", None, doc="""List of MTA identifiers trusted for things like Authentication Results and pulling TLS info
+
+        For example, if set to 'mx1.example.com', the following headers will be used for presenting message security information:
+
+            Received: from smtp.example.net ([203.0.113.25]) by mx1.example.com (whatever) with ESMTP id whatever (version=TLSv1/SSLv3
+             cipher=ECDHE-RSA-AES256-GCM-SHA384 bits=256 verify=NO) for <whomever@example.com>; Fri, 10 Jun 2020 12:00:00 -0100
+
+        The above received header shows that the message was encrypted in transit (at least to the trusted MTA)
+
+            Authentication-Results: mx.example.com; dkim=pass header.i=@example.net [...];
+             spf=pass (example.com: domain of whomever@example.net designates 203.0.113.25 as permitted sender)
+             smtp.mailfrom="whomever@example.net";
+             dmarc=pass (p=REJECT sp=QUARANTINE dis=NONE) header.from=examplenet
+
+        The above Authentication-Results header shows that the message is authentic (inasmuch as a sending MTA verified it)
+
+        Note that the id used for Received headers needn't match the
+        Authentication-Results headers, so this option accepts a comma
+        separate list of the IDs to trust for this information."""))
     options.addOption(settings.BoolOption('usekeyring', True, doc="Set to attempt to use system keyrings for password storage"))
     return options
 
