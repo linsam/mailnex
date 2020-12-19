@@ -1108,6 +1108,12 @@ def getPassword(settings, protocol, user, host, port):
                 pass_ = None
                 print("Info: no password managers found; cannot save your password for automatic login")
                 cantSave = True
+            except KeyboardInterrupt:
+                raise
+            except Exception as ev:
+                pass_ = None
+                print("Warning: Couldn't use password manager: {}".format(repr(ev)))
+                cantSave = True
     prompt_to_save = False
     if not pass_:
         pass_ = getpass.getpass()
