@@ -10,7 +10,7 @@ setup(
         url = "http://linsam.homelinux.com/mailnex",
         packages = ['mailnex'],
         install_requires = [
-            "Pygments==2.7.4",
+            "Pygments==2.15.0",
             "argparse==1.2.1",
             "blessings==1.6",
             "keyring==9.0",
