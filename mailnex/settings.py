@@ -38,7 +38,7 @@ class Options(object):
         return self.options.__contains__(key)
     def __iter__(self):
         # First pass: hand off to underlying type
-        return self.options.itervalues()
+        return self.options.values().__iter__()
     def __getitem__(self, key):
         # Handle x[y] syntax
         return self.options[key]
@@ -130,6 +130,8 @@ class StringOption(Option):
         return u"%s=%s" % (self.name, self.value)
     def strValue(self):
         return self.value
+    def __str__(self):
+        return self.__unicode__()
 #    def __str__(self):
 #        """Attempt to make a str from unicode by using utf-8. This is not a great way to do it, because it assumes a utf-8 capable system for display, and worse, will break when we move to python3
 #
@@ -153,7 +155,7 @@ class FlagsOption(Option):
             return
         # split into separate flags, make sure no dups
         # TODO: Do we really want to strip?
-        self.value = map(lambda x: x.strip(),list(set(value.split(','))))
+        self.value = list(map(lambda x: x.strip(),list(set(value.split(',')))))
     def __getattr__(self, name):
         if name in self.value:
             return True
