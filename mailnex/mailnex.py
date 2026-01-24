@@ -2416,7 +2416,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if line == 'y' or line == 'yes':
                             print(" Saving...")
                             try:
-                                keyring.set_password("imap://%s" % host, user, pass_)
+                                keyring.set_password("%s://%s" % (proto, host), user, pass_)
                             except RuntimeError:
                                 print("Error: couldn't save password to keyring")
                             break
