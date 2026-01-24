@@ -37,11 +37,11 @@ STATE_AUTH = 2
 STATE_SELECT = 3
 STATE_LOGOUT = 4
 
-re_untagged = re.compile(r'\* (OK|NO|BAD|PREAUTH|BYE) (\[[^]]*\])? ?(.*)', re.DOTALL)
-re_tagged = re.compile(r'([^ ]*) (OK|NO|BAD|PREAUTH|BYE) (\[[^]]*\])? ?(.*)', re.DOTALL)
-re_continue = re.compile(r'\+ (OK|NO|BAD|PREAUTH|BYE) (\[[^]]*\])? ?(.*)')
-re_numdat = re.compile(r'\* (\d+) ([a-zA-Z]+) ?(.*)', re.DOTALL)
-re_untagdat = re.compile(r'\* ([a-zA-Z]+) ?(.*)', re.DOTALL)
+re_untagged = re.compile(rb'\* (OK|NO|BAD|PREAUTH|BYE) (\[[^]]*\])? ?(.*)', re.DOTALL)
+re_tagged = re.compile(rb'([^ ]*) (OK|NO|BAD|PREAUTH|BYE) (\[[^]]*\])? ?(.*)', re.DOTALL)
+re_continue = re.compile(rb'\+ (OK|NO|BAD|PREAUTH|BYE) (\[[^]]*\])? ?(.*)')
+re_numdat = re.compile(rb'\* (\d+) ([a-zA-Z]+) ?(.*)', re.DOTALL)
+re_untagdat = re.compile(rb'\* ([a-zA-Z]+) ?(.*)', re.DOTALL)
 
 class imap4Exception(Exception):
     """Root exception for all exceptions raised by this imap4 module"""
@@ -170,57 +170,59 @@ class imap4ClientConnection(object):
             # Don't worry if the callback doesn't exist
             pass
     def processCodes(self, status, code, string):
+        print(repr(status),repr(code),repr(string))
         # Assert code[0] == '[' and code[-1] == ']'
         codes = code[1:-1].split()
         codename = codes[0].upper()
+        print(repr(codes))
         # These are 'resp-text-code' in the IMAP ABNF
         # IMAP4rev1 codes
-        if codename == "ALERT":
+        if codename == b"ALERT":
             # TODO: Log, show to screen, something. The user is supposed to
             # see the output!
             # TODO: callback for alert message? Log it
             # ourselves? Both?
             pass
-        elif codename == 'CAPABILITY':
+        elif codename == b'CAPABILITY':
             caps = codes[1:]
             if self.debug:
-                print "Capabilities:", caps
+                print("Capabilities:", caps)
             self.caps = caps
-        elif codename == "BADCHARSET":
+        elif codename == b"BADCHARSET":
             pass
             # TODO: callback for bad charset?
-        elif codename == "PERMANENTFLAGS":
+        elif codename == b"PERMANENTFLAGS":
             # Make this an assert?
-            if codes[1][0] == '(':
+            if codes[1].startswith(b'('):
                 codes[1] = codes[1][1:]
             else:
-                raise imap4Exception("Malformed PERMANENTFLAGS")
+                raise imap4Exception("Malformed PERMANENTFLAGS {} {}".format(codes[1], codes[1][0]))
             # Make this an assert?
-            if codes[-1][-1] == ')':
+            if codes[-1].endswith(b')'):
                 codes[-1] = codes[-1][:-1]
             else:
-                raise imap4Exception("Malformed PERMANENTFLAGS")
+                raise imap4Exception("Malformed PERMANENTFLAGS {}".format(codes[-1]))
             self.permflags = codes[1:]
-        elif codename == "READ-ONLY":
+        elif codename == b"READ-ONLY":
             self.rw = False
-        elif codename == "READ-WRITE":
+        elif codename == b"READ-WRITE":
             self.rw = True
-        elif codename == "TRYCREATE":
+        elif codename == b"TRYCREATE":
             # TODO: callback for trycreate?
             pass
-        elif codename == "UIDNEXT":
+        elif codename == b"UIDNEXT":
             self.uidnext = int(codes[1], 10)
-        elif codename == "UIDVALIDITY":
+        elif codename == b"UIDVALIDITY":
             self.uidvalidity = int(codes[1], 10)
-        elif codename == "UNSEEN":
+        elif codename == b"UNSEEN":
             self.unseen = int(codes[1], 10)
         # RFC 4551 CONDSTORE additions
-        elif codename == "HIGHESTMODSEQ":
+        elif codename == b"HIGHESTMODSEQ":
             self.highestmodseq = int(codes[1], 10)
-        elif codename == "NOMODSEQ":
+        elif codename == b"NOMODSEQ":
             self.highestmodseq = None
         # RFC 5162 QRESYNC additions
-        elif codename == "CLOSED":
+        elif codename == b"CLOSED":
             pass
             # Also VANISHED, but that shouldn't happen unless we explicitly
             # enable QRESYNC
@@ -339,7 +341,7 @@ class imap4ClientConnection(object):
 
     def readLine(self):
         """Read a simple line from the IMAP socket"""
-        line = ""
+        line = b""
         linelen = 0
         while True:
             data = self.socket.recv(1)
@@ -356,7 +358,7 @@ class imap4ClientConnection(object):
                 # TODO: Try to cleanup by flushing? Let something higher take
                 # care of it?
                 raise imap4Exception("Server response too long (at %i, which exceeds maxlinelen %i)" % (len(line), self.maxlinelen))
-            if line.endswith('\r\n'):
+            if line.endswith(b'\r\n'):
                 if self.debug:
                     print("readLine: {}".format(repr(line)))
                 return line
@@ -370,13 +372,13 @@ class imap4ClientConnection(object):
         This function processes those enough to form a full IMAP line which
         might include those new lines within strings.
         """
-        line = ""
+        line = b""
         while True:
             line += self.readLine()
-            segment = line.rfind('{')
+            segment = line.rfind(b'{')
             # TODO: invert this conditional or pull into a function; its hard
             # to read like this.
-            if segment != -1 and line.endswith('}\r\n') and line[segment + 1 : -3].isdigit():
+            if segment != -1 and line.endswith(b'}\r\n') and line[segment + 1 : -3].isdigit():
                 count = int(line[segment + 1 : -3],10)
                 # NOTE: The count is the number of bytes to read after the
                 # initial CRLF. We put the CRLF back into the stream so
@@ -385,7 +387,7 @@ class imap4ClientConnection(object):
                 # Read the rest of the literal
                 while count:
                     partial = self.socket.recv(count)
-                    if partial == "":
+                    if partial == b"":
                         # TODO: Might have been SSL layer stuff. Figure
                         # out how to check if the socket is actually dead.
                         raise imap4Exception("Lost socket?")
@@ -404,12 +406,12 @@ class imap4ClientConnection(object):
         if self.idling:
             if self.debug:
                 print("Sending: done")
-            self.socket.send("done\r\n")
-            self.processUntilTag("T{}".format(self.tag))
+            self.socket.send(b"done\r\n")
+            self.processUntilTag(b"T{}".format(self.tag))
         # TODO: Allow tags to be templated or something.
         self.tag += 1
-        tagstr = "T%i" % self.tag
-        imapcmd = "%s %s\r\n" % (tagstr, cmd)
+        tagstr = b"T%i" % self.tag
+        imapcmd = b"%s %s\r\n" % (tagstr, cmd)
         if self.debug:
             print("Sending command: {}".format(repr(imapcmd)))
         self.socket.send(imapcmd)
@@ -427,13 +429,13 @@ class imap4ClientConnection(object):
     def processUntilTag(self, tagstr):
         while True:
             line = self.readFullLine()
-            if line.endswith('\r\n'):
+            if line.endswith(b'\r\n'):
                 if self.debug:
                     print("processUntilTag recvline: {}".format(repr(line)))
                 # Strip the line ending off
                 line = line[:-2]
                 # We got a whole line. Process it.
-                if line.startswith("+"):
+                if line.startswith(b"+"):
                     raise imap4Exception("Continuation required")
                 # Any response can have a response code. initial codes can be
                 # ALERT, BADCHARSET, CAPABILITY, PARSE, PERMANENTFLAGS,
@@ -485,7 +487,7 @@ class imap4ClientConnection(object):
                         print("Unexpected tag %s received; was waiting for %s" % (tag, tagstr))
                         # Keep waiting for *our* tag
                         continue
-                    if status.upper() != 'OK':
+                    if status.upper() != b'OK':
                         # TODO: Use our own exception class
                         # Ideally, we'd have one kind of exception for NO and
                         # another for BAD, and one for whatever else we might
@@ -524,26 +526,26 @@ class imap4ClientConnection(object):
             if r is not None:
                 num, typ, data = r.groups()
                 # message-data
-                if typ.upper() == "FETCH":
+                if typ.upper() == b"FETCH":
                     if self.debug:
                         print("FETCH for %s" % num, data)
                     if self.cb_fetch:
                         self.cb_fetch(num, data)
                     if "fetch" in self.cbs:
                         self.cbs["fetch"](num, data)
-                elif typ.upper() == "EXPUNGE":
+                elif typ.upper() == b"EXPUNGE":
                     if self.debug:
                         print("EXPUNGE for %s" % num)
                     if "expunge" in self.cbs:
                         self.cbs['expunge'](num, data)
                 # numerical mailbox-data
-                elif typ.upper() == "EXISTS":
+                elif typ.upper() == b"EXISTS":
                     if self.debug:
                         print("Exists: %s" % num)
                     self.exists = int(num, 10)
                     if "exists" in self.cbs:
                         self.cbs["exists"](int(num, 10))
-                elif typ.upper() == "RECENT":
+                elif typ.upper() == b"RECENT":
                     if self.debug:
                         print("Recent: %s" % num)
                     self.recent = int(num, 10)
@@ -558,21 +560,21 @@ class imap4ClientConnection(object):
                 if r is not None:
                     typ, data = r.groups()
                     # capability-data
-                    if typ.upper() == "CAPABILITY":
+                    if typ.upper() == b"CAPABILITY":
                         self.caps = data.split()
                     # mailbox-data
-                    elif typ.upper() == "FLAGS":
+                    elif typ.upper() == b"FLAGS":
                         self.flags = data.split() #TODO should this be parsed for literals or quoted strings?
-                    elif typ.upper() == "LIST":
+                    elif typ.upper() == b"LIST":
                         if "list" in self.cbs:
                             self.cbs["list"](line)
-                    elif typ.upper() == "LSUB":
+                    elif typ.upper() == b"LSUB":
                         if "lsub" in self.cbs:
                             self.cbs["lsub"](line)
-                    elif typ.upper() == "SEARCH":
+                    elif typ.upper() == b"SEARCH":
                         if self.cb_search:
                             self.cb_search(typ, data)
-                    elif typ.upper() == "STATUS":
+                    elif typ.upper() == b"STATUS":
                         # TODO: callback
                         pass
                     # message-data
@@ -605,7 +607,7 @@ class imap4ClientConnection(object):
         # randomly by address family (that is, try IPv6 first, then IPv4, then
         # whatever is left)?
         for i in targets:
-            print "Trying", i[4][0],i[3] # address, canonical name (if available)
+            print("Trying", i[4][0],i[3]) # address, canonical name (if available)
             s = socket.socket(*i[:3])
             if useSsl:
                 oldSock = s
@@ -634,10 +636,10 @@ class imap4ClientConnection(object):
                 self._negotiate(s, host)
                 break
             except socket.error as ev:
-                print "  ", ev.strerror
+                print("  ", ev.strerror)
                 continue
             except imap4Exception as ev:
-                print "  error with imap negotiation"
+                print("  error with imap negotiation", ev)
                 continue
         else:
             # TODO: Provide some more info. Ideally, we'd have some
@@ -657,24 +659,24 @@ class imap4ClientConnection(object):
             status, code, string = a.groups()
             if code:
                 self.processCodes(status, code, string)
-            if code == '[ALERT]':
+            if code == b'[ALERT]':
                 # TODO: Log 'string' with priority. We want the user to see
                 # it.
                 pass
-            if status == "OK":
+            if status == b"OK":
                 # Transition to unauthenticated. Cache any capabilities. Add
                 # message to info log
                 self.state = STATE_UNAUTH
-            elif status == "PREAUTH":
+            elif status == b"PREAUTH":
                 # Transition to authenticated. Cache any capabilities. Add
                 # message to info log
                 self.state = STATE_AUTH
-            elif status == "BYE":
+            elif status == b"BYE":
                 # Transition to disconnected. Show error string to user
                 self.state = STATE_LOGOUT
             else:
                 # TODO: Log the response?
-                raise imap4Exception("Unexpected response from server")
+                raise imap4Exception("Unexpected response from server: {}".format(repr(status)))
             self.socket = s
             self.hostname = host
         except KeyboardInterrupt:
@@ -740,18 +742,25 @@ class imap4ClientConnection(object):
         #self.tag += 1
         #r = self.socket.recv(1024)
         #print(r)
-        res, code, string = self.doSimpleCommand("LOGIN \"%s\" \"%s\"" % (username, password))
+        if type(username)==type(str()):
+            username=username.encode("utf8")
+        if type(password)==type(str()):
+            password=password.encode("utf8")
+
+        res, code, string = self.doSimpleCommand(b"LOGIN \"%s\" \"%s\"" % (username, password))
         if (res == 'OK'):
             self.state = STATE_AUTH
     def select(self, box = None):
         if box is None:
-            box = "INBOX"
-        res, code, string = self.doSimpleCommand("SELECT %s" % box)
-        if res != 'OK':
+            box = b"INBOX"
+        if type(box)==type(str()):
+            box = box.encode("utf8")
+        res, code, string = self.doSimpleCommand(b"SELECT %s" % box)
+        if res != b'OK':
             raise imap4Exception("Failed to select box")
     def getheaders(self, message):
-        res, code, string = self.doSimpleCommand("fetch %s (BODY.PEEK[HEADER])" % message)
-        if res != 'OK':
+        res, code, string = self.doSimpleCommand(b"fetch %s (BODY.PEEK[HEADER])" % message)
+        if res != b'OK':
             raise imap4Exception("Failed to fetch headers")
     def fetch(self, message, what):
         """Generic fetcher. Given an IMAP spec of messages (not UIDs), fetch the 'what' from them.
@@ -769,14 +778,14 @@ class imap4ClientConnection(object):
             fetchlist.append((message, data))
         self.cb_fetch = fetch_cb
         try:
-            res, code, string = self.doSimpleCommand("fetch %s %s" % (message, what))
+            res, code, string = self.doSimpleCommand(b"fetch %s %s" % (message, what))
         except Exception:
             #TODO: log, not print
             print("Failed to fetch %s %s" % (what, message))
             raise
         finally:
             self.cb_fetch = oldcb
-        if res != 'OK':
+        if res != b'OK':
             raise imap4Exception("Failed to fetch %s: %s %s" % (message, res, string))
         return fetchlist
     def uidfetch(self, message, what):

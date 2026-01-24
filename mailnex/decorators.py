@@ -154,7 +154,7 @@ def showExceptions(func):
             if not topException:
                 raise
             import traceback
-            if not self.C.settings.debug.exception:
+            if not True or self.C.settings.debug.exception:
                 # TODO: Print the exception type hierarchy. E.g.
                 # "exceptions.KeyError" instead of just "KeyError", since some
                 # modules may define same-named exceptions with different

@@ -4,129 +4,22 @@ import prompt_toolkit
 # TODO: Make pygments optional?
 from pygments.lexer import Lexer
 from pygments.token import *
-from prompt_toolkit.layout.lexers import PygmentsLexer
+from prompt_toolkit.lexers import PygmentsLexer
 from pygments.token import Token
 from pygments.styles.tango import TangoStyle
-from prompt_toolkit.styles import style_from_pygments
+from prompt_toolkit.styles import style_from_pygments_cls
 from pygments.lexers import HtmlLexer
-from prompt_toolkit.key_binding.manager import KeyBindingManager
+#from prompt_toolkit.key_binding.manager import KeyBindingManager
+from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 
 import pygments.style
 
 import signal
-import pyuv
+import uvloop
 import sys
 import six
 
-class ptk_pyuv_wrapper(prompt_toolkit.eventloop.base.EventLoop):
-    """A prompt_toolkit compatible event loop that wraps pyuv (libuv) as the real event loop.
-
-    Options:
-        realloop - optional. If given, we'll use it, otherwise we'll create a new pyuv.Loop.
-
-    """
-    def __init__(self, realloop=None):
-        # prompt_toolkit....PosixEventLoop never bothers to init its super, so maybe we
-        # shouldn't either?
-        if realloop is None:
-            realloop = pyuv.Loop()
-        self.realloop = realloop
-        self.pending_async = []
-    def run(self, stdin, callbacks):
-        # The PosixEventLoop basically sets up a callback for sigwinch to
-        # monitor terminal resizes, and a callback for when stdin is ready.
-        # libuv can do the stdin with the TTY handler, so we'll give that a
-        # whirl
-        self.sigw = pyuv.Signal(self.realloop)
-        self.sigw.start(self.sigwinch, signal.SIGWINCH)
-        self.tty = pyuv.TTY(self.realloop, sys.stdin.fileno(), True)
-        self.tty.start_read(self.ttyread)
-        self._callbacks = callbacks
-        self.inputstream = prompt_toolkit.terminal.vt100_input.InputStream(callbacks.feed_key)
-        return self.realloop.run()
-    def ttyPause(self):
-        """Disable receive on the tty.
-
-        This is useful when spawning another program that needs the tty (e.g. less or vim).
-
-        Note: prompt_toolkit calls stop when the prompt completes, and we
-        remove tty and sigwinch watchers on stop and restore on run again
-        (when asking for another prompt), so in those cases, this needn't be
-        called. This probably doesn't hold true for 'full screen' application
-        mode.
-
-        Call ttyResume() to restore input.
-        """
-        self.tty.stop_read()
-    def ttyResume(self):
-        """Restore receive on the tty.
-
-        See ttyPause()."""
-        self.tty.start_read(self.ttyread)
-    def sigwinch(self, event, signum):
-        # We don't worry about all that executor threading stuffs that
-        # prompt_toolkit does, because libuv (is supposed to) give us signals
-        # in the main thread and not in a signal context (which is one of the
-        # whole points of doing a self-pipe).
-        self._callbacks.terminal_size_changed()
-    def ttyread(self, event, data, error):
-        if data is None:
-            self.tty.close()
-            self.realloop.stop()
-        else:
-            try:
-                # TODO: Obtain this from user preference, fall back on stdin
-                self.inputstream.feed(six.text_type(data, sys.stdin.encoding))
-            except Exception:
-                # If we don't stop, we can get into an exception loop such
-                # that every character the user types posts an exception and
-                # they cannot exit without spawning another terminal to run a
-                # kill command against this program.
-                self.tty.close()
-                self.realloop.stop()
-                raise
-    # Other stuff prompt_toolkit wants us to have :-(
-    def add_reader(self, fd, callback):
-        print "add_reader called", fd, callback
-    def remove_reader(self, fd):
-        print "remove_reader called", fd
-    def close(self):
-        self.sigw.close()
-        self.tty.close()
-    def stop(self):
-        self.sigw.close()
-        self.tty.close()
-        self.realloop.stop()
-    def call_from_executor(self, callback, _max_postpone_until=None):
-        #TODO: Mess with max postpone? PosixEventLoop uses a pipe to schedule
-        # a callback for execution.
-        # We'll just call the function via pyuv Async and be done with it.
-        def wrapper(handle):
-            handle.close()
-            callback()
-            i = self.pending_async.index(handle)
-            del self.pending_async[i]
-        a = pyuv.Async(self.realloop, wrapper)
-        # If we don't store a somewhere ourselves, libuv never calls the
-        # callback. I suspect it is getting garbage collected if we don't keep
-        # a reference ourselves.
-        self.pending_async.append(a)
-        a.send()
-    def run_in_executor(self, callback):
-        # PosixEventLoop creates a thread function to call the callback and
-        # gives that to the executor... Apparently prompt_toolkit might rely
-        # on this so that it doesn't process autocompletions during paste in a
-        # heavy manner. TODO: Revisit this (they have a note about i/o vs cpu
-        # preferencing)
-        def wrapper(handle):
-            handle.close()
-            callback()
-            i = self.pending_async.index(handle)
-            del self.pending_async[i]
-        a = pyuv.Async(self.realloop, wrapper)
-        self.pending_async.append(a)
-        a.send()
 
 def PromptLexerFactory(cmd_obj):
     class PromptLexer(Lexer):
@@ -187,9 +80,9 @@ class PromptPygStyle(pygments.style.Style):
             }
 
 #prompt_style = style_from_pygments(TangoStyle, {
-prompt_style = style_from_pygments(PromptPygStyle, {
-    Token.Text: '#888888',
-    })
+#prompt_style = style_from_pygments_cls(PromptPygStyle, {
+#    Token.Text: '#888888',
+#    })
 
 class Completer(prompt_toolkit.completion.Completer):
     def __init__(self, cmd):
@@ -259,9 +152,11 @@ class CmdPrompt(cmd.Cmd):
             return [
                     (Token, self.prompt),
                     ]
-        self.ptkevloop = ptk_pyuv_wrapper(eventloop)
-        registry = KeyBindingManager.for_prompt().registry
-        @registry.add_binding(Keys.ControlZ)
+        ###self.ptkevloop = ptk_pyuv_wrapper(eventloop)
+        #registry = KeyBindingManager.for_prompt().registry
+        bindings = KeyBindings()
+        #@registry.add_binding(Keys.ControlZ)
+        @bindings.add('c-z')
         def _(event):
             """Support backrounding ourselves."""
             # I'm surprised this isn't part of the default maps.
@@ -276,23 +171,23 @@ class CmdPrompt(cmd.Cmd):
             # TODO: Figure out how to use an appropriate key here, or allow it
             # to be customized.
             event.cli.suspend_to_background()
-        self.cli = prompt_toolkit.interface.CommandLineInterface(
-                application = prompt_toolkit.shortcuts.create_prompt_application(
-                    u"",
+        self.cli = prompt_toolkit.PromptSession(
+                    #u"",
                     #multiline = True,
-                    get_prompt_tokens = gpt,
-                    style = prompt_style,
-                    lexer = PygmentsLexer(PromptLexerFactory(self)),
-                    completer = self.completer,
+                    #get_prompt_tokens = gpt,
+                    #style = prompt_style,
+                    #lexer = PygmentsLexer(PromptLexerFactory(self)),
+                    #completer = self.completer,
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
-                    get_title = self.get_title,
-                    get_bottom_toolbar_tokens=self.toolbar,
-                    key_bindings_registry=registry,
-                    ),
-                eventloop = self.ptkevloop,
-                output = prompt_toolkit.shortcuts.create_output(true_color = False),
-        )
+                    #get_title = self.get_title,
+                    #get_bottom_toolbar_tokens=self.toolbar,
+                    #key_bindings_registry=registry,
+                    key_bindings=bindings,
+                    )#,
+                #eventloop = self.ptkevloop,
+                #output = prompt_toolkit.shortcuts.create_output(true_color = False),
+        #)
         # ui_lines is the number of lines occupied by the UI.
         # For example, 1 line for command prompt, 7 lines for completion menu,
         # 1 line for toolbar.
@@ -349,8 +244,9 @@ class CmdPrompt(cmd.Cmd):
             line = self.cmdqueue.pop(0)
         else:
             try:
-                line = self.cli.run(True)
-                line = line.text
+                #line = self.cli.run(True)
+                line = self.cli.prompt()
+                #line = line.text
             except EOFError:
                 line = 'EOF'
         line = self.precmd(line)
@@ -390,14 +286,14 @@ class CmdPrompt(cmd.Cmd):
             proc.close()
             proc.loop.stop()
             res.append(status)
-        com = pyuv.Pipe(self.ptkevloop.realloop, True)
+        com = uvloop.Pipe(self.ptkevloop.realloop, True)
         stdio = [
-                pyuv.StdIO(stream=com, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_READABLE_PIPE),
-                pyuv.StdIO(fd=sys.stdout.fileno(), flags=pyuv.UV_INHERIT_FD),
-                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                uvloop.StdIO(stream=com, flags=uvloop.UV_CREATE_PIPE | uvloop.UV_READABLE_PIPE),
+                uvloop.StdIO(fd=sys.stdout.fileno(), flags=uvloop.UV_INHERIT_FD),
+                uvloop.StdIO(fd=sys.stderr.fileno(), flags=uvloop.UV_INHERIT_FD),
                 ]
         self.ttyBusy = True
-        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        s = uvloop.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
         def closeWhenDone(handle, error):
             # TODO: Maybe report error?
             handle.close()
@@ -415,15 +311,15 @@ class CmdPrompt(cmd.Cmd):
             proc.close()
             proc.loop.stop()
             res[0] = status
-        com = pyuv.Pipe(self.ptkevloop.realloop, True)
-        como = pyuv.Pipe(self.ptkevloop.realloop, True)
+        com = uvloop.Pipe(self.ptkevloop.realloop, True)
+        como = uvloop.Pipe(self.ptkevloop.realloop, True)
         stdio = [
-                pyuv.StdIO(stream=com, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_READABLE_PIPE),
-                pyuv.StdIO(stream=como, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_WRITABLE_PIPE),
-                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                uvloop.StdIO(stream=com, flags=uvloop.UV_CREATE_PIPE | uvloop.UV_READABLE_PIPE),
+                uvloop.StdIO(stream=como, flags=uvloop.UV_CREATE_PIPE | uvloop.UV_WRITABLE_PIPE),
+                uvloop.StdIO(fd=sys.stderr.fileno(), flags=uvloop.UV_INHERIT_FD),
                 ]
         self.ttyBusy = True
-        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        s = uvloop.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
         def closeWhenDone(handle, error):
             # TODO: Maybe report error?
             handle.close()
@@ -455,12 +351,12 @@ class CmdPrompt(cmd.Cmd):
             proc.loop.stop()
             res.append(status)
         stdio = [
-                pyuv.StdIO(fd=sys.stdin.fileno(), flags=pyuv.UV_INHERIT_FD),
-                pyuv.StdIO(fd=sys.stdout.fileno(), flags=pyuv.UV_INHERIT_FD),
-                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                uvloop.StdIO(fd=sys.stdin.fileno(), flags=uvloop.UV_INHERIT_FD),
+                uvloop.StdIO(fd=sys.stdout.fileno(), flags=uvloop.UV_INHERIT_FD),
+                uvloop.StdIO(fd=sys.stderr.fileno(), flags=uvloop.UV_INHERIT_FD),
                 ]
         self.ttyBusy = True
-        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        s = uvloop.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
         self.ptkevloop.realloop.run()
         self.ttyBusy = False
         return res[0]
@@ -473,14 +369,14 @@ class CmdPrompt(cmd.Cmd):
             proc.close()
             proc.loop.stop()
             res.append(status)
-        com = pyuv.Pipe(self.ptkevloop.realloop, True)
+        com = uvloop.Pipe(self.ptkevloop.realloop, True)
         stdio = [
-                pyuv.StdIO(fd=sys.stdin.fileno(), flags=pyuv.UV_INHERIT_FD),
-                pyuv.StdIO(stream=com, flags=pyuv.UV_CREATE_PIPE | pyuv.UV_WRITABLE_PIPE),
-                pyuv.StdIO(fd=sys.stderr.fileno(), flags=pyuv.UV_INHERIT_FD),
+                uvloop.StdIO(fd=sys.stdin.fileno(), flags=uvloop.UV_INHERIT_FD),
+                uvloop.StdIO(stream=com, flags=uvloop.UV_CREATE_PIPE | uvloop.UV_WRITABLE_PIPE),
+                uvloop.StdIO(fd=sys.stderr.fileno(), flags=uvloop.UV_INHERIT_FD),
                 ]
         self.ttyBusy = True
-        s = pyuv.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
+        s = uvloop.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
         self.ptkevloop.realloop.run()
         self.ttyBusy = False
         return res[0]

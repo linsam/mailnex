@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Ubuntu 14.04 doesn't have xapian for python3. Quite possibly other modules
@@ -155,15 +155,15 @@ import mailcap
 import shlex
 # Other
 import tempfile
-import pyuv
+import uvloop
 import time
 from . import settings
 import subprocess
 import string
 import shutil
-from cStringIO import StringIO
 import io
 from io import BytesIO
+from io import StringIO
 haveGpg = False
 haveGpgme = False
 try:
@@ -1382,7 +1382,7 @@ def enumerateKeys(keys):
 class Cmd(cmdprompt.CmdPrompt):
     def __init__(self, *args, **kwargs):
         cmdprompt.CmdPrompt.__init__(self, *args, **kwargs)
-        self.__dict__[b'do_='] = self.equals
+        self.__dict__['do_='] = self.equals
         # Allow the equals symbol to show up in commands, which allows a
         # command to be named '='. Alternatively, we could handle it in the
         # default handler.
@@ -3965,36 +3965,36 @@ class Cmd(cmdprompt.CmdPrompt):
             myio = StringIO()
             self.stdout = myio
             indent = "    "
-            def icasecmp(a, b):
-                return cmp(a.lower(), b.lower())
-            doc.sort(icasecmp)
-            topic.sort(icasecmp)
-            undoc.sort(icasecmp)
+            def lower(a):
+                return a.lower()
+            doc.sort(key=lower)
+            topic.sort(key=lower)
+            undoc.sort(key=lower)
             if doc:
                 outlines.append("Documented commands:")
                 self.columnize(doc, width - len(indent))
-                myio.reset()
+                myio.seek(0)
                 for line in myio:
                     outlines.append(indent + line[:-1])
-                myio.reset()
+                myio.seek(0)
                 myio.truncate()
                 outlines.append("")
             if topic:
                 outlines.append("Topics:")
                 self.columnize(topic, width - len(indent))
-                myio.reset()
+                myio.seek(0)
                 for line in myio:
                     outlines.append(indent + line[:-1])
-                myio.reset()
+                myio.seek(0)
                 myio.truncate()
                 outlines.append("")
             if undoc:
                 outlines.append("Undocumented commands:")
                 self.columnize(undoc, width - len(indent))
-                myio.reset()
+                myio.seek(0)
                 for line in myio:
                     outlines.append(indent + line[:-1])
-                myio.reset()
+                myio.seek(0)
                 myio.truncate()
                 outlines.append("")
             self.stdout = oldout
@@ -6993,9 +6993,9 @@ def interact(invokeOpts):
         if res:
             postConfFolder = res
     C.t = blessings.Terminal()
-    t = pyuv.Timer(cmd.ptkevloop.realloop)
-    t.start(cmd.bgcheck, 1, 5)
-    C.bgtimer = t
+    #t = pyuv.Timer(cmd.ptkevloop.realloop)
+    #t.start(cmd.bgcheck, 1, 5)
+    #C.bgtimer = t
     if postConfFolder:
         cmd.do_folder(postConfFolder)
     try:
@@ -7003,7 +7003,7 @@ def interact(invokeOpts):
     except KeyboardInterrupt:
         cmd.do_exit("")
     except Exception as ev:
-        if options.debug.exception:
+        if True or options.debug.exception:
             raise
         else:
             print("Bailing on exception",ev)
