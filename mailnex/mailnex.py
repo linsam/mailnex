@@ -3796,7 +3796,7 @@ class Cmd(cmdprompt.CmdPrompt):
         structureString = u"\n".join(structureStrings)
         resparts.append((None, None, structureString + '\r\n\r\n'))
         if len(fetchParts) == 0:
-            resparts.append(('info', None, "No displayable parts"))
+            resparts.append((b'info', None, "No displayable parts"))
             return resparts
         elif len(fetchParts) == 1 and len(fetchParts[0][0]) == 0:
             # This message doesn't have parts, so fetch "part 1" to get the
@@ -4016,7 +4016,8 @@ class Cmd(cmdprompt.CmdPrompt):
             # First pass, dump them directly and move on.
             # TODO: Perhaps apply the headerorder setting even to
             # Print command?
-            headerstr += headers
+            if isinstance(headers, bytes):
+                headerstr += headers.decode()
             return headerstr
         if isinstance(headers, bytes):
             headers=headers.decode()
@@ -4809,7 +4810,10 @@ class Cmd(cmdprompt.CmdPrompt):
         # for styling
         content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
-        res = self.runAProgramWithInput(["less","-R"], content)
+        # TODO: Restore external pager
+        #res = self.runAProgramWithInput(["less","-R"], content)
+        print(content.decode('utf-8'))
+        res = 1
         if res == 0:
             # TODO: Allow asynchronous mode. See do_print for details.
             M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
