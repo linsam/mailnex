@@ -714,8 +714,8 @@ def unpackStructM(data, options, depth=1, tag="", predesc=""):
                 # TODO: should never reach here. Assert instead?
                 index = tag
                 part = ""
-            options['cache']["{}.BODY[{}.MIME]".format(index,part)] = headers
-            options['cache']["{}.BODY[{}]".format(index,part)] = data.get_payload()
+            options['cache'][b"%s.BODY[%s.MIME]"%(index,part)] = headers
+            options['cache'][b"%s.BODY[%s]"%(index,part)] = data.get_payload()
     return this
 
 def flattenStruct(struct):
@@ -850,23 +850,23 @@ def processImapData(text, options):
     inbrace = False
     wasquoted = False
     literalRemain = 0
-    literalSizeString = ""
+    literalSizeString = b""
     pos = -1
     last = len(text) - 1
     if options.debug.parse:
         print(" length:", last)
     while pos < last:
         pos += 1
-        c = text[pos]
+        c = text[pos:pos+1]
         if options.debug.parse:
-            print(" Processing {} @ {}".format(repr(c), pos))
-        if c == '\\' and inquote:
+            print(" Processing {} @ {}; inquote {} inspace {} inbrace {} wasquoted {} curtext is".format(repr(c), pos, inquote, inspace, inbrace, wasquoted, curtext))
+        if c == b'\\' and inquote:
             # Backslash *should* only precede a doublequote or a backslash,
             # but we'll let it escape anything
             pos += 1
             curtext.append(text[pos])
             continue
-        if c == ' ' or c == '\t':
+        if c == b' ' or c == b'\t':
             if inquote:
                 if options.debug.parse:
                     print(" keep space, we are quoted")
@@ -886,7 +886,7 @@ def processImapData(text, options):
                 continue
             continue
         if inbrace:
-            if c != '}':
+            if c != b'}':
                 literalSizeString += c
                 continue
             # Got close curly brace; process the literal
@@ -905,13 +905,13 @@ def processImapData(text, options):
                     print("Finished literal remain:", curtext)
                 continue
             raise Exception("Invalid literal size %s" % repr(literalSizeString))
-        if inspace and c == '{':
+        if inspace and c == b'{':
             inspace = False
             inbrace = True
             literalSizeString = ""
             continue
         inspace = False
-        if c == '"':
+        if c == b'"':
             if inquote:
                 # TODO: Does ending a quote terminate an atom?
                 if options.debug.parse:
@@ -924,7 +924,7 @@ def processImapData(text, options):
                     print(" Entering quote")
                 inquote = True
             continue
-        if c == '(':
+        if c == b'(':
             if inquote:
                 if options.debug.parse:
                     print(" keep paren, we are quoted")
@@ -938,7 +938,7 @@ def processImapData(text, options):
             lset.append(curlist)
             inspace = True
             continue
-        if c == ')':
+        if c == b')':
             if inquote:
                 if options.debug.parse:
                     print(" keep paren, we are quoted")
@@ -971,7 +971,8 @@ def processImapData(text, options):
         raise Exception("Malformed input. Reached end without a closing quote")
     if len(curtext):
         print("EOF, flush leftover text", curtext)
-        thisStr = b"".join(curtext)
+        thisStr = bytes(curtext) #b"".join(curtext)
+        print("     leftover as str", thisStr)
         if not wasquoted and thisStr.lower() == b'nil':
             curlist.append(None)
         else:
@@ -2035,53 +2036,53 @@ class Cmd(cmdprompt.CmdPrompt):
         # First pass, except for FLAGS, we'll not split up the parts. If any
         # part is missing from the cache, we'll re-fetch all parts to populate
         # the cache
-        assert args.startswith('(')
-        assert args.endswith(')')
-        if isinstance(msgset,int) or isinstance(msgset, long):
+        assert args.startswith(b'(')
+        assert args.endswith(b')')
+        if isinstance(msgset,int):
             # Convert to list
             msgset = [msgset]
         argsList = args[1:-1].split()
         origArgsList = list(argsList)
         # Always re-cache flags
-        if 'FLAGS' in argsList:
-            argsList.remove('FLAGS')
+        if b'FLAGS' in argsList:
+            argsList.remove(b'FLAGS')
             if self.C.settings.debug.general:
                 print("executing IMAP command FETCH {} {}".format(msgset.imapListStr(), '(FLAGS)'))
-            data = self.C.connection.fetch(msgset.imapListStr(), '(FLAGS)')
+            data = self.C.connection.fetch(msgset.imapListStr(), b'(FLAGS)')
             for d in data:
                 r = processImapData(d[1], self.C.settings)[0]
-                self.C.cache["{}.{}".format(d[0], 'FLAGS')] = getResultPart('FLAGS', r)
+                self.C.cache["%s.%s"%(d[0], b'FLAGS')] = getResultPart(b'FLAGS', r)
 
         # Build a fetch list
         flist = MessageList()
         for i in msgset:
             for a in argsList:
-                if a.upper().startswith("BODY.PEEK"):
-                    a = "BODY" + a[9:]
-                if not '{}.{}'.format(i,a) in self.C.cache:
+                if a.upper().startswith(b"BODY.PEEK"):
+                    a = b"BODY" + a[9:]
+                if not b'%d.%s'%(i,a) in self.C.cache:
                     flist.add(i)
                     break
         # Fetch and cache
         if flist:
-            args = '({})'.format(" ".join(argsList))
+            args = b'(%s)' % b" ".join(argsList)
             if self.C.settings.debug.general:
                 print("executing IMAP command FETCH {} {}".format(flist.imapListStr(), args))
             data = self.C.connection.fetch(flist.imapListStr(), args)
             for d in data:
                 r = processImapData(d[1], self.C.settings)[0]
                 for arg in argsList:
-                    if arg.upper().startswith("BODY.PEEK"):
-                        arg = "BODY" + arg[9:]
+                    if arg.upper().startswith(b"BODY.PEEK"):
+                        arg = b"BODY" + arg[9:]
                     part = getResultPart(arg, r)
-                    self.C.cache["{}.{}".format(d[0], arg)] = part
+                    self.C.cache[b"%s.%s"%(d[0], arg)] = part
         data = []
         for i in msgset:
             d = []
             for a in origArgsList:
-                if a.upper().startswith("BODY.PEEK"):
-                    a = "BODY" + a[9:]
+                if a.upper().startswith(b"BODY.PEEK"):
+                    a = b"BODY" + a[9:]
                 d.append(a)
-                d.append(self.C.cache['{}.{}'.format(i, a)])
+                d.append(self.C.cache[b'%d.%s' % (i, a)])
             data.append((i, d))
         return data
 
@@ -2631,9 +2632,9 @@ class Cmd(cmdprompt.CmdPrompt):
         # cache and be done, maybe)
         self.C.lastMessage -= 1
         # was the message unseen? If so, decrement self.status['unread']
-        p = '{}.FLAGS'.format(msg)
+        p = b'%s.FLAGS'%str(msg)
         if p in self.C.cache:
-            if '\\Seen' not in self.C.cache[p]:
+            if b'\\Seen' not in self.C.cache[p]:
                 self.status['unread'] -= 1
             else:
                 # Wasn't part of unread count. Nothing to do.
@@ -2645,21 +2646,23 @@ class Cmd(cmdprompt.CmdPrompt):
             pass
 
     def fetchMonitor(self, msg, data):
+        if self.C.settings.debug.general:
+            print("fetchMonitor: processing",msg,data)
         data = processImapData(data, self.C.settings)[0]
         l = lambda: print("fetch received:", msg, data)
-        if self.cli._is_running and self.C.settings.debug.general:
-            self.cli.run_in_terminal(l)
+#        if self.cli._is_running and self.C.settings.debug.general:
+#            self.cli.run_in_terminal(l)
         # NOTE: data is often raw, can't always be made unicode, so trying to
         # search for a (unicode) string in it can cause conversion errors to
         # do the comparison. Better to search for a bytestring instead.
         if b'FLAGS' in data:
-            flags = getResultPart('FLAGS', data)
-            p = '{}.FLAGS'.format(msg)
+            flags = getResultPart(b'FLAGS', data)
+            p = b'%s.FLAGS'%(msg)
             if p in self.C.cache:
                 oldflags = self.C.cache[p]
-                if '\\Seen' in oldflags and not '\\Seen' in flags:
+                if b'\\Seen' in oldflags and not b'\\Seen' in flags:
                     self.status['unread'] += 1
-                if not '\\Seen' in oldflags and '\\Seen' in flags:
+                if not b'\\Seen' in oldflags and b'\\Seen' in flags:
                     self.status['unread'] -= 1
             else:
                 # We don't know what the flags were, so we don't know if the
@@ -3556,8 +3559,8 @@ class Cmd(cmdprompt.CmdPrompt):
         return everything instead of just text parts.
         """
         resparts = []
-        parts = self.cacheFetch(index, '(BODY.PEEK[HEADER] BODYSTRUCTURE)')[0]
-        headers = getResultPart('BODY[HEADER]', parts[1])
+        parts = self.cacheFetch(index, b'(BODY.PEEK[HEADER] BODYSTRUCTURE)')[0]
+        headers = getResultPart(b'BODY[HEADER]', parts[1])
         # TODO: Headers are required to be ASCII or encoded using a header
         # encoding that results in ASCII (lists charset and encodes as
         # quoted-printable or base64 with framing). We should decode headers
@@ -3640,7 +3643,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if struct.type_ == "multipart" and struct.subtype == 'encrypted':
                 if '{}.d.SUBSTRUCTURE'.format(struct.tag) in self.C.cache:
                     # Already decoded this message
-                    secondaryStruct = self.C.cache['{}.d.SUBSTRUCTURE'.format(struct.tag)]
+                    secondaryStruct = self.C.cache[b'%s.d.SUBSTRUCTURE'%(struct.tag)]
                 else:
                     p = struct.parameters
                     if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-encrypted':
@@ -3649,8 +3652,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         if haveGpg:
                             inner = struct.tag.split('.')[1:]
                             encpart = ".".join(inner + ['2'])
-                            data = self.cacheFetch(index, '(BODY.PEEK[%s])' % (encpart))[0]
-                            message = getResultPart("BODY[{}]".format(encpart), data[1])
+                            data = self.cacheFetch(index, 'b(BODY.PEEK[%s])' % (encpart))[0]
+                            message = getResultPart(b"BODY[%s]"%(encpart), data[1])
                             ctx = gpg.Context()
                             skipEncrypted = False
                             try:
@@ -3672,8 +3675,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         elif haveGpgme:
                             inner = struct.tag.split('.')[1:]
                             encpart = ".".join(inner + ['2'])
-                            data = self.cacheFetch(index, '(BODY.PEEK[%s])' % (encpart))[0]
-                            message = getResultPart("BODY[{}]".format(encpart), data[1])
+                            data = self.cacheFetch(index, b'(BODY.PEEK[%s])' % (encpart))[0]
+                            message = getResultPart(b"BODY[%s]"%(encpart), data[1])
                             ctx = gpgme.Context()
                             msgdat = io.BytesIO(message)
                             result = io.BytesIO()
@@ -5716,16 +5719,16 @@ class Cmd(cmdprompt.CmdPrompt):
     def showHeadersNonVF(self, messageList, file=sys.stdout):
         """Show headers, given a global message list only"""
         msgset = messageList.imapListStr()
-        args = "(ENVELOPE INTERNALDATE FLAGS)"
+        args = b"(ENVELOPE INTERNALDATE FLAGS)"
         if self.C.settings.debug.general:
             print("FETCH {} {}".format(messageList.imapListStr(), args))
         data = self.cacheFetch(messageList, args)
         #data = normalizeFetch(data)
         resset = []
         for d in data:
-            envelope = getResultPart("ENVELOPE", d[1])
-            internaldate = getResultPart("INTERNALDATE", d[1])
-            flags = getResultPart("FLAGS", d[1])
+            envelope = getResultPart(b"ENVELOPE", d[1])
+            internaldate = getResultPart(b"INTERNALDATE", d[1])
+            flags = getResultPart(b"FLAGS", d[1])
             envelope = Envelope(*envelope)
 
             # Handle attrs. First pass, only do collapsed form.
@@ -5739,19 +5742,19 @@ class Cmd(cmdprompt.CmdPrompt):
             # Or I could look at mailx source code, but so far I've done
             # neither.
             uflags = map(lambda x: x.upper(), flags)
-            if '\RECENT' in uflags:
-                if '\SEEN' in uflags:
+            if b'\RECENT' in uflags:
+                if b'\SEEN' in uflags:
                     nuro = self.C.settings.attrlist.value[ATTR_NEWREAD]
                 else:
                     nuro = self.C.settings.attrlist.value[ATTR_NEW]
             else:
-                if '\SEEN' in uflags:
+                if b'\SEEN' in uflags:
                     nuro = self.C.settings.attrlist.value[ATTR_OLD]
                 else:
                     nuro = self.C.settings.attrlist.value[ATTR_UNREAD]
             attr=None
             deleted = flagged = draft = answered = False
-            if '\DELETED' in uflags:
+            if b'\DELETED' in uflags:
                 if attr is None:
                     try:
                         attr = self.C.settings.attrlist.value[ATTR_DELETED]
@@ -5762,15 +5765,15 @@ class Cmd(cmdprompt.CmdPrompt):
                         # of these to the default setting's value maybe
                         attr = 'D'
                 deleted = True
-            if '\FLAGGED' in uflags:
+            if b'\FLAGGED' in uflags:
                 if attr is None:
                     attr = self.C.settings.attrlist.value[ATTR_FLAGGED]
                 flagged = True
-            if '\DRAFT' in uflags:
+            if b'\DRAFT' in uflags:
                 if attr is None:
                     attr = self.C.settings.attrlist.value[ATTR_DRAFT]
                 draft = True
-            if '\ANSWERED' in uflags:
+            if b'\ANSWERED' in uflags:
                 if attr is None:
                     attr = self.C.settings.attrlist.value[ATTR_ANSWERED]
                 answered = True
