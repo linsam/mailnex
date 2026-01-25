@@ -2218,6 +2218,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
         cache clear         clear whole cache
         cache cleardec      clear decrypted data from cache
+        cache dump          show cache contents (verbose)
         cache info          show information about the cache
         """
         args = args.strip()
@@ -2228,12 +2229,15 @@ class Cmd(cmdprompt.CmdPrompt):
             for i in self.C.cache.keys():
                 if '.d.' in i or 'BODY[d.' in i:
                     del self.C.cache[i]
+        elif args == 'dump':
+            for k,v in self.C.cache.items():
+                print("{}: {}".format(repr(k),repr(v)))
         elif args == 'info':
             # This approximates the size of the cache data.
             s = sys.getsizeof(self.C.cache)
             print("Cache structure: %7.3f %sB" % normalizeSize(s, bi=True))
             c = 0
-            for k,v in self.C.cache.iteritems():
+            for k,v in self.C.cache.items():
                 c += sys.getsizeof(k)
                 c += sys.getsizeof(v)
             print("Cache contents:  %7.3f %sB" % normalizeSize(c, bi=True))

@@ -403,7 +403,7 @@ class imap4ClientConnection(object):
         and exception)"""
         if self.idling:
             if self.debug:
-                print("Sending: done")
+                print("Sending: done (to stop idling)")
             self.socket.send(b"done\r\n")
             self.processUntilTag(b"T{}".format(self.tag))
         # TODO: Allow tags to be templated or something.
@@ -505,14 +505,15 @@ class imap4ClientConnection(object):
         #       Can also be results, e.g. * FLAGS (\Answered \Seen)
         #       or value results, e.g. * 6347 EXISTS
         #                              * 0 RECENT
-        #print("notag",line)
+        if self.debug:
+            print("processUntagged", line)
         # Start by looking for response-cond-state
         r = re.match(re_untagged, line)
         if r is not None:
             status, code, string = r.groups()
             # TODO, look for content to cache and/or callback
             if self.debug:
-                print("response",status,code,string)
+                print("response cond-state",status,code,string)
             if code:
                 self.processCodes(status, code, string)
         else:
@@ -523,13 +524,19 @@ class imap4ClientConnection(object):
             r = re.match(re_numdat, line)
             if r is not None:
                 num, typ, data = r.groups()
+                if self.debug:
+                    print("response numdat", num, typ, data)
                 # message-data
                 if typ.upper() == b"FETCH":
                     if self.debug:
                         print("FETCH for %s" % num, data)
                     if self.cb_fetch:
+                        if self.debug:
+                            print("Calling fetch callback", self.cb_fetch)
                         self.cb_fetch(num, data)
                     if "fetch" in self.cbs:
+                        if self.debug:
+                            print("Calling fetch cbs", self.cbs)
                         self.cbs["fetch"](num, data)
                 elif typ.upper() == b"EXPUNGE":
                     if self.debug:
@@ -773,7 +780,11 @@ class imap4ClientConnection(object):
         oldcb = self.cb_fetch
         fetchlist = []
         def fetch_cb(message, data):
+            if self.debug:
+                print("imap:fetch:fetch_cb",message,data)
             fetchlist.append((message, data))
+            if self.debug:
+                print("imap:fetch:fetch_cb returning")
         self.cb_fetch = fetch_cb
         try:
             res, code, string = self.doSimpleCommand(b"fetch %s %s" % (message, what))
