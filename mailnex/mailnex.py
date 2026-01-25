@@ -7003,7 +7003,7 @@ def interact(invokeOpts):
     except KeyboardInterrupt:
         cmd.do_exit("")
     except Exception as ev:
-        if True or options.debug.exception:
+        if options.debug.exception:
             raise
         else:
             print("Bailing on exception",ev)

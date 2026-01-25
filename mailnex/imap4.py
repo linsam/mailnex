@@ -170,11 +170,9 @@ class imap4ClientConnection(object):
             # Don't worry if the callback doesn't exist
             pass
     def processCodes(self, status, code, string):
-        print(repr(status),repr(code),repr(string))
         # Assert code[0] == '[' and code[-1] == ']'
         codes = code[1:-1].split()
         codename = codes[0].upper()
-        print(repr(codes))
         # These are 'resp-text-code' in the IMAP ABNF
         # IMAP4rev1 codes
         if codename == b"ALERT":
