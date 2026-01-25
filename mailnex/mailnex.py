@@ -594,9 +594,9 @@ def unpackStruct(data, options, depth=1, tag="", predesc=""):
     """Recursively unpack the structure of a message (as given by IMAP's BODYSTRUCTURE message-data)
 
     @param data hierarchy of BODYSTRUCTURE elements
-    @depth starting depth (may be used for indenting output, or for debugging)
-    @tag current identifier of parent. For the first call, this should be the message ID. It will be dot separated for sub parts.
-    @predesc prefix description. Mostly used internally for when we hit a message/rfc822.
+    @param depth starting depth (may be used for indenting output, or for debugging)
+    @param tag current identifier of parent. For the first call, this should be the message ID. It will be dot separated for sub parts.
+    @param predesc prefix description. Mostly used internally for when we hit a message/rfc822.
     @return array of parts, which may contain array of parts.
     """
     # This is slightly tricky because of the way they ordered it. I haven't
