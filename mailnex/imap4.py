@@ -786,6 +786,10 @@ class imap4ClientConnection(object):
             if self.debug:
                 print("imap:fetch:fetch_cb returning")
         self.cb_fetch = fetch_cb
+        if type(message)==type(str()):
+            message = message.encode("utf8")
+        if type(what)==type(str()):
+            what = what.encode("utf8")
         try:
             res, code, string = self.doSimpleCommand(b"fetch %s %s" % (message, what))
         except Exception:
@@ -830,13 +834,15 @@ class imap4ClientConnection(object):
         return self.caps
     def search(self, charset, query):
         searchres = []
+        charset = charset.encode("ascii")
+        query = query.encode("ascii") # TODO: Encode based on charset?
         def cb(typ, data):
             searchres.extend(data.split())
         oldsearch = self.cb_search
         self.cb_search = cb
-        res, code, string = self.doSimpleCommand("SEARCH CHARSET %s %s" % (charset, query))
+        res, code, string = self.doSimpleCommand(b"SEARCH CHARSET %s %s" % (charset, query))
         self.cb_search = oldsearch
-        if res != "OK":
+        if res != b"OK":
             raise imap4Exception("Failed to do search: %s %s" % (res, string))
         return searchres
 
