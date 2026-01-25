@@ -4888,7 +4888,11 @@ class Cmd(cmdprompt.CmdPrompt):
     @argsToMessageList
     @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
     def do_show(self, msglist):
-        """Show the raw, unprocessed message"""
+        """Show the raw, unprocessed message
+
+        Unlike `print` or `Print`, this fetches the message fresh from the
+        server and doesn't look at nor save into the cache.
+        """
         C = self.C
         M = C.connection
         if msglist is None:
@@ -4899,16 +4903,19 @@ class Cmd(cmdprompt.CmdPrompt):
             msgs = [index]
         else:
             msgs = msglist
-        content = b""
+        content = ""
         for index in msgs:
-            data = M.fetch(index, b'(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+            data = M.fetch(str(index), b'(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
             parts = processImapData(data[0][1], self.C.settings)[0]
             headers = getResultPart(b'BODY[HEADER]', parts)
             body = getResultPart(b'BODY[TEXT]', parts)
             #content = headers.encode('utf-8') + body.encode('utf-8')
-            content += b"Message {}:\n".format(index) + str(headers) + str(body)
+            breakpoint()
+            content += "Message {}:\n".format(index) + headers.decode() + body.decode()
         # TODO: Process content for control chars?
-        res = self.runAProgramWithInput(["less"], content)
+        # TODO: Restore external pager
+        #res = self.runAProgramWithInput(["less"], content)
+        print(content)
 
     @showExceptions
     def do_mail(self, args):
