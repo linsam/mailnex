@@ -207,8 +207,8 @@ class CmdPrompt(cmd.Cmd):
         origPrompt = self.prompt
         self.prompt = prompt
         origHistory = self.history
-        origCompleter = self.cli.application.buffer.completer
-        self.cli.application.buffer.completer = completer
+        #origCompleter = self.cli.application.buffer.completer
+        #self.cli.application.buffer.completer = completer
         # TODO: Interpret titlefunc!
         tmphistory = prompt_toolkit.history.InMemoryHistory()
         # FIXME: This doesn't stop the up-arrow from seeing previously entered
@@ -219,16 +219,15 @@ class CmdPrompt(cmd.Cmd):
         # then it cannot be restored when we are done here. Probably we should
         # be creating a new temporary Buffer object and attaching it to the
         # application instead!
-        self.cli.application.buffer.history = tmphistory
+        #self.cli.application.buffer.history = tmphistory
         self.lexerEnabled = False
-        self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
+        #self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
         try:
-            text = self.cli.run(False)
-            text = text.text
+            text = self.cli.prompt()
         finally:
             self.prompt = origPrompt
-            self.cli.application.buffer.history = origHistory
-            self.cli.application.buffer.completer = origCompleter
+            #self.cli.application.buffer.history = origHistory
+            #self.cli.application.buffer.completer = origCompleter
             self.lexerEnabled = True
         return text
 

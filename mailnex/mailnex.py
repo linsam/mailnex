@@ -2498,8 +2498,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 c.poller.start(pyuv.UV_READABLE, self.checkData)
                 c.doIdle()
             else:
-                self.C.bgtimer.stop()
-                self.C.bgtimer.start(self.bgcheck, 1, 5)
+                pass
+                #self.C.bgtimer.stop()
+                #self.C.bgtimer.start(self.bgcheck, 1, 5)
 
         except KeyboardInterrupt:
             print("Aborting")
@@ -2676,10 +2677,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 pass
             self.C.cache[p] = flags
             l = lambda: print("New flags:", flags, "old flags:", oldflags)
-            if self.cli._is_running and self.C.settings.debug.general:
-                self.cli.run_in_terminal(l)
-            if self.cli._is_running:
-                self.cli.invalidate()
+#            if self.cli._is_running and self.C.settings.debug.general:
+#                self.cli.run_in_terminal(l)
+#            if self.cli._is_running:
+#                self.cli.invalidate()
 
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing
