@@ -153,6 +153,7 @@ import shutil
 import io
 from io import BytesIO
 from io import StringIO
+import codecs
 haveGpg = False
 haveGpgme = False
 try:
@@ -590,7 +591,7 @@ class structureMessage(structureRoot):
         assert isinstance(sub, structureRoot), "%s isn't a structureRoot or similar" % type(sub)
         self.subs.append(sub)
 
-def unpackStruct(data, options, depth=1, tag="", predesc=""):
+def unpackStruct(data, options, depth=1, tag=b"", predesc=""):
     """Recursively unpack the structure of a message (as given by IMAP's BODYSTRUCTURE message-data)
 
     @param data hierarchy of BODYSTRUCTURE elements
@@ -627,6 +628,8 @@ def unpackStruct(data, options, depth=1, tag="", predesc=""):
     # BODYSTRUCTURE. In particular, that means that for message/rfc822, we
     # don't recurse on the non-string initial list, but on the body structure
     # element at index 8
+    if options.debug.struct:
+        print("unpackStruct: depth:{}, tag:{}, data:{}".format(repr(depth), repr(tag), repr(data)))
     extra = ""
     this = None
     if isinstance(data[0], list):
@@ -644,7 +647,7 @@ def unpackStruct(data, options, depth=1, tag="", predesc=""):
             print("%s   %s%s/%s%s" % (tag, predesc, "multipart", data[i], extra))
         j = 1
         for dat in data[:i]:
-            this.addSub(unpackStruct(dat, options, depth + 1, tag + '.' + str(j)))
+            this.addSub(unpackStruct(dat, options, depth + 1, tag + b'.' + b'%d'%(j)))
             j += 1
     else:
         # If we are message/rfc822, then we have further subdivision!
@@ -730,7 +733,7 @@ def flattenStruct(struct):
         # display to terminal!
         parts[struct.tag] = struct
         #structureStrings.append("%s   %s/%s%s" % (struct.tag, struct.type_, struct.subtype, extra))
-        innerTag = ".".join(struct.tag.split('.')[1:])
+        innerTag = b".".join(struct.tag.split(b'.')[1:])
         # First pass, we'll just grab all text/plain parts. Later we'll
         # want to check disposition, and later we'll want to deal with
         # multipart/alternative better (and multipart/related)
@@ -1854,7 +1857,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # too heavy. I think this must be what Vim felt like trying to be
             # compatible with vi. Maybe we do like them, have a compatibility
             # flag to parse (sortof) like mailx, or use a better syntax
-            map(messages.add, parseRange(i))
+            for j in parseRange(i): messages.add(j)
         return list(messages)
 
     def precmd(self, line):
@@ -3275,7 +3278,6 @@ class Cmd(cmdprompt.CmdPrompt):
         if maxChildrenMsg:
             showReplList(messageLeaders[maxChildrenMsg])
         #return
-        import codecs
         # NOTE: python3 has an encoding parameter directly in open, no need
         # for codecs.open.
         # See
@@ -3603,7 +3605,7 @@ class Cmd(cmdprompt.CmdPrompt):
         #
         #
         structstr = getResultPart(b'BODYSTRUCTURE', parts[1])
-        struct = unpackStruct(structstr, self.C.settings, tag=str(index))
+        struct = unpackStruct(structstr, self.C.settings, tag=b"%d"%index)
         structureStrings = []
         fetchParts = []
         # Add an initial structure string about message security info (we've
@@ -3659,8 +3661,8 @@ class Cmd(cmdprompt.CmdPrompt):
                                     # TODO: Handle displaying multiple signatures
                                     sigres = sigresToStringGpg(ctx, sig)
                                 m = email.message_from_string(result)
-                                secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + ".d")
-                                self.C.cache["{}.d.SUBSTRUCTURE".format(struct.tag)] = secondaryStruct
+                                secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + b".d")
+                                self.C.cache[b"%s.d.SUBSTRUCTURE"%(struct.tag)] = secondaryStruct
                         elif haveGpgme:
                             inner = struct.tag.split('.')[1:]
                             encpart = ".".join(inner + ['2'])
@@ -3678,7 +3680,7 @@ class Cmd(cmdprompt.CmdPrompt):
                                     # TODO: Handle displaying multiple signatures
                                     sigres = sigresToString(ctx, sig)
                                 m = email.message_from_string(result.getvalue())
-                                secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + ".d")
+                                secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + b".d")
                                 self.C.cache["{}.d.SUBSTRUCTURE".format(struct.tag)] = secondaryStruct
 
             if struct.type_ == "multipart" and struct.subtype == "signed":
@@ -3713,7 +3715,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             # TODO: Handle displaying multiple signatures
                             sigres = sigresToStringGpg(ctx, sig)
                     elif haveGpgme:
-                        inner = struct.tag.split('.')[1:]
+                        inner = struct.tag.split(b'.')[1:]
                         messageTag = ".".join(inner + ['1'])
                         signatureTag = ".".join(inner + ['2'])
                         data = self.cacheFetch(index, b'(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])'%(messageTag, messageTag, signatureTag))[0]
@@ -3741,25 +3743,25 @@ class Cmd(cmdprompt.CmdPrompt):
             structureStrings.append("%s   %s/%s%s %s" % (
                 struct.tag,
                 struct.type_,
-                struct.subtype,
+                struct.subtype.decode('ascii'),
                 extra,
                 sigres if sigres else "",
                 ))
-            innerTag = ".".join(struct.tag.split('.')[1:])
+            innerTag = b".".join(struct.tag.split(b'.')[1:])
             # First pass, we'll just grab all text/plain parts. Later we'll
             # want to check disposition, and later we'll want to deal with
             # multipart/alternative better (and multipart/related)
-            if (allParts and struct.type_ == "text") or (not allParts and struct.type_ == "text" and struct.subtype == "plain"):
+            if (allParts and struct.type_ == b"text") or (not allParts and struct.type_ == b"text" and struct.subtype == b"plain"):
                 # TODO: write the following a bit more efficiently. Like,
                 # split only once, use second part of return only, perhaps?
                 # TODO: Is skip ever true?
                 if not skip:
                     # Default: Show each section's headers too
-                    if innerTag != "":
+                    if innerTag != b"":
                         # If this is the outermost part (e.g. this isn't a
                         # multipart message), then there isn't a MIME header.
                         # Only get the section MIME headers for lower levels.
-                        fetchParts.append(("%s.MIME" % innerTag, None))
+                        fetchParts.append((b"%s.MIME" % innerTag, None))
                     fetchParts.append((innerTag, struct))
 #            if allParts and not isinstance(struct, structureMessage) and not hasattr(struct, "subs"):
 #                # Probably useful to display, not a multipart itself, or a
@@ -3773,8 +3775,8 @@ class Cmd(cmdprompt.CmdPrompt):
                     extra += " (%s)" % struct.disposition[0]
 
                 structureStrings.append("%*s   `-> %s/%s%s" % (len(struct.tag), "", struct.type_, struct.subtype, extra))
-                fetchParts.append(("%s.MIME" % innerTag, None))
-                fetchParts.append(("%s.HEADER" % innerTag, struct))
+                fetchParts.append((b"%s.MIME" % innerTag, None))
+                fetchParts.append((b"%s.HEADER" % innerTag, struct))
 
                 if hasattr(innerstruct,'subs'):
                     # Switch to the inner for further processing; will fall
@@ -3782,7 +3784,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     # This is not a multipart message. Plan to fetch this
                     # terminal, then end with no further processing
-                    fetchParts.append(("%s.TEXT" % innerTag, innerstruct))
+                    fetchParts.append((b"%s.TEXT" % innerTag, innerstruct))
                     return
             if hasattr(struct, "subs"):
                 # This is a multipart, walk through the sub parts recursively
@@ -3799,13 +3801,13 @@ class Cmd(cmdprompt.CmdPrompt):
         elif len(fetchParts) == 1 and len(fetchParts[0][0]) == 0:
             # This message doesn't have parts, so fetch "part 1" to get the
             # body
-            fparts = ["BODY.PEEK[1]"]
-            fetchParts[0] = (u'1', fetchParts[0][1])
-        fparts = ["BODY.PEEK[%s]" % s[0] for s in fetchParts]
+            fparts = [b"BODY.PEEK[1]"]
+            fetchParts[0] = (b'1', fetchParts[0][1])
+        fparts = [b"BODY.PEEK[%s]" % s[0] for s in fetchParts]
         if fparts:
-            data = self.cacheFetch(index, '(%s)' % " ".join(fparts))[0]
+            data = self.cacheFetch(index, b'(%s)' % b" ".join(fparts))[0]
         for o in fetchParts:
-            dstr = getResultPart("BODY[%s]" % (o[0],), data[1])
+            dstr = getResultPart(b"BODY[%s]" % (o[0],), data[1])
             if o[1] is None and isinstance(o[1], structureMultipart):
                 o[1].encoding = None
                 o[1].attrs = None
@@ -3820,16 +3822,16 @@ class Cmd(cmdprompt.CmdPrompt):
                 continue
             # Finally, check for character set encoding
             # and other layers, like format flowed
-            if o[1] and hasattr(o[1], "attrs") and o[1].attrs and 'charset' in o[1].attrs:
-                charset = o[1].attrs['charset']
+            if o[1] and hasattr(o[1], "attrs") and o[1].attrs and b'charset' in o[1].attrs:
+                charset = o[1].attrs[b'charset']
                 try:
                     # TODO: Is this possibly a security risk? Is there any
                     # value that causes the decode function to go awry?
-                    d = dstr.decode(charset)
+                    d = dstr.decode(charset.decode())
                     # Look for common control characters that likely mean a
                     # decode error. Most common is MS Outlook encoding text in
                     # CP1252 and then claiming it is iso-8859-1.
-                    for c in map(unichr, range(0x80,0xa0)):
+                    for c in map(chr, range(0x80,0xa0)):
                         if c in d:
                             if self.C.settings.debug.general:
                                 print("Found control characters!")
@@ -3854,7 +3856,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             d = "Part %s: failed to decode as %s" % (o[0], charset)
                         realcharset = None
                 except LookupError as err:
-                    d = "Part %s: failed to decode as %s" % charset
+                    d = "Part %s: failed to decode as %s" % (o[0], charset)
                     # TODO: Attempt to recover? Maybe the contents are just
                     # ASCII anyway?
                 else:
@@ -4016,6 +4018,8 @@ class Cmd(cmdprompt.CmdPrompt):
             # Print command?
             headerstr += headers
             return headerstr
+        if isinstance(headers, bytes):
+            headers=headers.decode()
         msg = email.message_from_string(headers)
         for header in ignore:
             if header in msg:
@@ -4090,13 +4094,13 @@ class Cmd(cmdprompt.CmdPrompt):
                 body += "\033[7mPart %s:\033[0m\n" % (part[0] or '1')
             if self.C.settings.debug.general:
                 if hasattr(part[1], 'encoding') and part[1].encoding:
-                    body += "encoding: " + part[1].encoding + "\r\n"
+                    body += "encoding: " + part[1].encoding.decode() + "\r\n"
                 if part[1]:
                     body += "struct: " + repr(part[1].__dict__) + "\r\n"
             if headerstr != "":
                 body += headerstr
                 headerstr = u''
-            if part[0].endswith(".HEADER"):
+            if part[0].endswith(b".HEADER"):
                 body += self.filterHeaders(part[2], self.C.settings.ignoredheaders.value, self.C.settings.headerorder.value, allHeaders)
             elif not part[1]:
                 body += part[2]
@@ -4178,13 +4182,13 @@ class Cmd(cmdprompt.CmdPrompt):
         if encoding:
             # Some mailers do weird casing, so we'll normalize it
             encoding = encoding.lower()
-        if encoding in [None, "", "nil", '7bit', '8bit', '7-bit', '8-bit']:
+        if encoding in [None, b"", b"nil", b'7bit', b'8bit', b'7-bit', b'8-bit']:
             # Don't need to do anything
             return data
-        elif encoding == "quoted-printable":
-            return data.decode("quopri")
-        elif encoding == "base64":
-            return data.decode("base64")
+        elif encoding == b"quoted-printable":
+            return codecs.decode(data, "quopri")
+        elif encoding == b"base64":
+            return codecs.decode(data, "base64")
         print("unknown encoding %s; can't decode for display\r\n" % (encoding))
         # TODO: raise an exception instead?
         return None
