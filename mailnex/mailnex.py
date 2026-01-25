@@ -6640,7 +6640,7 @@ def getOptionsSet():
     Each section is optional. The most specific descriptor will be used.
     See 'help authentication' for more information.
     """))
-    options.addOption(settings.BoolOption("allpartlabels", 0, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
+    options.addOption(settings.BoolOption("allpartlabels", False, doc="Show all part separation labels when displaying multi-part messages in print.\nWhen unset, only show separators for sub-messages."))
     options.addOption(settings.FlagsOption("altfrom", [], doc="""Alternative Addresses for user.
 
     There are 2 common use cases. In one, the user has multiple identities, and you'd like to
@@ -6733,7 +6733,7 @@ def getOptionsSet():
     # Use the username and hostname of this machine as a (hopefully reasonable)
     # guess for the from line.
     options.addOption(settings.StringOption("from", "%s@%s" % (getpass.getuser(), os.uname()[1]), doc="Value to use for From field of composed email messages"))
-    options.addOption(settings.BoolOption("headers", 1, doc="""Show headers on events that update them.
+    options.addOption(settings.BoolOption("headers", True, doc="""Show headers on events that update them.
 
     This includes things like connecting and receiving new messages. This setting covers the default.
     Individual events can be controlled by seting headers_EVENT where EVENT is the event's name.
@@ -6744,7 +6744,7 @@ def getOptionsSet():
     """))
     options.addOption(settings.BoolOption("headers_folder", None))
     options.addOption(settings.BoolOption("headers_newmsg", None))
-    options.addOption(settings.BoolOption("headerstats", 0, doc="Show information about the page of message headers displayed in headers and z/Z commands"))
+    options.addOption(settings.BoolOption("headerstats", False, doc="Show information about the page of message headers displayed in headers and z/Z commands"))
     options.addOption(settings.StringOption("headline", "{this}{attr}{num:4} {date:19} {from:<15.15} {t.italic_blue}{subject:<30.30}{t.normal} |{flags}",
         doc="""Format string for headers lines (e.g. in headers and from commands)
 
