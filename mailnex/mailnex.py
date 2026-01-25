@@ -338,7 +338,7 @@ def getResultPart(part, data):
     # weird like returning a class or something.
     raise mailnexPartNotFound("Part %s not found" % part)
 
-def sanatize(data, condense=True, replace=False):
+def sanitize(data, condense=True, replace=False):
     """Remove control characters and (optionally) condense space.
 
     Most importantly, this removes escape and mode switching characters.
@@ -354,9 +354,9 @@ def sanatize(data, condense=True, replace=False):
     # every time this function is called...
 
     # ASCII control chars are 0-0x1f and 0x7f, called C0
-    c0 = range(0, 0x20) + [0x7f]
+    c0 = list(range(0, 0x20)) + [0x7f]
     # ISO 6429 has additional, C1
-    c1 = range(0x80,0xa0)
+    c1 = list(range(0x80,0xa0))
     # However, we'll leave gaps for whitespace generating chars, which will be
     # handled by the condense option
     # We will leave BS, Del, VT, and FF for regular removal here. VT and FF
@@ -365,13 +365,14 @@ def sanatize(data, condense=True, replace=False):
     c0.remove(0xa) # LF (line feed or Unix EOL (end of line)
     c0.remove(0xd) # CR (carriage return. Part of Windows and Network new line (CR-LF))
     c1.remove(0x85) # NEL (next line)
-    stripChars = map(unichr, c0 + c1)
-    condenseChars = map(unichr, [0x9, 0xa, 0xd, 0x20, 0x85])
+    stripChars = map(chr, c0 + c1)
+    condenseChars = map(chr, [0x9, 0xa, 0xd, 0x20, 0x85])
 
     res = []
     lastChar = None
     for i in data:
         if condense and i in condenseChars:
+            # TODO: This probably doesn't work if we were given a bytes()
             if lastChar != ' ':
                 res.append(' ')
                 lastChar = ' '
@@ -405,7 +406,12 @@ def sanatize(data, condense=True, replace=False):
             continue
         res.append(i)
         lastChar = i
-    return "".join(res)
+    def normalize_int_to_char(a):
+        # If we were given a bytes() we now have an array of ints. If we were given a str() we have an array of str(). Normalize to str
+        if isinstance(a, int):
+            a = chr(a)
+        return a
+    return "".join(map(normalize_int_to_char,res))
 
 class MessageList(object):
     """Acts like a set, but automatically collapses ranges.
@@ -5845,8 +5851,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     headline = self.C.settings.headline.value
                 # Sanitize strings for display
-                subject = sanatize(subject)
-                froms = map(sanatize, froms)
+                subject = sanitize(subject)
+                froms = map(sanitize, froms)
 
                 attrlist = self.C.settings.attrlist.value
                 if level:
