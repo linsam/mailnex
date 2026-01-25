@@ -5860,7 +5860,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     headline = self.C.settings.headline.value
                 # Sanitize strings for display
                 subject = sanitize(subject)
-                froms = map(sanitize, froms)
+                froms = list(map(sanitize, froms))
 
                 attrlist = self.C.settings.attrlist.value
                 if level:
@@ -5875,7 +5875,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         'gnum': gnum,
                         'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
                         'subject': subject,
-                        'flags': " ".join(flags),
+                        'flags': " ".join(map(lambda x: x.decode('ascii'), flags)),
                         'from': froms[0],
                         'leader': leader,
                         'level': level,
@@ -6315,7 +6315,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     continue
                 print("\n--- {} ---".format(name))
                 for opt in optset:
-                    print(unicode(opt))
+                    print(opt)
         else:
             sep = args.find('=')
             if sep == -1:
@@ -6342,7 +6342,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 elif args[-1] == '?':
                     # Print current value
                     try:
-                        print(unicode(self.C.settings[args[:-1]]))
+                        print(self.C.settings[args[:-1]])
                     except KeyError:
                         print("No setting named %s" % args[:-1])
                 elif args[-1] == '&':
