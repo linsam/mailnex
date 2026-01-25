@@ -859,7 +859,7 @@ def processImapData(text, options):
         pos += 1
         c = text[pos:pos+1]
         if options.debug.parse:
-            print(" Processing {} @ {}; inquote {} inspace {} inbrace {} wasquoted {} curtext is".format(repr(c), pos, inquote, inspace, inbrace, wasquoted, curtext))
+            print(" Processing {} @ {}; inquote {} inspace {} inbrace {} wasquoted {} literalSize {} curtext is".format(repr(c), pos, inquote, inspace, inbrace, wasquoted, repr(literalSizeString), repr(curtext)))
         if c == b'\\' and inquote:
             # Backslash *should* only precede a doublequote or a backslash,
             # but we'll let it escape anything
@@ -908,7 +908,7 @@ def processImapData(text, options):
         if inspace and c == b'{':
             inspace = False
             inbrace = True
-            literalSizeString = ""
+            literalSizeString = b""
             continue
         inspace = False
         if c == b'"':
