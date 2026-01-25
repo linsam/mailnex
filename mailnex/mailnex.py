@@ -3022,16 +3022,16 @@ class Cmd(cmdprompt.CmdPrompt):
             t2 = None
             # slow path, but interruptable
             for i in range(1,self.C.lastMessage + 1):
-                res = self.C.connection.fetch(i, '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
+                res = self.C.connection.fetch(i, b'(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
                 data = processImapData(res[0][1], self.C.settings)
-                headertext = getResultPart('body[header.FIELDS (references in-reply-to message-id)]', data[0])
+                headertext = getResultPart(b'body[header.FIELDS (references in-reply-to message-id)]', data[0])
                 headers = processHeaders(headertext)
-                uid = getResultPart('uid', data[0])
+                uid = getResultPart(b'uid', data[0])
                 processMessage(i, uid, headers)
         else:
             print("list:",msglist)
             m = MessageList(msglist)
-            res = self.C.connection.fetch(m.imapListStr(), '(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
+            res = self.C.connection.fetch(m.imapListStr(), b'(UID BODY.PEEK[HEADER.FIELDS (references in-reply-to message-id)])')
             t2=time.time()
             for i,data in res:
                 i = int(i)
@@ -3074,9 +3074,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 # Which is a wrong interpretation of the results. However,
                 # since we know we only have one set of that, we'll use the
                 # ']' as the key.
-                headertext = getResultPart(']', data[0])
+                headertext = getResultPart(b']', data[0])
                 headers = processHeaders(headertext)
-                uid = getResultPart('uid', data[0])
+                uid = getResultPart(b'uid', data[0])
                 # TODO: Not part of the RFC, but a useful extension would be
                 # to also scan for attached messages (e.g. message/rfc822
                 # parts) and process those as well.
@@ -3442,7 +3442,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # whatever
                 # TODO: Add attachment file names (when available) to search
                 # data for method, so that they can be found.
-                data = M.fetch(i, '(BODY.PEEK[HEADER] BODY.PEEK[1] UID)')
+                data = M.fetch(i, b'(BODY.PEEK[HEADER] BODY.PEEK[1] UID)')
                 #print(typ)
                 #print(data)
                 #print(data[0][1])
@@ -3451,8 +3451,8 @@ class Cmd(cmdprompt.CmdPrompt):
 
                 data = processImapData(data[0][1], self.C.settings)
 
-                headertext = getResultPart('body[header]', data[0])
-                uid = int(getResultPart('UID', data[0]))
+                headertext = getResultPart(b'body[header]', data[0])
+                uid = int(getResultPart(b'UID', data[0]))
                 headers = processHeaders(headertext)
                 print("\r%i (%i)"% (i, uid), end='')
                 sys.stdout.flush()
@@ -3484,7 +3484,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # is, message header "Date:" and IMAP's INTERNALDATE) and
                 # store as values to allow for ranged searches
 
-                termgenerator.index_text(getResultPart('body[1]', data[0]))
+                termgenerator.index_text(getResultPart(b'body[1]', data[0]))
                 # Support full document retrieval but without reference info
                 # (we'll have to fully rebuild the db to get new stuff. TODO:
                 # store UID and such)
@@ -3602,7 +3602,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # numbered parts give us the parts.
         #
         #
-        structstr = getResultPart('BODYSTRUCTURE', parts[1])
+        structstr = getResultPart(b'BODYSTRUCTURE', parts[1])
         struct = unpackStruct(structstr, self.C.settings, tag=str(index))
         structureStrings = []
         fetchParts = []
@@ -3699,8 +3699,8 @@ class Cmd(cmdprompt.CmdPrompt):
                         messageTag = ".".join(inner + ['1'])
                         signatureTag = ".".join(inner + ['2'])
                         data = self.cacheFetch(index, '(BODY.PEEK[{}.MIME] BODY.PEEK[{}] BODY.PEEK[{}])'.format(messageTag, messageTag, signatureTag))[0]
-                        messageData = getResultPart('BODY[{}.MIME]'.format(messageTag), data[1]) + getResultPart('BODY[{}]'.format(messageTag), data[1])
-                        sigData = getResultPart('BODY[{}]'.format(signatureTag), data[1])
+                        messageData = getResultPart(b'BODY[%s.MIME]'%(messageTag), data[1]) + getResultPart(b'BODY[%s]'%(messageTag), data[1])
+                        sigData = getResultPart(b'BODY[%s]'%(signatureTag), data[1])
 
                         ctx = gpg.Context()
                         try:
@@ -3716,9 +3716,9 @@ class Cmd(cmdprompt.CmdPrompt):
                         inner = struct.tag.split('.')[1:]
                         messageTag = ".".join(inner + ['1'])
                         signatureTag = ".".join(inner + ['2'])
-                        data = self.cacheFetch(index, '(BODY.PEEK[{}.MIME] BODY.PEEK[{}] BODY.PEEK[{}])'.format(messageTag, messageTag, signatureTag))[0]
-                        messageData = getResultPart('BODY[{}.MIME]'.format(messageTag), data[1]) + getResultPart('BODY[{}]'.format(messageTag), data[1])
-                        sigData = getResultPart('BODY[{}]'.format(signatureTag), data[1])
+                        data = self.cacheFetch(index, b'(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])'%(messageTag, messageTag, signatureTag))[0]
+                        messageData = getResultPart(b'BODY[%s.MIME]'%(messageTag), data[1]) + getResultPart(b'BODY[%s]'%(messageTag), data[1])
+                        sigData = getResultPart(b'BODY[%s]'%(signatureTag), data[1])
 
                         ctx = gpgme.Context()
                         msgdat = io.BytesIO(messageData)
@@ -4198,11 +4198,11 @@ class Cmd(cmdprompt.CmdPrompt):
 
         Note: doesn't decode characterset data into unicode"""
         #print("Fetching attachment")
-        data = self.C.connection.fetch(msgpart[0], '(BODY.PEEK[{}])'.format(msgpart[1]))
+        data = self.C.connection.fetch(msgpart[0], b'(BODY.PEEK[%s])'%(msgpart[1]))
         #print("processing data")
         parts = processImapData(data[0][1], self.C.settings)
         #print("getting part")
-        data = getResultPart('BODY[{}]'.format(msgpart[1]), parts[0])
+        data = getResultPart(b'BODY[%s]'%(msgpart[1]), parts[0])
         #print(data)
         #print(part.encoding)
         data = self.transferDecode(data, part.encoding)
@@ -4231,7 +4231,7 @@ class Cmd(cmdprompt.CmdPrompt):
             return
         filename=args[1]
         msg = args[0]
-        data = self.C.connection.fetch(msg, '(BODY.PEEK[])')
+        data = self.C.connection.fetch(msg, b'(BODY.PEEK[])')
         parts = processImapData(data[0][1], self.C.settings)
         data = parts[0][1]
         with open(filename, "wa")  as outfile:
@@ -4310,7 +4310,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     fname=None
                     #print("disp: {}".format(repr(val.disposition[1])))
                     try:
-                        fname = getResultPart('filename', val.disposition[1])
+                        fname = getResultPart(b'filename', val.disposition[1])
                     except mailnexPartNotFound:
                         pass
                     if val.tag == "":
@@ -4361,8 +4361,8 @@ class Cmd(cmdprompt.CmdPrompt):
         return
 
     def getStructure(self, index):
-        res = self.cacheFetch(index, '(BODYSTRUCTURE)')[0]
-        struct = getResultPart('BODYSTRUCTURE', res[1])
+        res = self.cacheFetch(index, b'(BODYSTRUCTURE)')[0]
+        struct = getResultPart(b'BODYSTRUCTURE', res[1])
         struct = unpackStruct(struct, self.C.settings)
         struct = flattenStruct(struct)
         return struct
@@ -4823,7 +4823,7 @@ class Cmd(cmdprompt.CmdPrompt):
             return
         M = self.C.connection
         index = int(args)
-        data = M.fetch(index, '(BODY.PEEK[HEADER])')
+        data = M.fetch(index, b'(BODY.PEEK[HEADER])')
         data = processImapData(data[0][1], self.C.settings)
         headers = processHeaders(data[0][1])
         term = None
@@ -4890,10 +4890,10 @@ class Cmd(cmdprompt.CmdPrompt):
             msgs = msglist
         content = b""
         for index in msgs:
-            data = M.fetch(index, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
+            data = M.fetch(index, b'(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
             parts = processImapData(data[0][1], self.C.settings)[0]
-            headers = getResultPart('BODY[HEADER]', parts)
-            body = getResultPart('BODY[TEXT]', parts)
+            headers = getResultPart(b'BODY[HEADER]', parts)
+            body = getResultPart(b'BODY[TEXT]', parts)
             #content = headers.encode('utf-8') + body.encode('utf-8')
             content += b"Message {}:\n".format(index) + str(headers) + str(body)
         # TODO: Process content for control chars?
@@ -5558,7 +5558,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # For now, only support showing one set of headers. This is a
             # debugging command for now anyhow.
             index = msglist[0]
-        data = M.fetch(args, '(BODY.PEEK[HEADER])')
+        data = M.fetch(args, b'(BODY.PEEK[HEADER])')
         headers = processHeaders(processImapData(data[0][1])[0][1], self.C.settings)
         if "subject" in headers:
             print("Subject:", headers["subject"][-1])
@@ -5599,7 +5599,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # p.disposition looks like ["attachment", ["filename", "file1.txt"]]
                 if p.disposition[1]:
                     try:
-                        d = getResultPart('filename', p.disposition[1])
+                        d = getResultPart(b'filename', p.disposition[1])
                         # TODO: Interpret name (may be a quopri or b64 encoded
                         # header)
                         disp += " (name: {})".format(d)
