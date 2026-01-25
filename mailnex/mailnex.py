@@ -1,17 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Ubuntu 14.04 doesn't have xapian for python3. Quite possibly other modules
-# aren't available as well.
-#
-# I might have to demarcate Ubuntu 16.04 and CentOS 7 as minimum OSes. Don't
-# know *yet* if packages are supported there either.
-#
-# At any rate, might as well make this module as close to python 3 as possible
-# for now, so that once we can change over, it'll be easier.
-from __future__ import print_function
-from __future__ import unicode_literals
-
 #  Search indexing
 #  ---------------
 # Terms:
@@ -4036,7 +4025,7 @@ class Cmd(cmdprompt.CmdPrompt):
         for header in headerOrder:
             if header in msg:
                 for val in msg.get_all(header):
-                    enc = unicode(email.header.make_header(email.header.decode_header(val)))
+                    enc = email.header.make_header(email.header.decode_header(val))
                     tmpl = "format_header_{}".format(header.lower())
                     if tmpl in self.C.settings:
                         prefheaders += self.C.settings[tmpl].value.format(t=self.C.t,header=header,value=enc) + '\n'
@@ -4049,7 +4038,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 del msg[header]
         for header in msg.items():
             key, val = header
-            enc = unicode(email.header.make_header(email.header.decode_header(val)))
+            enc = email.header.make_header(email.header.decode_header(val))
             tmpl = "format_header_{}".format(key.lower())
             if tmpl in self.C.settings:
                 otherheaders += self.C.settings[tmpl].value.format(t=self.C.t,header=key,value=enc) + '\n'
@@ -5804,7 +5793,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # the user wants, they can see both.
                     date = date.astimezone(dateutil.tz.tzlocal())
                 try:
-                    subject = unicode(email.header.make_header(email.header.decode_header(envelope.subject)))
+                    subject = email.header.make_header(email.header.decode_header(envelope.subject))
                 except:
                     subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
@@ -5813,7 +5802,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 newfroms = []
                 for fr in froms:
                     try:
-                        newfroms.append(unicode(email.header.make_header(email.header.decode_header(fr))))
+                        newfroms.append(email.header.make_header(email.header.decode_header(fr)))
                     except:
                         try:
                             # TODO: Log warning about guessing?
@@ -6308,7 +6297,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("\n--- {} ---".format(name))
                 for opt in optset:
                     if opt.value != opt.default:
-                        print(unicode(opt))
+                        print(opt)
         elif args == "all":
             for name, optset in allsettings:
                 if len(optset) == 0:
