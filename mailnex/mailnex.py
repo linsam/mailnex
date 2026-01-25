@@ -4731,7 +4731,10 @@ class Cmd(cmdprompt.CmdPrompt):
         # for styling
         content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
-        res = self.runAProgramWithInput(["less","-R"], content)
+        # TODO: Restore external pager
+        #res = self.runAProgramWithInput(["less","-R"], content)
+        print(content.decode('utf-8'))
+        res = 1
         if res == 0:
             # TODO: Allow asynchronous mode. That is, in mailx, we locally
             # keep track of the fact that the message was seen until the user
