@@ -490,7 +490,7 @@ class MessageList(object):
         for r in self.ranges:
             for i in range(r[0], r[1] + 1):
                 yield i
-        raise StopIteration()
+        return
     __iter__ = iterate
 
 
