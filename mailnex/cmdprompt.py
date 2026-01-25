@@ -223,7 +223,7 @@ class CmdPrompt(cmd.Cmd):
         self.lexerEnabled = False
         #self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
         try:
-            text = self.cli.prompt()
+            text = self.cli.prompt(self.prompt)
         finally:
             self.prompt = origPrompt
             #self.cli.application.buffer.history = origHistory
@@ -244,7 +244,7 @@ class CmdPrompt(cmd.Cmd):
         else:
             try:
                 #line = self.cli.run(True)
-                line = self.cli.prompt()
+                line = self.cli.prompt(self.prompt)
                 #line = line.text
             except EOFError:
                 line = 'EOF'
