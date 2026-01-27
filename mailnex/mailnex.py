@@ -5505,7 +5505,6 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 s.cacerts = self.C.settings.cacertsfile.value
             # TODO: Allow overriding CA somehow
-            s.cacerts="/etc/dovecot/dovecot.pem"
             # TODO: Allow user certificates
             s.connect(host, port, ssl)
             if user:

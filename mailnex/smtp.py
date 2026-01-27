@@ -112,6 +112,9 @@ class smtpClient(object):
             # TODO: Handle older python without the default context, like our
             # imap lib does (e.g. as on Ubuntu 14.04)
             if self.cacerts:
+                import os
+                if not os.access(self.cacerts, os.R_OK):
+                    print("WARNING: cannot access", self.cacerts)
                 context = ssl.create_default_context(cafile=self.cacerts)
             else:
                 context = ssl.create_default_context()
