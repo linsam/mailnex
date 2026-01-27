@@ -5150,6 +5150,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 return False
             self.C.printInfo("Sending message...")
 
+            import cProfile
+            profiler = cProfile.Profile()
+            profiler.enable()
             try:
                 origbcc = message.get_all('bcc',[])
                 res = self.sendMessage(editor, message)
@@ -5171,6 +5174,12 @@ class Cmd(cmdprompt.CmdPrompt):
                         print(ev)
             else:
                 break
+            finally:
+                profiler.disable()
+                import pstats
+                stats = pstats.Stats(profiler)
+                stats.sort_stats(pstats.SortKey.CUMULATIVE)
+                stats.print_stats()
         return res
 
     def sendMessage(self, editor, message):
