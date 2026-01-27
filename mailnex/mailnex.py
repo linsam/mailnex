@@ -7025,7 +7025,7 @@ def interact(invokeOpts):
         confFile = invokeOpts.config
     if confFile:
         # Walk through the config file
-        with open(confFile) as conf:
+        with open(confFile,"rb") as conf:
             print("reading conf from", confFile)
             postConfFolder = cmd.processConfig(confFile, 1, conf)
     if invokeOpts.account:
