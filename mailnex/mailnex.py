@@ -5193,7 +5193,10 @@ class Cmd(cmdprompt.CmdPrompt):
             m['Date'] = email.utils.formatdate(localtime=True) # Allow user to override local and possibly timezone?
         # Should headers: Message-Id
         if not 'Message-Id' in m:
-            m['Message-Id'] = email.utils.make_msgid("mailnex")
+            if self.C.settings.middomain:
+                m['Message-Id'] = email.utils.make_msgid("mailnex", self.C.settings.middomain)
+            else:
+                m['Message-Id'] = email.utils.make_msgid("mailnex")
         # Misc headers
         if not 'User-Agent' in m:
             # TODO: User-Agent isn't actually a mail header, it is a news
@@ -6836,6 +6839,19 @@ def getOptionsSet():
         'content-transfer-encoding',
         'mime-version',
         ], doc="Mime Headers to ignore (as opposed to message headers). See also 'ignoredheaders'."))
+    options.addOption(settings.StringOption("middomain", None, doc="""Message-ID Domain name.
+
+        If given, this string is used for the domain part of the message-id of outgoing messages.
+
+        If not set, the email library will attempt to look up the domain of the local computer and use that.
+        However, this lookup can be slow. Additionally you might want to force a different name to avoid
+        disclosing information about your machine (but note, MTAs may include such information anyway).
+
+        Notes on uniqueness: The domain part is supposed to make collissions of MIDs less likely. The email
+        library creates an ID out of a unix timestamp, the PID of the program, a 64bit random number, and
+        a client ID string (e.g. 'mailnex'). As such, it should be pretty unlikely to actually collide even
+        if you specify the domain of your mail server here, but you get to make that decision.
+        """))
     options.addOption(settings.FlagsOption("mimeheaderorder", [
         #TODO: a default ordering?
         ], doc="Prefered order of MIME headers. See also 'headerorder'."))
