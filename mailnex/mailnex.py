@@ -5516,7 +5516,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     prompt_to_save = False
                     password = getpass.getpass()
                 else:
-                    _, prompt_to_save, password = getPassword(self.C.settings, "smtp", user, host, port)
+                    _, prompt_to_save, password = getPassword(self.C.settings, scheme, user, host, port)
                 res = s.login(user, password)
                 if res == False:
                     self.C.printError("smtp login failed. Probably bad username or password")
@@ -5528,7 +5528,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if line == 'y' or line == 'yes':
                             print(" Saving...")
                             try:
-                                keyring.set_password("smtp://%s" % host, user, password)
+                                keyring.set_password("%s://%s" % (scheme, host), user, password)
                             except RuntimeError:
                                 print("Error: couldn't save password to keyring")
                             break
