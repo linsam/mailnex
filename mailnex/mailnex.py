@@ -5508,6 +5508,14 @@ class Cmd(cmdprompt.CmdPrompt):
                 s.cacerts = self.C.settings.cacertsfile.value
             # TODO: Allow overriding CA somehow
             # TODO: Allow user certificates
+            # TODO: DANE?
+            #   import dns # (package python3-dnspython)
+            #   myresolver = dns.resolver.Resolver() # Get a system default resolver
+            #   myresolver.ednsflags |= dns.flags.DO # enable DNSSEC
+            #   timeout = 15 # default in lib is 5, but it can take a bit longer doing DNSSEC
+            #   res = myresolver.resolve("_%d._tcp.%s" % (port, host), "TLSA", lifetime=timeout)
+            #   if (res.response.ednsflags & dns.flags.DO) and (res.response.flags & dns.flags.AD):
+            #       data = str(res.response.rrset[0]) # Should verify response is what we asked? (CNAME/DNAME may complicate). Should iterate over all results (might have multiple acceptible cert infos)
             s.connect(host, port, ssl)
             if user:
                 prompt_to_save = False
