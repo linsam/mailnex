@@ -5464,6 +5464,8 @@ class Cmd(cmdprompt.CmdPrompt):
             # or draft-earhart-url-smtp for details of proposed URL schemes
             # and their basis
             url = urlparse.urlparse(constr)
+            if url.path:
+                raise Exception("path part '{}' doesn't make sense in sending url '{}'".format(url.path, constr))
             scheme = url.scheme
             user = url.username
             host = url.hostname
