@@ -4909,8 +4909,6 @@ class Cmd(cmdprompt.CmdPrompt):
             parts = processImapData(data[0][1], self.C.settings)[0]
             headers = getResultPart(b'BODY[HEADER]', parts)
             body = getResultPart(b'BODY[TEXT]', parts)
-            #content = headers.encode('utf-8') + body.encode('utf-8')
-            breakpoint()
             content += "Message {}:\n".format(index) + headers.decode() + body.decode()
         # TODO: Process content for control chars?
         # TODO: Restore external pager
