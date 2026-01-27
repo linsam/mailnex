@@ -5225,7 +5225,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # Get rid of empty addresses, which can occur from double comma, or
         # trailing comma
         # TODO: Should also clean up the headers?
-        recipients = filter(None, recipients)
+        recipients = list(filter(None, recipients))
         if len(recipients) == 0:
             self.C.printError("There are no recipients for this message")
             raise MailnexException("empty recipients list")
@@ -5452,7 +5452,7 @@ class Cmd(cmdprompt.CmdPrompt):
         #return False
 
         if('smtp' in self.C.settings and self.C.settings.smtp):
-            import smtp
+            from . import smtp
             # Use SMTP
             # Note: port 25 is plain SMTP, 465 is TLS wrapped plain SMTP, and
             # 587 is SUBMIT (SUBMISSION). Both 25 and 587 are plain text until
@@ -5539,7 +5539,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # allow explicitly setting the smtp from value?
             # Note: s.sendmail currently always returns None or raises and
             # Exception, so we don't handle res here.
-            res = s.sendmail(m['from'], recipients, fp.getvalue())
+            envelope_from = m['from'].encode('ascii')
+            envelope_to = list(map(lambda x: x.encode('ascii'), recipients))
+            res = s.sendmail(envelope_from, envelope_to, fp.getvalue().encode('ascii'))
             #for addr in res.keys():
                 # This could be done better. Also use error reporting
                 #print("Error: Sending to {} failed".format(addr))

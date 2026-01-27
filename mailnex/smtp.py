@@ -5,43 +5,47 @@
 
 import socket
 import ssl
+import codecs
 
 def parseExtension(extensions, data):
     """Parses a single line of EHLO response data"""
-    if ' ' in data:
-        name, args = data.split(" ", 1)
+    if b' ' in data:
+        name, args = data.split(b" ", 1)
+        # The extension data ought to be ASCII; so default decoding UTF-8 should be fine.
+        name = name.decode()
+        args = args.decode()
     else:
-        name = data
+        name = data.decode()
         args = None
     extensions[name] = args
 
 def parseExtensions(extensions, data):
     """Parses all lines of EHLO response data"""
-    for line in data.split('\r\n'):
+    for line in data.split(b'\r\n'):
         if len(line) < 3:
-            print "Error:", line
+            print("Error:", line)
             return False
         if len(line) < 4:
             # Something is wrong. Should be 3 digit status followed by hyphen
             # or space. We can conclude the server erroneously sent us a line
             # with just the 3 byte code.
-            if line[0] != '2':
-                print "Server unhappy:", line
+            if line[0:1] != b'2':
+                print("Server unhappy:", line)
                 return False
             break
-        elif line[3] == '-':
+        elif line[3:4] == b'-':
             # Multiline data
             parseExtension(extensions, line[4:])
             continue
-        elif line[3] == ' ':
+        elif line[3:4] == b' ':
             # Last line
             parseExtension(extensions, line[4:])
-            if line[0] != '2':
-                print "Server unhappy:", line
+            if line[0:1] != b'2':
+                print("Server unhappy:", line)
                 return False
             break
         else:
-            print "Invalid response", line
+            print("Invalid response", line)
             return False
 
 # NONE: Do not use TLS
@@ -67,7 +71,7 @@ class smtpClient(object):
         # randomly by address family (that is, try IPv6 first, then IPv4, then
         # whatever is left)?
         for i in targets:
-            print "Trying", i[4][0],i[3] # address, canonical name (if available)
+            print("Trying", i[4][0],i[3]) # address, canonical name (if available)
             s = socket.socket(*i[:3])
             if secure == SEC_SSL:
                 oldSock = s
@@ -79,7 +83,7 @@ class smtpClient(object):
                 self._negotiate(s, host, secure)
                 break
             except socket.error as ev:
-                print "  ", ev.strerror
+                print("Failed, socket error: ", ev.strerror, ev)
                 continue
         else:
             # TODO: Provide some more info. Ideally, we'd have some
@@ -89,10 +93,10 @@ class smtpClient(object):
             raise Exception("unable to connect")
     def _negotiate(self, s, host, security):
         r = s.recv(1024)
-        if not r.startswith("2"):
+        if not r.startswith(b"2"):
             raise Exception("Server unhappy: {}".format(r))
         # TODO: Check if hostname isn't fqdn; warn user? fail?
-        s.send("EHLO {}\r\n".format(socket.gethostname()))
+        s.send("EHLO %s\r\n"%(socket.gethostname().encode()))
         r = s.recv(1024)
         extensions = {}
         r = parseExtensions(extensions, r)
@@ -104,9 +108,9 @@ class smtpClient(object):
                 # attack attempt and we might get through, or it could be a
                 # misconfigured proxy, and the command might also get through
                 raise Exception("Server reports no TLS capability")
-            s.send("STARTTLS\r\n")
+            s.send(b"STARTTLS\r\n")
             r = s.recv(1024)
-            if r[0] != "2":
+            if r[0:1] != b"2":
                 raise Exception("Failed to start TLS: {}".format(r))
             oldSock = s
             # TODO: Handle older python without the default context, like our
@@ -120,7 +124,7 @@ class smtpClient(object):
                 context = ssl.create_default_context()
             s = context.wrap_socket(s, server_hostname=host)
             # Now that we are secure, re-get extensions
-            s.send("EHLO {}\r\n".format(socket.gethostname()))
+            s.send(b"EHLO %s\r\n"%(myhostname.encode()))
             r = s.recv(1024)
             extensions = {}
             r = parseExtensions(extensions, r)
@@ -138,10 +142,11 @@ class smtpClient(object):
     def login(self, username, password):
         s = self.sock
         if 'AUTH' in self.extensions and 'PLAIN' in self.extensions['AUTH']:
-            s.send("AUTH PLAIN {}".format("{}\x00{}\x00{}".format(username, username, password).encode('base64')))
+            authstr = b"AUTH PLAIN %s\r\n"%(codecs.encode("{}\x00{}\x00{}".format(username, username, password).encode(), 'base64')).replace(b'\n',b'')
+            s.send(authstr)
             r = s.recv(1024)
-            if r[0] != '2':
-                print "failed", r
+            if r[0:1] != b'2':
+                print("failed", r)
                 return False
             self.state = AUTENTICATED
         else:
@@ -149,35 +154,35 @@ class smtpClient(object):
     def sendmail(self, from_, to, message):
         # TODO: some basic validation of from and to
         s = self.sock
-        s.send("MAIL FROM:<{}>\r\n".format(from_))
+        s.send(b"MAIL FROM:<%s>\r\n"%(from_))
         r = s.recv(1024)
-        if r[0] != '2': raise Exception("bad from line: {}".format(r))
+        if r[0:1] != b'2': raise Exception("bad from line: {}".format(r))
         for i in to:
-            s.send("RCPT TO:<{}>\r\n".format(i))
+            s.send(b"RCPT TO:<%s>\r\n"%(i))
             r = s.recv(1024)
             # TODO: Collect failed recipients into a list to give caller.
             # If we fail on the first, the user can get frustrated correcting
             # 1 mistake at a time instead of correcting multiple at once
-            if r[0] != '2': raise Exception("bad to: {}, {}".format(i, r))
-        s.send("DATA\r\n")
+            if r[0:1] != b'2': raise Exception("bad to: {}, {}".format(i, r))
+        s.send(b"DATA\r\n")
         r = s.recv(1024)
-        if not r.startswith('354'): raise Exception("Unexpected {}".format(r))
+        if not r.startswith(b'354'): raise Exception("Unexpected {}".format(r))
         # TODO: normalize line endings?
         # TODO: correct line length?
-        for line in message.split('\n'):
-            if line.endswith('\r'):
+        for line in message.split(b'\n'):
+            if line.endswith(b'\r'):
                 line = line[:-1]
-            if line.startswith("."):
-                line = '.' + line
-            s.send(line + '\r\n')
-        s.send('.\r\n') # terminate message
+            if line.startswith(b"."):
+                line = b'.' + line
+            s.send(line + b'\r\n')
+        s.send(b'.\r\n') # terminate message
         r = s.recv(1024)
-        if r[0] != '2': raise Exception("Failed to send data: {}".format(r))
+        if r[0:1] != b'2': raise Exception("Failed to send data: {}".format(r))
     def quit(self):
         s = self.sock
-        s.send("QUIT\r\n")
+        s.send(b"QUIT\r\n")
         r = s.recv(1024)
-        if r[0] != '2': raise Exception("Failed to quit: {}".format(r))
+        if r[0:1] != b'2': raise Exception("Failed to quit: {}".format(r))
         self.sock = None
         self.state = DISCONNECTED
         return
