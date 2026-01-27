@@ -96,7 +96,9 @@ class smtpClient(object):
         if not r.startswith(b"2"):
             raise Exception("Server unhappy: {}".format(r))
         # TODO: Check if hostname isn't fqdn; warn user? fail?
-        s.send("EHLO %s\r\n"%(socket.gethostname().encode()))
+        #myhostname=socket.gethostname()
+        myhostname="ehlo.thunderbird.net" # K9 mail uses this
+        s.send(b"EHLO %s\r\n"%(myhostname.encode()))
         r = s.recv(1024)
         extensions = {}
         r = parseExtensions(extensions, r)
