@@ -6646,7 +6646,12 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     def do_python(self, args):
-        if self.C.settings.debug.python:
+        """Execute given string in the python interpreter (Primarily for debug)
+
+        Use at your own risk/benefit"""
+        if not self.C.settings.debug.python:
+            print("Python debugging is not enabled")
+        else:
             res = eval(args)
             if res is not None:
                 print(repr(res))
