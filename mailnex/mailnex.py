@@ -355,8 +355,8 @@ def sanitize(data, condense=True, replace=False):
     c0.remove(0xa) # LF (line feed or Unix EOL (end of line)
     c0.remove(0xd) # CR (carriage return. Part of Windows and Network new line (CR-LF))
     c1.remove(0x85) # NEL (next line)
-    stripChars = map(chr, c0 + c1)
-    condenseChars = map(chr, [0x9, 0xa, 0xd, 0x20, 0x85])
+    stripChars = list(map(chr, c0 + c1))
+    condenseChars = list(map(chr, [0x9, 0xa, 0xd, 0x20, 0x85]))
 
     res = []
     lastChar = None
@@ -1004,8 +1004,8 @@ def processHeaders(text):
                     value = None
             headers[name].append(value)
         if not b': ' in line:
-            if not ':' in line:
-                if line == "":
+            if not b':' in line:
+                if line == b"":
                     # end of headers
                     return headers
                 # Line had no colon and no indent
@@ -1690,7 +1690,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if self.C.virtfolder:
                 # Convert back to virtual indices
                 data = map(lambda x: self.C.virtfolder.index(x) + 1, data)
-            map(messages.add, data)
+            for msg in data: messages.add(msg)
         for i in args:
             if i.startswith('('):
                 cri = [i]
@@ -1728,7 +1728,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if self.C.virtfolder:
                             # Convert back to virtual indices
                             data = map(lambda x: self.C.virtfolder.index(x) + 1, data)
-                        map(messages.add, data)
+                        for msg in data: messages.add(msg)
                     elif i == 'f':
                         if self.C.virtfolder:
                             r = MessageList(self.C.virtfolder).imapListStr() + " "
@@ -1741,7 +1741,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if self.C.virtfolder:
                             # Convert back to virtual indices
                             data = map(lambda x: self.C.virtfolder.index(x) + 1, data)
-                        map(messages.add, data)
+                        for msg in data: messages.add(msg)
                     else:
                         print("Error: Unrecognized message class :{}".format(i))
                         return []
@@ -1751,7 +1751,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     messages.add(self.C.currentMessage)
                 elif i == '`':
                     # TODO: print "No previously marked messages" if the list is empty
-                    map(messages.add, self.C.lastList)
+                    for msg in self.C.lastList: messages.add(msg)
                 elif i == '^':
                     messages.add(1)
                 elif i == '$':
@@ -1814,7 +1814,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if len(subres) == 0:
                             print("Error: '{}' is empty".format(sub))
                             return []
-                        res = map(lambda x: x-subres[0], res)
+                        res = list(map(lambda x: x-subres[0], res))
                     return res
                 if '++' in i:
                     i = i.split('++')
@@ -1835,7 +1835,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if len(subres) == 0:
                             print("Error: '{}' is empty".format(sub))
                             return []
-                        res = map(lambda x: x+subres[0], res)
+                        res = list(map(lambda x: x+subres[0], res))
                     return res
             # TODO
             # What kind of precedance to we want to have? If I allow a list to
@@ -1979,7 +1979,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         firstLine = ac[0]
                         filename = firstLine[0]
                         startline = firstLine[1]
-                        res = self.processConfig(filename, startline, map(lambda x: x[2], ac))
+                        res = self.processConfig(filename, startline, list(map(lambda x: x[2], ac)))
                         if res:
                             postConfFolder = res
                     continue
@@ -2173,7 +2173,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 firstLine = ac[0]
                 filename = firstLine[0]
                 startline = firstLine[1]
-                postFolder = self.processConfig(filename, startline, map(lambda x: x[2], ac))
+                postFolder = self.processConfig(filename, startline, list(map(lambda x: x[2], ac)))
                 if postFolder:
                     self.do_folder(postFolder)
 
@@ -2459,13 +2459,13 @@ class Cmd(cmdprompt.CmdPrompt):
                 # connect; we'll have to ask for it. It could either be that
                 # the server didn't feel like sending one, or there are no
                 # messages that are unseen.
-                unseen = map(int, self.C.connection.search("utf-8", "UNSEEN"))
+                unseen = list(map(int, self.C.connection.search("utf-8", "UNSEEN")))
             else:
                 unseen = [self.C.connection.unseen]
             if len(unseen) != 0:
                 self.C.currentMessage = sorted(unseen)[0]
             else:
-                flagged = map(int, self.C.connection.search("utf-8", "flagged"))
+                flagged = list(map(int, self.C.connection.search("utf-8", "flagged")))
                 if len(flagged) != 0:
                     self.C.currentMessage = sorted(flagged)[0]
                 else:
@@ -3111,7 +3111,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("  calc duration:", t3-t2)
         if 0:
             # More detailed stats
-            for m,d in messageLeaders.iteritems():
+            for m,d in messageLeaders.items():
                 if len(d.children) == 0:
                     print("singleton", d.mseq, d.muid)
                 elif len(d.children) == 1:
@@ -3127,7 +3127,7 @@ class Cmd(cmdprompt.CmdPrompt):
             return count
         # Build virtfolder with thread ordering
         msgleaderlist = []
-        for m,d in messageLeaders.iteritems():
+        for m,d in messageLeaders.items():
             msgleaderlist.append((m,d))
         if 'l' in args:
             # Last child sort order
@@ -3140,11 +3140,11 @@ class Cmd(cmdprompt.CmdPrompt):
                         iter(i)
                 iter(m)
                 return last[0]
-            for _,d in messageLeaders.iteritems():
+            for _,d in messageLeaders.items():
                 d.sortKey = findlast(d)
         else:
             # Default, first child sort order
-            for _,d in messageLeaders.iteritems():
+            for _,d in messageLeaders.items():
                 # TODO: actually iterate children for first valid msq (message
                 # sequence number).
                 d.sortKey = d.mseq
@@ -3218,7 +3218,7 @@ class Cmd(cmdprompt.CmdPrompt):
         maxmsg = None
         maxChildren = 0
         maxChildrenMsg = None
-        for m,d in messageLeaders.iteritems():
+        for m,d in messageLeaders.items():
             chldcnt = countAllChildren(d)
             if chldcnt > maxChildren:
                 maxChildren=chldcnt
@@ -3284,7 +3284,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # http://stackoverflow.com/questions/10971033/backporting-python-3-openencoding-utf-8-to-python-2
         with codecs.open("/tmp/list.txt","w", encoding='utf-8') as f:
             print("----------- all non 0 ----------", file=f)
-            for m,d in messageLeaders.iteritems():
+            for m,d in messageLeaders.items():
                 if len(d.children) == 0:
                     continue
                 showReplList(d, file=f)
@@ -3376,7 +3376,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 ))
         try:
             with open(lastMessageFile) as f:
-                uv, lastu = map(int,f.read().split())
+                uv, lastu = tuple(map(int,f.read().split()))
         except:
             pass
 
@@ -3495,7 +3495,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     self.C.connection.mailnexUser,
                     self.C.connection.mailnexHost,
                     self.C.connection.mailnexBox,
-                    "\r\n".join(["%s: %s" % x for x in headers.iteritems()])
+                    "\r\n".join(["%s: %s" % x for x in headers.items()])
                     ))
                 # We will use the message UID (formerly we were using the
                 # MSeq) as the identifier. This will allow us to obtain this
@@ -4296,7 +4296,7 @@ class Cmd(cmdprompt.CmdPrompt):
             partsavelist=[]
             struct = self.getStructure(int(msg))
             #print(struct)
-            for key,val in struct.iteritems():
+            for key,val in struct.items():
                 #print(key,val,dir(val))
                 #print((key,
                 #    val,
@@ -4376,7 +4376,7 @@ class Cmd(cmdprompt.CmdPrompt):
         def checkMsg(tok):
             try:
                 msg = tok.split('.')
-                msg = map(int,msg)
+                msg = list(map(int,msg))
             except:
                 res.append((cmdprompt.Generic.Error, tok))
             else:
@@ -5069,8 +5069,8 @@ class Cmd(cmdprompt.CmdPrompt):
         # Some mail clients seem to like to split headers on multiple lines to
         # keep them short (as per spec) but do it in the middle of a quoted
         # string, which I think is against spec.
-        to = map(lambda x: x.replace('\r', ''), to)
-        cc = map(lambda x: x.replace('\r', ''), cc)
+        to = list(map(lambda x: x.replace('\r', ''), to))
+        cc = list(map(lambda x: x.replace('\r', ''), cc))
 
         for addr in email.utils.getaddresses(to):
             for myaddr in me:
@@ -5598,7 +5598,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("From:", headers['from'][-1])
 
         print()
-        for key,val in headers.iteritems():
+        for key,val in headers.items():
             for i in range(len(val)):
                 print("%s[%i]=%s" % (key, i, repr(val)))
 
@@ -6400,7 +6400,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     return
                 else:
                     # Straight assignment
-                    key,value = map(lambda x: x.strip(), args.split('=', 1))
+                    key,value = tuple(map(lambda x: x.strip(), args.split('=', 1)))
                     try:
                         try:
                             self.C.settings[key] = value
@@ -6542,7 +6542,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("No applicable messages")
             return
         #TODO: Make 'interesting' criteria a user setting
-        msgs = map(int,self.C.connection.search('utf-8', '(or FLAGGED NEW)'))
+        msgs = list(map(int,self.C.connection.search('utf-8', '(or FLAGGED NEW)')))
         if self.C.virtfolder:
             msgs = [self.C.virtfolder.index(x) for x in msgs if x in self.C.virtfolder]
         if self.C.settings.debug.general:
