@@ -5760,7 +5760,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # I'd want to see. I'm guessing there's a POSIX standard for this.
             # Or I could look at mailx source code, but so far I've done
             # neither.
-            uflags = map(lambda x: x.upper(), flags)
+            uflags = list(map(lambda x: x.upper(), flags))
             if b'\RECENT' in uflags:
                 if b'\SEEN' in uflags:
                     nuro = self.C.settings.attrlist.value[ATTR_NEWREAD]
@@ -5827,12 +5827,12 @@ class Cmd(cmdprompt.CmdPrompt):
                 except:
                     subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
-                froms = [x[0] if not x[0] in [None, b'NIL'] else "%s@%s" % (x[2], x[3]) for x in envelope.from_]
+                froms = [x[0] if not x[0] in [None, b'NIL'] else b"%s@%s" % (x[2], x[3]) for x in envelope.from_]
                 # Not great, but try to decode the froms fields
                 newfroms = []
                 for fr in froms:
                     try:
-                        newfroms.append(email.header.make_header(email.header.decode_header(fr)))
+                        newfroms.append(str(email.header.make_header(email.header.decode_header(fr))))
                     except:
                         try:
                             # TODO: Log warning about guessing?
