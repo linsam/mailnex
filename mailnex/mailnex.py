@@ -3148,7 +3148,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # TODO: actually iterate children for first valid msq (message
                 # sequence number).
                 d.sortKey = d.mseq
-        msgleaderlist.sort(cmp=lambda x,y: cmp(x[1].sortKey,y[1].sortKey))
+        msgleaderlist.sort(key=lambda x: x[1].sortKey)
         msglist = []
         msglistextra = []
         def expand(m, leader=False, level=0, markers=None):
@@ -3898,7 +3898,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 topics.append(i[5:])
         # TODO: Should we really do icase sort? We aren't matching
         # insensitively. This feels inconsistent.
-        topics.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        topics.sort(key=lambda x:x.lower())
         for i in topics:
             yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
 
@@ -6268,7 +6268,7 @@ class Cmd(cmdprompt.CmdPrompt):
         for opt in self.C.settings:
             if opt.name.startswith(this_word):
                 topics.append(opt.name)
-        topics.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        topics.sort(key=lambda x: x.lower())
         for i in topics:
             yield cmdprompt.prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
     @showExceptions
