@@ -986,7 +986,7 @@ def processHeaders(text):
     for line in lines:
         if line.startswith(b" ") or line.startswith(b"\t"):
             # continuation. Append to previous
-            value += "\r\n" + line
+            value += b"\r\n" + line
             continue
         if name:
             if name not in headers:
@@ -1013,7 +1013,7 @@ def processHeaders(text):
             else:
                 # poorly formed header, but I've seen it
                 # This line had a colon, but no space after it
-                name, value = line.split(':', 1)
+                name, value = line.split(b':', 1)
                 name = name.lower()
         else:
             name, value = line.split(b': ', 1)
@@ -2896,10 +2896,10 @@ class Cmd(cmdprompt.CmdPrompt):
         #          direct children of the dummy root, but a dummy child or
         #          root.
         def processMessage(i, uid, headers):
-            if not 'message-id' in headers:
+            if not b'message-id' in headers:
                 print("Fail (no id):", i, uid)
                 return
-            mid = headers['message-id']
+            mid = headers[b'message-id']
             if len(mid) != 1:
                 print("Fail: multiple ids", i, uid)
                 return
@@ -2920,8 +2920,8 @@ class Cmd(cmdprompt.CmdPrompt):
             # in other messages (very costly if not doin subject comparison to
             # limit the search, and difficult to get right given the
             # inconsistent methods of including quoted text).
-            if 'references' in headers:
-                refs = headers['references']
+            if b'references' in headers:
+                refs = headers[b'references']
                 #print("references something", i, uid, refs)
                 # Ok, so the reference list needs to be actually parsed. This
                 # quick-split method isn't valid, though it usually works.
@@ -2938,8 +2938,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 # out-of-chain, and parsing a reply-to-multiple-messages
                 # explicitly isn't possible, though implicitly this is a reply
                 # to all messages listed.
-            if len(refs) == 0 and 'in-reply-to' in headers:
-                replies = headers['in-reply-to']
+            if len(refs) == 0 and b'in-reply-to' in headers:
+                replies = headers[b'in-reply-to']
                 # This is supposed to contain all of the messages this one
                 # replies to. In practice, apparently, this has rarely or
                 # never actually referred to more than one message, and has
