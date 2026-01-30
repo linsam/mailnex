@@ -3109,7 +3109,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # slow-ish link where the server already had the data cached.
                 print("  fetch duration:", t2-t1)
                 print("  calc duration:", t3-t2)
-        if 0:
+        if self.C.settings.debug.findrefs:
             # More detailed stats
             for m,d in messageLeaders.items():
                 if len(d.children) == 0:
