@@ -18,7 +18,6 @@ import pygments.style
 import signal
 import uvloop
 import sys
-import six
 
 
 def PromptLexerFactory(cmd_obj):
