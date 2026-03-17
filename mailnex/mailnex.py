@@ -3685,9 +3685,9 @@ class Cmd(cmdprompt.CmdPrompt):
                                 secondaryStruct = unpackStructM(m, {"cache": self.C.cache}, 1, struct.tag + b".d")
                                 self.C.cache["{}.d.SUBSTRUCTURE".format(struct.tag)] = secondaryStruct
 
-            if struct.type_ == "multipart" and struct.subtype == "signed":
+            if struct.type_ == "multipart" and struct.subtype == b"signed":
                 p = struct.parameters
-                if p and 'protocol' in p and p['protocol'].lower() == 'application/pgp-signature':
+                if p and b'protocol' in p and p[b'protocol'].lower() == b'application/pgp-signature':
                     # TODO: What if the message doesn't have the protocol
                     # parameter, but otherwise follows the protocol? (That is,
                     # has 2 parts, the second part being
@@ -3699,10 +3699,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     # how to handle, and we probably shouldn't give the user
                     # misleading information.
                     if haveGpg:
-                        inner = struct.tag.split('.')[1:]
-                        messageTag = ".".join(inner + ['1'])
-                        signatureTag = ".".join(inner + ['2'])
-                        data = self.cacheFetch(index, '(BODY.PEEK[{}.MIME] BODY.PEEK[{}] BODY.PEEK[{}])'.format(messageTag, messageTag, signatureTag))[0]
+                        inner = struct.tag.split(b'.')[1:]
+                        messageTag = b".".join(inner + [b'1'])
+                        signatureTag = b".".join(inner + [b'2'])
+                        data = self.cacheFetch(index, b'(BODY.PEEK[%s.MIME] BODY.PEEK[%s] BODY.PEEK[%s])'%(messageTag, messageTag, signatureTag))[0]
                         messageData = getResultPart(b'BODY[%s.MIME]'%(messageTag), data[1]) + getResultPart(b'BODY[%s]'%(messageTag), data[1])
                         sigData = getResultPart(b'BODY[%s]'%(signatureTag), data[1])
 
