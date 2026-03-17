@@ -2,6 +2,9 @@ from __future__ import print_function
 from __future__ import unicode_literals
 import magic
 import email.mime
+import email.mime.base
+import email.mime.text
+import email.mime.multipart
 import string
 import tempfile
 from . import cmdprompt
@@ -531,21 +534,22 @@ def doAttachments(editor, m):
             print("Error reading file %s for attachment" % attach)
             raise err
         # TODO: Allow the user to override the detected mime type
-        entity = email.mime.Base.MIMEBase(*mtype.split("/"))
+        entity = email.mime.base.MIMEBase(*mtype.split("/"))
         entity.set_payload(data)
 
         # Note: string.printable would be better, but it includes vertical
         # tab and form-feed, which I'm not certain should be included in
         # emails, so we'll construct our own without it for now.
-        printable = string.digits + string.letters + string.punctuation + b' \t\r\n'
+        printable = string.digits + string.ascii_letters + string.punctuation + ' \t\r\n'
+        printable = printable.encode('ascii')
         if not all(c in printable for c in data):
             # TODO: Allow user to override this (e.g. force base64 or quopri)
             email.encoders.encode_base64(entity)
         entity.add_header('Content-Disposition', 'attachment', filename=attach.split(os.sep)[-1])
-        if not isinstance(m, email.mime.Multipart.MIMEMultipart):
+        if not isinstance(m, email.mime.multipart.MIMEMultipart):
             # Convert into multipart/mixed
-            n = email.mime.Multipart.MIMEMultipart()
-            o = email.mime.Text.MIMEText("")
+            n = email.mime.multipart.MIMEMultipart()
+            o = email.mime.text.MIMEText("")
             o.set_payload(m.get_payload())
             for key in m.keys():
                 vals = m.get_all(key)

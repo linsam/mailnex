@@ -120,6 +120,8 @@ from . import imap4
 import email
 import email.utils
 import email.mime.text
+import email.mime.multipart
+import email.mime.base
 import quopri
 import mailbox
 # password prompter
@@ -5360,10 +5362,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     res = ctx.encrypt_sign(rkeys, 0, indat, outdat)
                     outdat = outdat.getvalue()
                 print("res:", res)
-                newmsg = email.mime.Multipart.MIMEMultipart("encrypted", protocol="application/pgp-encrypted")
-                pgppart = email.mime.Base.MIMEBase("application", "pgp-encrypted")
+                newmsg = email.mime.multipart.MIMEMultipart("encrypted", protocol="application/pgp-encrypted")
+                pgppart = email.mime.base.MIMEBase("application", "pgp-encrypted")
                 pgppart.set_payload("Version: 1\r\n")
-                datpart = email.mime.Base.MIMEBase("application", "octet-stream", name="encrypted.asc")
+                datpart = email.mime.base.MIMEBase("application", "octet-stream", name="encrypted.asc")
                 datpart.add_header('Content-Disposition', 'inline', filename="encrypted.asc")
                 datpart.set_payload(outdat)
                 newmsg.attach(pgppart)
@@ -5415,9 +5417,9 @@ class Cmd(cmdprompt.CmdPrompt):
                 sigstr = "pgp-" + digests[sig.hash_algo].lower()
 
                 # Create the signing wrapper
-                newmsg = email.mime.Multipart.MIMEMultipart("signed", micalg=sigstr, protocol="application/pgp-signature")
+                newmsg = email.mime.multipart.MIMEMultipart("signed", micalg=sigstr, protocol="application/pgp-signature")
                 newmsg.attach(m)
-                sigpart = email.mime.Base.MIMEBase("application","pgp-signature", name="signature.asc")
+                sigpart = email.mime.base.MIMEBase("application","pgp-signature", name="signature.asc")
                 # Not sure if inline or attachment is best. Some versions of
                 # Eudora try to save the signature as a file in the
                 # attachments directory if we don't have a disposition or make
