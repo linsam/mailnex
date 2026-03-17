@@ -11,11 +11,18 @@ from . import cmdprompt
 from .exceptions import MailnexException
 from .pathcompleter import *
 
+haveGpg = False
+haveGpgme = False
 try:
-    import gpgme
-    haveGpgme = True
+    import gpg
+    haveGpg = True
 except ImportError:
-    haveGpgme = False
+    try:
+        import gpgme
+        haveGpgme = True
+    except ImportError:
+        pass
+
 
 def attachFile(attachList, filename, pos=None, replace=False):
     """Check a path and add it to the attachment list
@@ -344,8 +351,8 @@ class editorCmds(object):
 
     @noarg
     def do_pgpsign(self, line):
-        if not haveGpgme:
-            self.C.printError("Cannot sign; python-gpgme package missing")
+        if not (haveGpgme or haveGpg):
+            self.C.printError("Cannot sign; neither python-gpg nor python-gpgme package found")
         else:
             # Invert sign. Python doesn't like "sign = !sign"
             self.pgpsign = self.pgpsign == False
@@ -355,8 +362,8 @@ class editorCmds(object):
                 self.C.printInfo("Will NOT sign the whole message with OpenPGP/MIME")
     @noarg
     def do_pgpenc(self, line):
-        if not haveGpgme:
-            self.C.printError("Cannot sign; python-gpgme package missing")
+        if not (haveGpgme or haveGpg):
+            self.C.printError("Cannot sign; neither python-gpg nor python-gpgme package found")
         else:
             # Invert sign. Python doesn't like "sign = !sign"
             self.pgpencrypt = self.pgpencrypt == False

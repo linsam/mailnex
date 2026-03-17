@@ -5313,7 +5313,7 @@ class Cmd(cmdprompt.CmdPrompt):
             fp = StringIO()
             gen = MyGenerator(fp)
             gen.flatten(m)
-            for line in fp.getvalue().split(b'\n'):
+            for line in fp.getvalue().split('\n'):
                 # So, RFC822 dictates that the lines should be network
                 # terminated (\r\n), but doing so would result in quite a mix
                 # here, since the rest of python's email package use native
@@ -5327,11 +5327,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 # requires that the hash be done with the network endings, and
                 # while gpg2 can handle trying both, Thunderbird/Enigmail
                 # doesn't (which is proper anyway)
-                if line.endswith(b'\r'):
+                if line.endswith('\r'):
                     convlines.append(line[:-1])
                 else:
                     convlines.append(line)
-            indat = b"\r\n".join(convlines)
+            indat = "\r\n".join(convlines)
             if editor.pgpencrypt:
                 rkeys = []
                 for r in recipients:
@@ -5353,6 +5353,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # should encrypt for sender as well. Should we encrypt to
                 # sender always anyway? Maybe make it an option.
                 if haveGpg:
+                    indat = indat.encode('utf-8')
                     res = ctx.encrypt(indat, recipients=rkeys, sign=True, compress=False)
                     outdat = res[0]
                     res = (res[1],res[2])
@@ -5390,6 +5391,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # TODO: Handle case where signing fails (bad passphrase, cancelled
                 # operation, etc).
                 if haveGpg:
+                    indat = indat.encode("utf-8")
                     outdat, sigs = ctx.sign(indat, mode=gpg.constants.SIG_MODE_DETACH)
                     sigs = sigs.signatures
                 else:
