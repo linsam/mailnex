@@ -95,7 +95,7 @@ class BoolOption(Option):
     def strValue(self):
         return str(self).strip()
     def setValue(self, value):
-        if isinstance(value, (str,unicode)):
+        if isinstance(value, str):
             if value.lower() in ["1", "true", self.name]:
                 self.value = True
             elif value.lower() in ["0", "false", "no" + self.name]:
