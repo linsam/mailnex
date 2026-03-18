@@ -4633,7 +4633,7 @@ class Cmd(cmdprompt.CmdPrompt):
         content += body.encode('utf-8')
         res = self.runAProgramWithInput(["less","-R"], content)
         if res == 0:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % index)
         return vindex
 
     @shortcut("p")
@@ -4760,7 +4760,7 @@ class Cmd(cmdprompt.CmdPrompt):
             #
             # However, some people probably like the mailx behavior better
             # because they are used to it, so we ought to support it.
-            M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
+            M.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % index)
         # TODO: Raise exception if not successful?
         # Pros: Explicitly lets the user know something went wrong (no output
         # is probably a bad thing
@@ -4818,7 +4818,7 @@ class Cmd(cmdprompt.CmdPrompt):
         res = 1
         if res == 0:
             # TODO: Allow asynchronous mode. See do_print for details.
-            M.doSimpleCommand("STORE %s +FLAGS (\Seen)" % index)
+            M.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % index)
 
     @showExceptions
     @optionalNeeds(haveXapian, "Needs python-xapian package installed")
@@ -5135,7 +5135,7 @@ class Cmd(cmdprompt.CmdPrompt):
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
         sent = self.editMessage(newmsg)
         if sent:
-            M.doSimpleCommand("STORE %s +FLAGS (\Answered)" % index)
+            M.doSimpleCommand("STORE %s +FLAGS (\\Answered)" % index)
 
     def editMessage(self, message):
         """Run message composer until it is sent or the user aborts.
@@ -5765,19 +5765,19 @@ class Cmd(cmdprompt.CmdPrompt):
             # Or I could look at mailx source code, but so far I've done
             # neither.
             uflags = list(map(lambda x: x.upper(), flags))
-            if b'\RECENT' in uflags:
-                if b'\SEEN' in uflags:
+            if b'\\RECENT' in uflags:
+                if b'\\SEEN' in uflags:
                     nuro = self.C.settings.attrlist.value[ATTR_NEWREAD]
                 else:
                     nuro = self.C.settings.attrlist.value[ATTR_NEW]
             else:
-                if b'\SEEN' in uflags:
+                if b'\\SEEN' in uflags:
                     nuro = self.C.settings.attrlist.value[ATTR_OLD]
                 else:
                     nuro = self.C.settings.attrlist.value[ATTR_UNREAD]
             attr=None
             deleted = flagged = draft = answered = False
-            if b'\DELETED' in uflags:
+            if b'\\DELETED' in uflags:
                 if attr is None:
                     try:
                         attr = self.C.settings.attrlist.value[ATTR_DELETED]
@@ -5788,15 +5788,15 @@ class Cmd(cmdprompt.CmdPrompt):
                         # of these to the default setting's value maybe
                         attr = 'D'
                 deleted = True
-            if b'\FLAGGED' in uflags:
+            if b'\\FLAGGED' in uflags:
                 if attr is None:
                     attr = self.C.settings.attrlist.value[ATTR_FLAGGED]
                 flagged = True
-            if b'\DRAFT' in uflags:
+            if b'\\DRAFT' in uflags:
                 if attr is None:
                     attr = self.C.settings.attrlist.value[ATTR_DRAFT]
                 draft = True
-            if b'\ANSWERED' in uflags:
+            if b'\\ANSWERED' in uflags:
                 if attr is None:
                     attr = self.C.settings.attrlist.value[ATTR_ANSWERED]
                 answered = True
@@ -5963,7 +5963,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Deleted)" % ",".join(map(str,msglist)))
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Deleted)" % ",".join(map(str,msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -5986,7 +5986,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Deleted)" % ",".join(map(str, msglist)))
+            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\\Deleted)" % ",".join(map(str, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -6014,7 +6014,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Seen)" % ",".join(map(str,msglist)))
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % ",".join(map(str,msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -6035,7 +6035,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Seen)" % ",".join(map(str, msglist)))
+            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\\Seen)" % ",".join(map(str, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -6059,7 +6059,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\Flagged)" % ",".join(map(str,msglist)))
+            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Flagged)" % ",".join(map(str,msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -6082,7 +6082,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\Flagged)" % ",".join(map(str, msglist)))
+            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\\Flagged)" % ",".join(map(str, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
