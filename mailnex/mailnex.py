@@ -6019,6 +6019,8 @@ class Cmd(cmdprompt.CmdPrompt):
             # end.
         except Exception as ev:
             print("Failed to mark as read: %s" % ev)
+            if self.C.settings.debug.exception:
+                raise
 
     @showExceptions
     @needsConnection
@@ -6040,6 +6042,8 @@ class Cmd(cmdprompt.CmdPrompt):
             # end.
         except Exception as ev:
             print("Failed to unmark as read: %s" % ev)
+            if self.C.settings.debug.exception:
+                raise
 
     @showExceptions
     @needsConnection
