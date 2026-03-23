@@ -6014,7 +6014,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % ",".join(map(str,msglist)))
+            self.C.connection.doSimpleCommand(b"STORE %s +FLAGS (\\Seen)" % b",".join(map(lambda x: b"%d"%x, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -6037,7 +6037,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\\Seen)" % ",".join(map(str, msglist)))
+            self.C.connection.doSimpleCommand(b"STORE %s -FLAGS (\\Seen)" % b",".join(map(lambda x: b"%d"%x, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
