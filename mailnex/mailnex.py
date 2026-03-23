@@ -6063,11 +6063,13 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Flagged)" % ",".join(map(str,msglist)))
+            self.C.connection.doSimpleCommand(b"STORE %s +FLAGS (\\Flagged)" % b",".join(map(lambda x: b"%d"%x, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
             print("Failed to flag: %s" % ev)
+            if self.C.settings.debug.exception:
+                raise
 
     @showExceptions
     @needsConnection
@@ -6086,11 +6088,13 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\\Flagged)" % ",".join(map(str, msglist)))
+            self.C.connection.doSimpleCommand(b"STORE %s -FLAGS (\\Flagged)" % b",".join(map(lambda x: b"%d"%x, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
             print("Failed to unflag: %s" % ev)
+            if self.C.settings.debug.exception:
+                raise
 
     @showExceptions
     @needsConnection
