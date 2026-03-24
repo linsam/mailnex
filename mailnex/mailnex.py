@@ -1305,58 +1305,58 @@ def scanSec(mtas, headers):
     final = []
     res = []
     important = ['received', 'authentication-results']
-    headers = headers.split('\r\n')
-    this = ""
+    headers = headers.split(b'\r\n')
+    this = b""
     takeHeader = False
     for h in headers:
         if len(h) < 1:
             break # or continue? if empty, that should indicate end of headers, so this should only ever happen as the last and final iteration
         if takeHeader:
-            if not (h[0] == ' ' or h[0] == '\t'):
+            if not (h[0] == b' ' or h[0] == b'\t'):
                 takeHeader = False
                 final.append(this)
-                this = ""
+                this = b""
             else:
-                this += " " + h.lstrip()
+                this += b" " + h.lstrip()
                 continue
         if not takeHeader:
-            if h[0] == ' ' or h[0] == '\t':
+            if h[0] == b' ' or h[0] == b'\t':
                 # Continuation of a header we aren't interested in
                 continue
-            name = h.split(":", 1)[0]
+            name = h.split(b":", 1)[0]
             if name.lower() in important:
                 takeHeader = True
                 this = h
     for h in final:
         # TODO: Proper parsing into parts?
-        name, val = h.split(':', 1)
-        if name.lower() == 'authentication-results':
-            parts = val.split(';')
+        name, val = h.split(b':', 1)
+        if name.lower() == b'authentication-results':
+            parts = val.split(b';')
             mta_id = parts[0].strip()
             if mta_id in mtas:
                 for i in parts[1:]:
                     res.append(i.strip().split()[0]) # e.g. should be 'dkim=pass', 'dmarc=pass', etc.
-        elif name.lower() == 'received':
+        elif name.lower() == b'received':
             # TODO: this parsing is so bad.
             # First we'll try to get the trusted MTA by looking for the first
             # occurance of ' by ' and grabbing the token after that
-            if not ' by ' in val:
+            if not b' by ' in val:
                 continue
             # TODO: maybe we want to keep who it was from for display purposes
             # (e.g. from example.net to trusted.example.com encrypted with TLS1_2)
-            _,rest = val.split(' by ', 1) #TODO: what if the whitespace around 'by' isn't regular space (e.g. \t)?
+            _,rest = val.split(b' by ', 1) #TODO: what if the whitespace around 'by' isn't regular space (e.g. \t)?
             if not ' ' in rest:
                 continue
-            mta_id,rest = rest.split(' ', 1)
+            mta_id,rest = rest.split(b' ', 1)
             mta_id = mta_id.strip() # just in case there are extra spaces after 'by '
             if not mta_id in mtas:
                 continue
-            if not '(version=' in rest:
+            if not 'b(version=' in rest:
                 continue
-            _,rest = rest.split('(version=', 1)
-            if not ')' in rest:
+            _,rest = rest.split(b'(version=', 1)
+            if not b')' in rest:
                 continue
-            encinfo,rest = rest.split(')', 1)
+            encinfo,rest = rest.split(b')', 1)
             res.append("enc: {}".format(encinfo))
     return res
 
