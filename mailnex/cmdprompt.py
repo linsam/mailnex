@@ -180,7 +180,7 @@ class CmdPrompt(cmd.Cmd):
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
                     #get_title = self.get_title,
-                    #get_bottom_toolbar_tokens=self.toolbar,
+                    bottom_toolbar=self.toolbar,
                     #key_bindings_registry=registry,
                     key_bindings=bindings,
                     )#,
@@ -192,10 +192,10 @@ class CmdPrompt(cmd.Cmd):
         # 1 line for toolbar.
         self.ui_lines = 9
         self.status = {'unread': None}
-    def toolbar(self, cli):
+    def toolbar(self, cli=None):
         return [
-                (Token.Text, " Unread: "),
-                (Generic.Heading, str(self.status['unread'])),
+                ('class:bottom-toolbar', " Unread: "),
+                ('class:heading', str(self.status['unread'])),
                 ]
 
     def setPrompt(self, newprompt):
