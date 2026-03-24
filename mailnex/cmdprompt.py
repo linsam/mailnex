@@ -8,6 +8,7 @@ from prompt_toolkit.lexers import PygmentsLexer
 from pygments.token import Token
 from pygments.styles.tango import TangoStyle
 from prompt_toolkit.styles import style_from_pygments_cls
+from prompt_toolkit.shortcuts import set_title
 from pygments.lexers import HtmlLexer
 #from prompt_toolkit.key_binding.manager import KeyBindingManager
 from prompt_toolkit.key_binding import KeyBindings
@@ -171,17 +172,14 @@ class CmdPrompt(cmd.Cmd):
             # to be customized.
             event.cli.suspend_to_background()
         self.cli = prompt_toolkit.PromptSession(
-                    #u"",
+                    gpt,
                     #multiline = True,
-                    #get_prompt_tokens = gpt,
                     #style = prompt_style,
                     #lexer = PygmentsLexer(PromptLexerFactory(self)),
                     #completer = self.completer,
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
-                    #get_title = self.get_title,
                     bottom_toolbar=self.toolbar,
-                    #key_bindings_registry=registry,
                     key_bindings=bindings,
                     )#,
                 #eventloop = self.ptkevloop,
@@ -242,6 +240,7 @@ class CmdPrompt(cmd.Cmd):
             line = self.cmdqueue.pop(0)
         else:
             try:
+                set_title(self.get_title())
                 #line = self.cli.run(True)
                 line = self.cli.prompt(self.prompt)
                 #line = line.text
