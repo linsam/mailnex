@@ -106,7 +106,7 @@
 import os
 import sys
 import re
-import threading
+import anyio
 from . decorators import *
 from . exceptions import MailnexException
 # xapian search engine
@@ -7019,7 +7019,7 @@ def instancemethod(func, obj, cls):
     """
     return func.__get__(obj, cls)
 
-def interact(invokeOpts):
+async def interact(invokeOpts):
     cmd = Cmd(prompt="mailnex> ", histfile=histFile)
     C = Context()
     C.dbpath = defDbFile # TODO: allow get from config file
@@ -7062,7 +7062,7 @@ def interact(invokeOpts):
     if postConfFolder:
         cmd.do_folder(postConfFolder)
     try:
-        cmd.cmdloop()
+        await cmd.cmdloop()
     except KeyboardInterrupt:
         cmd.do_exit("")
     except Exception as ev:
@@ -7072,13 +7072,16 @@ def interact(invokeOpts):
             print("Bailing on exception",ev)
 
 def main():
+    anyio.run(amain)
+
+async def amain():
     import sys
     import argparse
     parser = argparse.ArgumentParser(description="command line mail user agent")
     parser.add_argument('--config', help='custom configuration file')
     parser.add_argument('--account','-A', help='run account command after config file is read')
     args = parser.parse_args()
-    interact(args)
+    await interact(args)
 
 if __name__ == "__main__":
     main()

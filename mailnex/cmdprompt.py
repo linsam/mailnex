@@ -228,7 +228,7 @@ class CmdPrompt(cmd.Cmd):
             self.lexerEnabled = True
         return text
 
-    def cmdSingle(self, intro=None):
+    async def cmdSingle(self, intro=None):
         """Perform a single prompt-and-execute sequence.
 
         Only displays an intro if given (doesn't fall back to instance's intro).
@@ -242,7 +242,7 @@ class CmdPrompt(cmd.Cmd):
             try:
                 set_title(self.get_title())
                 #line = self.cli.run(True)
-                line = self.cli.prompt(self.prompt)
+                line = await self.cli.prompt_async(self.prompt)
                 #line = line.text
             except EOFError:
                 line = 'EOF'
@@ -252,7 +252,7 @@ class CmdPrompt(cmd.Cmd):
         return stop
 
     
-    def cmdloop(self, intro=None):
+    async def cmdloop(self, intro=None):
         """Repeatedly issue a prompt, accept input, parse an initial prefix
         off the received input, and dispatch to action methods, passing them
         the remainder of the line as argument.
@@ -269,7 +269,7 @@ class CmdPrompt(cmd.Cmd):
                 self.stdout.write(str(self.intro)+"\n")
             stop = None
             while not stop:
-                stop = self.cmdSingle()
+                stop = await self.cmdSingle()
             self.postloop()
         finally:
             # Any cleanup here? We aren't using readline at all...
