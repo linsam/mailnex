@@ -13,6 +13,7 @@ from pygments.lexers import HtmlLexer
 #from prompt_toolkit.key_binding.manager import KeyBindingManager
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
+from prompt_toolkit.application import in_terminal, run_in_terminal
 
 import pygments.style
 
@@ -190,6 +191,7 @@ class CmdPrompt(cmd.Cmd):
         # 1 line for toolbar.
         self.ui_lines = 9
         self.status = {'unread': None}
+        self.cli.run_in_terminal = run_in_terminal
     def toolbar(self, cli=None):
         return [
                 ('class:bottom-toolbar', " Unread: "),

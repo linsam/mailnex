@@ -2597,7 +2597,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # becuase something was added and something else was expunged.
         # Probably need to track untagged fetch results to see that.
         l = lambda: print("Info: %s: %i New messages" % (time.asctime(), delta))
-        if self.cli._is_running:
+        if self.cli.app._is_running:
             self.cli.run_in_terminal(l)
         else:
             l()
@@ -2605,13 +2605,12 @@ class Cmd(cmdprompt.CmdPrompt):
             ml = MessageList()
             ml.addRange(value - delta + 1, value)
             l = lambda: self.showHeadersNonVF(ml)
-            def tcb(handle):
-                if self.cli._is_running:
+            async def tcb(handle):
+                if self.cli.app._is_running:
                     self.cli.run_in_terminal(l)
                 else:
                     l()
-            t = pyuv.Timer(self.ptkevloop.realloop)
-            t.start(tcb,0.1,0)
+            self.C.tg.start_soon(tcb, None)
 
     def newExpunge(self, value, msg):
         # TODO: let user know that message numbers have changed, but only do
@@ -2644,7 +2643,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("fetchMonitor: processing",msg,data)
         data = processImapData(data, self.C.settings)[0]
         l = lambda: print("fetch received:", msg, data)
-#        if self.cli._is_running and self.C.settings.debug.general:
+#        if self.cli.app._is_running and self.C.settings.debug.general:
 #            self.cli.run_in_terminal(l)
         # NOTE: data is often raw, can't always be made unicode, so trying to
         # search for a (unicode) string in it can cause conversion errors to
@@ -2678,10 +2677,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 pass
             self.C.cache[p] = flags
             l = lambda: print("New flags:", flags, "old flags:", oldflags)
-#            if self.cli._is_running and self.C.settings.debug.general:
+#            if self.cli.app._is_running and self.C.settings.debug.general:
 #                self.cli.run_in_terminal(l)
-#            if self.cli._is_running:
-#                self.cli.invalidate()
+#            if self.cli.app._is_running:
+#                self.cli.app.invalidate()
 
     def bgcheck(self, event):
         # NOOP command does nothing, but it has the side effect of allowing
@@ -2693,7 +2692,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # time.
         if self.C.connection:
             try:
-                self.C.connection.doSimpleCommand("noop")
+                self.C.connection.doSimpleCommand(b"noop")
             except:
                 self.C.connection = None
                 raise
@@ -7056,20 +7055,31 @@ async def interact(invokeOpts):
         if res:
             postConfFolder = res
     C.t = blessings.Terminal()
-    #t = pyuv.Timer(cmd.ptkevloop.realloop)
-    #t.start(cmd.bgcheck, 1, 5)
-    #C.bgtimer = t
-    if postConfFolder:
-        cmd.do_folder(postConfFolder)
-    try:
-        await cmd.cmdloop()
-    except KeyboardInterrupt:
-        cmd.do_exit("")
-    except Exception as ev:
-        if options.debug.exception:
-            raise
-        else:
-            print("Bailing on exception",ev)
+    async with anyio.create_task_group() as tg:
+        t = tg.start_soon(timer, 1, 5, cmd.bgcheck, None)
+        C.tg = tg
+        C.bgtimer = t
+        if postConfFolder:
+            cmd.do_folder(postConfFolder)
+        try:
+            await cmd.cmdloop()
+        except KeyboardInterrupt:
+            cmd.do_exit("")
+        except Exception as ev:
+            if options.debug.exception:
+                raise
+            else:
+                print("Bailing on exception",ev)
+        # We are done, the cmdloop exited. Let's clean up all our other tasks
+        print("cleanup")
+        tg.cancel_scope.cancel()
+        print("done")
+
+async def timer(delay, repeat, func, *args, **kwargs):
+    await anyio.sleep(delay)
+    while True:
+        func(*args, **kwargs)
+        await anyio.sleep(repeat)
 
 def main():
     anyio.run(amain)
