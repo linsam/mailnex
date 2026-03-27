@@ -296,11 +296,11 @@ class imap4ClientConnection(object):
         Raises an exception if connection doesn't support IDLE capability;
         caller should then poll with NOOP commands to get updates.
         """
-        if not 'IDLE' in self.caps:
+        if not b'IDLE' in self.caps:
             raise Exception("IMAP connection lacks IDLE capability")
         self.tag += 1
-        tagstr = "T{}".format(self.tag)
-        cmd = "{} idle\r\n".format(tagstr)
+        tagstr = b"T%d"%(self.tag)
+        cmd = b"%s idle\r\n"%(tagstr)
         if self.debug:
             print("Sending command: {}".format(repr(cmd)))
         self.socket.send(cmd)
@@ -309,8 +309,8 @@ class imap4ClientConnection(object):
             line = self.readFullLine()
             if self.debug:
                 print("doIdle recvline: {}".format(repr(line)))
-            if not line.startswith("+ "):
-                line = ""
+            if not line.startswith(b"+ "):
+                line = b""
                 linelen = 0
                 # TODO: timeout? limit number of lines we'll wait for?
                 continue
@@ -333,8 +333,8 @@ class imap4ClientConnection(object):
         See also doIdle() and doIdleData()
         """
         if self.idling:
-            self.socket.send("done\r\n")
-            self.processUntilTag("T{}".format(self.tag))
+            self.socket.send(b"done\r\n")
+            self.processUntilTag(b"T%d"%(self.tag))
         self.idling = False
 
     def readLine(self):
@@ -405,7 +405,7 @@ class imap4ClientConnection(object):
             if self.debug:
                 print("Sending: done (to stop idling)")
             self.socket.send(b"done\r\n")
-            self.processUntilTag(b"T{}".format(self.tag))
+            self.processUntilTag(b"T%d"%(self.tag))
         # TODO: Allow tags to be templated or something.
         self.tag += 1
         tagstr = b"T%i" % self.tag

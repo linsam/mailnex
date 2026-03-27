@@ -2490,11 +2490,13 @@ class Cmd(cmdprompt.CmdPrompt):
             self.C.virtfolder = None
             self.C.prevMessage = None
 
-            if 'IDLE' in c.caps:
+            if b'IDLE' in c.caps:
                 self.C.bgtimer.stop()
-                self.C.bgtimer.start(self.bgcheck, 60*29, 60*29)
-                c.poller = pyuv.Poll(self.ptkevloop.realloop, c.socket.fileno())
-                c.poller.start(pyuv.UV_READABLE, self.checkData)
+                self.C.bgtimer.start(60*29, 60*29)
+                c.poller = Poller(self.C.tg, c.socket.fileno(), self.checkData)
+                c.poller.start()
+                #c.poller = pyuv.Poll(self.ptkevloop.realloop, c.socket.fileno())
+                #c.poller.start(pyuv.UV_READABLE, self.checkData)
                 c.doIdle()
             else:
                 pass
@@ -7056,9 +7058,8 @@ async def interact(invokeOpts):
             postConfFolder = res
     C.t = blessings.Terminal()
     async with anyio.create_task_group() as tg:
-        t = tg.start_soon(timer, 1, 5, cmd.bgcheck, None)
         C.tg = tg
-        C.bgtimer = t
+        C.bgtimer = Timer(tg, 1, 5, cmd.bgcheck, None)
         if postConfFolder:
             cmd.do_folder(postConfFolder)
         try:
@@ -7074,6 +7075,62 @@ async def interact(invokeOpts):
         print("cleanup")
         tg.cancel_scope.cancel()
         print("done")
+
+class Poller(object):
+    def __init__(self, task_group, socket, func):
+        self.tg = task_group
+        self.sock = socket
+        self.func = func
+        self.scope = None
+    async def __call__(self):
+        with anyio.CancelScope() as scope:
+            self.scope = scope
+            while True:
+                await anyio.wait_socket_readable(self.sock)
+                self.func(self, None, None)
+    def stop(self):
+        self.scope.cancel()
+    def start(self):
+        self.tg.start_soon(self)
+
+class Timer(object):
+    def __init__(self, task_group, initial_delay, repeat_delay, func, *args, **kwargs):
+        self.tg = task_group
+        self.initial_delay = initial_delay
+        self.repeat_delay = repeat_delay
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.running = False
+        self.task = None
+        self.scope = None
+        if self.tg:
+            self.running = True
+            self.task = self.tg.start_soon(self)
+    async def __call__(self):
+        with anyio.CancelScope() as scope:
+            self.scope = scope
+            await anyio.sleep(self.initial_delay)
+            while True:
+                self.func(*self.args, **self.kwargs)
+                await anyio.sleep(self.repeat_delay)
+    def stop(self):
+        self.scope.cancel()
+        self.running = False
+    def start(self, initial_delay, repeat_delay, func=None, *args, **kwargs):
+        if self.running:
+            self.stop()
+        if initial_delay is not None:
+            self.initial_delay = initial_delay
+        if repeat_delay is not None:
+            self.repeat_delay = repeat_delay
+        if func is not None:
+            self.func = func
+            self.args = args
+            self.kwargs = kwargs
+        if self.tg:
+            self.running = True
+            self.tg.start_soon(self)
 
 async def timer(delay, repeat, func, *args, **kwargs):
     await anyio.sleep(delay)
