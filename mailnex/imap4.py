@@ -607,7 +607,12 @@ class imap4ClientConnection(object):
         # default to starttls if not given.
         if port == 993:
             useSsl = True
-        targets = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, 0)
+        try:
+            targets = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, 0)
+        except socket.gaierror as ev:
+            print("   ", ev.strerror)
+            raise imap4NoConnect("unable to connect")
+
         # TODO: should we iterate through targets in order, randomly, or
         # randomly by address family (that is, try IPv6 first, then IPv4, then
         # whatever is left)?
