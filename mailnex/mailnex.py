@@ -3321,24 +3321,24 @@ class Cmd(cmdprompt.CmdPrompt):
         def mycb(line):
             # TODO: More of this ought to be handled by the connection instead
             # fo us.
-            if not line.startswith("* LSUB "):
+            if not line.startswith(b"* LSUB "):
                 raise Exception("Bad format from server")
-            flags, delim, path =  processImapData(line[7:] + ' ', self.C.settings)
+            flags, delim, path =  processImapData(line[7:] + b' ', self.C.settings)
             # TODO: Is this supposed to be case insensitive?
-            if '\\Noselect' in flags:
-                print("({}{})".format(path,delim))
+            if b'\\Noselect' in flags:
+                print("({}{})".format(path.decode("ascii"),delim.decode("ascii")))
             else:
-                print("{}".format(path))
+                print("{}".format(path.decode("ascii")))
         self.C.connection.cbs["lsub"] = mycb
         try:
             if len(args) == 0:
-                self.C.connection.doSimpleCommand("LSUB \"\" %")
+                self.C.connection.doSimpleCommand(b"LSUB \"\" %")
             else:
                 # TODO: Horrible. Should check formatting, and probably need to
                 # handle escaping the string properly
                 # TODO: obtain the 'correct' final separator somehow instead
                 # of assuming slash
-                self.C.connection.doSimpleCommand("LSUB \"\" {}/%".format(args))
+                self.C.connection.doSimpleCommand(b"LSUB \"\" %s/%%"%(args))
         except:
             if oldcb:
                 self.C.connection.cbs["lsub"] = oldcb
@@ -4760,7 +4760,7 @@ class Cmd(cmdprompt.CmdPrompt):
             #
             # However, some people probably like the mailx behavior better
             # because they are used to it, so we ought to support it.
-            M.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % index)
+            M.doSimpleCommand(b"STORE %d +FLAGS (\\Seen)" % index)
         # TODO: Raise exception if not successful?
         # Pros: Explicitly lets the user know something went wrong (no output
         # is probably a bad thing
