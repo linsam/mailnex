@@ -311,7 +311,7 @@ class CmdPrompt(cmd.Cmd):
         self.ttyBusy = True
         result = await anyio.run_process(command=args, input=data, check=False, stdout=None, stderr=None)
         self.ttyBusy = False
-        return [result.returncode]
+        return result.returncode
     def runAProgramAsFilter(self, args, data):
         """Run a program with the given input. Return the output. Leaves stderr alone.
 
