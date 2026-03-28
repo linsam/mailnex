@@ -1,13 +1,22 @@
 from functools import wraps
+from inspect import iscoroutinefunction as is_async
 
 # Some decorators
 def needsConnection(func):
-    @wraps(func)
-    def needsConnectionWrapper(self, *args, **kwargs):
-        if not self.C.connection:
-            print("no connection. Try the 'folder' command.")
-        else:
-            return func(self, *args, **kwargs)
+    if is_async(func):
+        @wraps(func)
+        async def needsConnectionWrapper(self, *args, **kwargs):
+            if not self.C.connection:
+                print("no connection. Try the 'folder' command.")
+            else:
+                return await func(self, *args, **kwargs)
+    else:
+        @wraps(func)
+        def needsConnectionWrapper(self, *args, **kwargs):
+            if not self.C.connection:
+                print("no connection. Try the 'folder' command.")
+            else:
+                return func(self, *args, **kwargs)
     return needsConnectionWrapper
 
 def shortcut(name):
@@ -16,12 +25,13 @@ def shortcut(name):
     Actually, we'll just passthrough right now. This will just document intent for now.
 
     Eventually, we can add implementation without going through all the functions again to add it."""
-    def wrap1(func):
-        @wraps(func)
-        def shortcutWrapper(self, *args, **kwargs):
-            return func(self, *args, **kwargs)
-        return shortcutWrapper
-    return wrap1
+    #def wrap1(func):
+    #    @wraps(func)
+    #    def shortcutWrapper(self, *args, **kwargs):
+    #        return func(self, *args, **kwargs)
+    #    return shortcutWrapper
+    #return wrap1
+    return lambda x: x
 
 def optionalNeeds(var, message=None):
     """Marks a command as being optional, needing the given variable to be true to be active.
@@ -54,8 +64,7 @@ def argsToMessageList(func):
 
     As well, some commands behave differently with or without an argument. E.g. headers does different selection updates and displays markers differently.
     """
-    @wraps(func)
-    def argsToMessageListWrapper(self, args):
+    def getMessageList(self, args):
         if args:
             msglist = self.parseMessageList(args)
             if len(msglist) == 1:
@@ -67,7 +76,17 @@ def argsToMessageList(func):
                     return None
         else:
             msglist = None
-        return func(self, msglist)
+        return msglist
+    if is_async(func):
+        @wraps(func)
+        async def argsToMessageListWrapper(self, args):
+            msglist = getMessageList(self, args)
+            return await func(self, msglist)
+    else:
+        @wraps(func)
+        def argsToMessageListWrapper(self, args):
+            msglist = getMessageList(self, args)
+            return func(self, msglist)
     return argsToMessageListWrapper
 
 # Constants for updateMessageSelectionAtEnd:
@@ -84,13 +103,13 @@ def updateMessageSelectionAtEnd(UMSAE_style):
     """
     def wrap1(func):
         @wraps(func)
-        def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
+        async def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
             # First, cache the current message; the command we run might change
             # it, but we need it to update the last message correctly. We'll also
             # use it to restore the current message if the function fails.
             previouslyCurrent = self.C.currentMessage
             try:
-                res = func(self, msglist, *args, **kwargs)
+                res = await func(self, msglist, *args, **kwargs)
             except Exception:
                 # First restore the current message if we can, but don't fail if
                 # we can't.
@@ -137,8 +156,9 @@ def showExceptions(func):
 
     This will print a short exception unless the debug setting contains the exception flag, in which
     case a full stack trace will be shown."""
-    @wraps(func)
-    def showExceptionsWrapper(self, args):
+    topException = None
+    def prep():
+        nonlocal topException
         if not hasattr(self.C, "excTrack"):
             self.C.excTrack = True
         if self.C.excTrack:
@@ -147,26 +167,43 @@ def showExceptions(func):
         else:
             topException = False
 
-        result = None
-        try:
-            result = func(self, args)
-        except Exception as ev:
-            if not topException:
-                raise
-            import traceback
-            if not self.C.settings.debug.exception:
-                # TODO: Print the exception type hierarchy. E.g.
-                # "exceptions.KeyError" instead of just "KeyError", since some
-                # modules may define same-named exceptions with different
-                # meanings.
-                # TODO: Fix lstrip, it converts 'do_open' to 'pen' because it
-                # is a set of characters to strip, not a string to strip.
-                print("Error occurred in command '{}': {}".format(func.__name__.lstrip('do_'), traceback.format_exception_only(type(ev), ev)[-1]))
-            else:
-                traceback.print_exc()
-            print("Warning: mailnex may now be in an inconsistent state due to the above error.")
-        if topException:
-            self.C.excTrack = True
-        return result
+    def dealWithException(ev):
+        if not topException:
+            raise
+        import traceback
+        if not self.C.settings.debug.exception:
+            # TODO: Print the exception type hierarchy. E.g.
+            # "exceptions.KeyError" instead of just "KeyError", since some
+            # modules may define same-named exceptions with different
+            # meanings.
+            # TODO: Fix lstrip, it converts 'do_open' to 'pen' because it
+            # is a set of characters to strip, not a string to strip.
+            print("Error occurred in command '{}': {}".format(func.__name__.lstrip('do_'), traceback.format_exception_only(type(ev), ev)[-1]))
+        else:
+            traceback.print_exc()
+        print("Warning: mailnex may now be in an inconsistent state due to the above error.")
+
+    if is_async(func):
+        @wraps(func)
+        async def showExceptionsWrapper(self, args):
+            result = None
+            try:
+                result = await func(self, args)
+            except Exception as ev:
+                dealWithException(ev)
+            if topException:
+                self.C.excTrack = True
+            return result
+    else:
+        @wraps(func)
+        def showExceptionsWrapper(self, args):
+            result = None
+            try:
+                result = func(self, args)
+            except Exception as ev:
+                dealWithException(ev)
+            if topException:
+                self.C.excTrack = True
+            return result
     return showExceptionsWrapper
 
