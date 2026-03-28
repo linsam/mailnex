@@ -267,7 +267,7 @@ class CmdPrompt(cmd.Cmd):
         if not line:
             return self.emptyline()
         if cmd is None:
-            return self.default(line)
+            return await self.default(line)
         self.lastcmd = line
         if line == 'EOF' :
             self.lastcmd = ''
@@ -275,7 +275,7 @@ class CmdPrompt(cmd.Cmd):
             return self.default(line)
         else:
             if not hasattr(self, 'do_' + cmd):
-                return self.default(line)
+                return await self.default(line)
             func = getattr(self, 'do_' + cmd)
             if inspect.iscoroutinefunction(func):
                 return await func(arg)

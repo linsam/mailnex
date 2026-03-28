@@ -1870,7 +1870,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if line.strip():
             self.C.lastcommand = ''
         return line
-    def default(self, args):
+    async def default(self, args):
         c,a,l = self.parseline(args)
         #TODO Simulate the tokenizer of mailx a bit better. For example,
         # 'print5' will print message 5 instead of erroring that 'print5'
@@ -1893,7 +1893,7 @@ class Cmd(cmdprompt.CmdPrompt):
         elif c == 'n':
             return self.do_next(a)
         elif c == 'p':
-            return self.do_print(a)
+            return await self.do_print(a)
         elif c == 'P':
             return self.do_Print(a)
         elif c == 'q':
@@ -1910,8 +1910,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO: Should just try to do a parse of the line, independant of
             # if it looks like digits
             self.C.currentMessage = int(args)
-            self.do_print("")
+            res = await self.do_print("")
             self.C.lastcommand=""
+            return res
         else:
             print("Unknown command", c)
     def emptyline(self):
