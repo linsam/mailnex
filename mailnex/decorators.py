@@ -102,26 +102,7 @@ def updateMessageSelectionAtEnd(UMSAE_style):
     Most commands select the last message of the message list as the current message and update the previous message to the previously current message, and update the marked message list to be the given message list.
     """
     def wrap1(func):
-        @wraps(func)
-        async def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
-            # First, cache the current message; the command we run might change
-            # it, but we need it to update the last message correctly. We'll also
-            # use it to restore the current message if the function fails.
-            previouslyCurrent = self.C.currentMessage
-            try:
-                res = await func(self, msglist, *args, **kwargs)
-            except Exception:
-                # First restore the current message if we can, but don't fail if
-                # we can't.
-                try:
-                    self.C.currentMessage = previouslyCurrent
-                except:
-                    pass
-                # Next pass it on up
-                raise
-            # We successfully finished (well, didn't have an exception), so
-            # update the values
-            # However, don't update if the message list was empty
+        def updateMsgList(self, previouslyCurrent, msglist, res):
             if msglist is None:
                 self.C.lastList = []
             else:
@@ -144,6 +125,50 @@ def updateMessageSelectionAtEnd(UMSAE_style):
             else:
                 raise Exception("Unknown UMSAE style")
             return res
+        if is_async(func):
+            @wraps(func)
+            async def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
+                # First, cache the current message; the command we run might change
+                # it, but we need it to update the last message correctly. We'll also
+                # use it to restore the current message if the function fails.
+                previouslyCurrent = self.C.currentMessage
+                try:
+                    res = await func(self, msglist, *args, **kwargs)
+                except Exception:
+                    # First restore the current message if we can, but don't fail if
+                    # we can't.
+                    try:
+                        self.C.currentMessage = previouslyCurrent
+                    except:
+                        pass
+                    # Next pass it on up
+                    raise
+                # We successfully finished (well, didn't have an exception), so
+                # update the values
+                # However, don't update if the message list was empty
+                return updateMsgList(self, previouslyCurrent, msglist, res)
+        else:
+            @wraps(func)
+            def updateMessageSelectionAtEnd(self, msglist, *args, **kwargs):
+                # First, cache the current message; the command we run might change
+                # it, but we need it to update the last message correctly. We'll also
+                # use it to restore the current message if the function fails.
+                previouslyCurrent = self.C.currentMessage
+                try:
+                    res = func(self, msglist, *args, **kwargs)
+                except Exception:
+                    # First restore the current message if we can, but don't fail if
+                    # we can't.
+                    try:
+                        self.C.currentMessage = previouslyCurrent
+                    except:
+                        pass
+                    # Next pass it on up
+                    raise
+                # We successfully finished (well, didn't have an exception), so
+                # update the values
+                # However, don't update if the message list was empty
+                return updateMsgList(self, previouslyCurrent, msglist, res)
         return updateMessageSelectionAtEnd
     return wrap1
 
