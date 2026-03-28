@@ -1,4 +1,5 @@
 import cmd
+import inspect
 import prompt_toolkit
 
 # TODO: Make pygments optional?
@@ -18,7 +19,7 @@ from prompt_toolkit.application import in_terminal, run_in_terminal
 import pygments.style
 
 import signal
-import uvloop
+import anyio
 import sys
 
 
@@ -249,9 +250,36 @@ class CmdPrompt(cmd.Cmd):
             except EOFError:
                 line = 'EOF'
         line = self.precmd(line)
-        stop = self.onecmd(line)
+        stop = await self.onecmd(line)
         stop = self.postcmd(stop, line)
         return stop
+
+    async def onecmd(self, line):
+        """async version of the standard lib cmd.Cmd.onecmd
+
+        Instead of just calling the function, will check if it
+        is an async function and if so, will await it.
+
+        Also doesn't use exceptions for checking if command exists.
+        """
+
+        cmd, arg, line = self.parseline(line)
+        if not line:
+            return self.emptyline()
+        if cmd is None:
+            return self.default(line)
+        self.lastcmd = line
+        if line == 'EOF' :
+            self.lastcmd = ''
+        if cmd == '':
+            return self.default(line)
+        else:
+            if not hasattr(self, 'do_' + cmd):
+                return self.default(line)
+            func = getattr(self, 'do_' + cmd)
+            if inspect.iscoroutinefunction(func):
+                return await func(arg)
+            return func(arg)
 
     
     async def cmdloop(self, intro=None):
@@ -276,30 +304,14 @@ class CmdPrompt(cmd.Cmd):
         finally:
             # Any cleanup here? We aren't using readline at all...
             pass
-    def runAProgramWithInput(self, args, data):
+    async def runAProgramWithInput(self, args, data):
         """Run a program with the given input. Leaves stdout/stderr alone.
 
         This should be run when the prompt is inactive."""
-        res=[]
-        def finish(proc,status,signal):
-            proc.close()
-            proc.loop.stop()
-            res.append(status)
-        com = uvloop.Pipe(self.ptkevloop.realloop, True)
-        stdio = [
-                uvloop.StdIO(stream=com, flags=uvloop.UV_CREATE_PIPE | uvloop.UV_READABLE_PIPE),
-                uvloop.StdIO(fd=sys.stdout.fileno(), flags=uvloop.UV_INHERIT_FD),
-                uvloop.StdIO(fd=sys.stderr.fileno(), flags=uvloop.UV_INHERIT_FD),
-                ]
         self.ttyBusy = True
-        s = uvloop.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
-        def closeWhenDone(handle, error):
-            # TODO: Maybe report error?
-            handle.close()
-        com.write(data, closeWhenDone)
-        self.ptkevloop.realloop.run()
+        result = await anyio.run_process(command=args, input=data, check=False, stdout=None, stderr=None)
         self.ttyBusy = False
-        return res[0]
+        return [result.returncode]
     def runAProgramAsFilter(self, args, data):
         """Run a program with the given input. Return the output. Leaves stderr alone.
 
