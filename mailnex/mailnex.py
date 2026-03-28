@@ -1895,7 +1895,7 @@ class Cmd(cmdprompt.CmdPrompt):
         elif c == 'p':
             return await self.do_print(a)
         elif c == 'P':
-            return self.do_Print(a)
+            return await self.do_Print(a)
         elif c == 'q':
             return self.do_quit(a)
         elif c == 'vf':
@@ -4776,7 +4776,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @needsConnection
     @argsToMessageList
     @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
-    def do_Print(self, msglist):
+    async def do_Print(self, msglist):
         """Print all text parts of a message.
 
         This differs from 'print' in that ignored headers and all parts of
@@ -4811,10 +4811,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # for styling
         content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
-        # TODO: Restore external pager
-        #res = self.runAProgramWithInput(["less","-R"], content)
-        print(content.decode('utf-8'))
-        res = 1
+        res = await self.runAProgramWithInput(["less","-R"], content)
         if res == 0:
             # TODO: Allow asynchronous mode. See do_print for details.
             M.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % index)
