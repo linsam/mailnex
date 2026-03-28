@@ -1304,7 +1304,7 @@ def scanSec(mtas, headers):
     # Preprocess out just the headers we care about here
     final = []
     res = []
-    important = ['received', 'authentication-results']
+    important = [b'received', b'authentication-results']
     headers = headers.split(b'\r\n')
     this = b""
     takeHeader = False
@@ -1312,7 +1312,7 @@ def scanSec(mtas, headers):
         if len(h) < 1:
             break # or continue? if empty, that should indicate end of headers, so this should only ever happen as the last and final iteration
         if takeHeader:
-            if not (h[0] == b' ' or h[0] == b'\t'):
+            if not (h[0:1] == b' ' or h[0:1] == b'\t'):
                 takeHeader = False
                 final.append(this)
                 this = b""
@@ -1320,7 +1320,7 @@ def scanSec(mtas, headers):
                 this += b" " + h.lstrip()
                 continue
         if not takeHeader:
-            if h[0] == b' ' or h[0] == b'\t':
+            if h[0:1] == b' ' or h[0:1] == b'\t':
                 # Continuation of a header we aren't interested in
                 continue
             name = h.split(b":", 1)[0]
@@ -1332,7 +1332,7 @@ def scanSec(mtas, headers):
         name, val = h.split(b':', 1)
         if name.lower() == b'authentication-results':
             parts = val.split(b';')
-            mta_id = parts[0].strip()
+            mta_id = parts[0].strip().decode("utf-8") # Should maybe be decode from ASCII?
             if mta_id in mtas:
                 for i in parts[1:]:
                     res.append(i.strip().split()[0]) # e.g. should be 'dkim=pass', 'dmarc=pass', etc.
@@ -1345,13 +1345,14 @@ def scanSec(mtas, headers):
             # TODO: maybe we want to keep who it was from for display purposes
             # (e.g. from example.net to trusted.example.com encrypted with TLS1_2)
             _,rest = val.split(b' by ', 1) #TODO: what if the whitespace around 'by' isn't regular space (e.g. \t)?
-            if not ' ' in rest:
+            if not b' ' in rest:
                 continue
             mta_id,rest = rest.split(b' ', 1)
             mta_id = mta_id.strip() # just in case there are extra spaces after 'by '
+            mta_id = mta_id.decode("utf-8")
             if not mta_id in mtas:
                 continue
-            if not 'b(version=' in rest:
+            if not b'(version=' in rest:
                 continue
             _,rest = rest.split(b'(version=', 1)
             if not b')' in rest:
