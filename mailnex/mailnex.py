@@ -1892,7 +1892,7 @@ class Cmd(cmdprompt.CmdPrompt):
         elif c[0] == 'f' and len(c) > 1 and not c[1].isalpha():
             return self.do_from(c[1:] + ' ' + a)
         elif c == 'n':
-            return self.do_next(a)
+            return await self.do_next(a)
         elif c == 'p':
             return await self.do_print(a)
         elif c == 'P':
@@ -1916,7 +1916,7 @@ class Cmd(cmdprompt.CmdPrompt):
             return res
         else:
             print("Unknown command", c)
-    def emptyline(self):
+    async def emptyline(self):
         # repeat/continue last command
         if self.C.lastcommand=="search":
             self.C.lastsearchpos += 10
@@ -1940,7 +1940,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # Ideally, we'd mention the active list in the prompt. Ideally
             # we'd also list what the implicit command is in the prompt
             # (e.g. next or search continuation)
-            self.do_next("")
+            return await self.do_next("")
     def processConfig(self, fileName, startlineno, lines):
         """Process configuration lines.
 
@@ -4595,7 +4595,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @needsConnection
     @argsToMessageList
     @updateMessageSelectionAtEnd(UMSAE_RETURNS_CURRENT)
-    def do_next(self, msglist):
+    async def do_next(self, msglist):
         """Display the next message in the given list.
 
         If no list given, displays the next message in the mailbox.
@@ -4634,9 +4634,9 @@ class Cmd(cmdprompt.CmdPrompt):
         body = self.partsToString(parts)
         content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
-        res = self.runAProgramWithInput(["less","-R"], content)
+        res = await self.runAProgramWithInput(["less","-R"], content)
         if res == 0:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % index)
+            self.C.connection.doSimpleCommand(b"STORE %d +FLAGS (\\Seen)" % index)
         return vindex
 
     @shortcut("p")
@@ -5589,7 +5589,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # For now, only support showing one set of headers. This is a
             # debugging command for now anyhow.
             index = msglist[0]
-        data = M.fetch(args, b'(BODY.PEEK[HEADER])')
+        data = M.fetch(index, b'(BODY.PEEK[HEADER])')
         headers = processHeaders(processImapData(data[0][1])[0][1], self.C.settings)
         if "subject" in headers:
             print("Subject:", headers["subject"][-1])

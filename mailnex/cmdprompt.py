@@ -265,7 +265,7 @@ class CmdPrompt(cmd.Cmd):
 
         cmd, arg, line = self.parseline(line)
         if not line:
-            return self.emptyline()
+            return await self.emptyline()
         if cmd is None:
             return await self.default(line)
         self.lastcmd = line
