@@ -2545,32 +2545,32 @@ class Cmd(cmdprompt.CmdPrompt):
         def mycb(line):
             # TODO: More of this ought to be handled by the connection instead
             # fo us.
-            if not line.startswith("* LIST "):
+            if not line.startswith(b"* LIST "):
                 raise Exception("Bad format from server")
-            flags, delim, path =  processImapData(line[7:] + ' ', self.C.settings)
+            flags, delim, path =  processImapData(line[7:] + b' ', self.C.settings)
             # TODO: Is this supposed to be case insensitive?
             # TODO: How to handle servers without the CHILDREN extension? We
             # could probe or just never give hints about subfolders
-            if 'CHILDREN' in self.C.connection.caps and '\\HasChildren' in flags:
+            if b'CHILDREN' in self.C.connection.caps and b'\\HasChildren' in flags:
                 # NOTE: According to RFC3348, a server MAY have both
                 # HasChildren and HasNoChildren if it isn't sure, and then we
                 # shouldn't make assumptions, but on the next line says it is
                 # an error if the server does this. I think we'll err on the
                 # side of having children, and if the user cannot select it,
                 # they'll get an error.
-                print("{}{}".format(path,delim))
+                print("{}{}".format(path.decode("utf-8"),delim.decode("utf-8")))
             else:
-                print("{}".format(path))
+                print("{}".format(path.decode("utf-8")))
         self.C.connection.cbs["list"] = mycb
         try:
             if len(args) == 0:
-                self.C.connection.doSimpleCommand("LIST \"\" %")
+                self.C.connection.doSimpleCommand(b"LIST \"\" %")
             else:
                 # TODO: Horrible. Should check formatting, and probably need to
                 # handle escaping the string properly
                 # TODO: obtain the 'correct' final separator somehow instead
                 # of assuming slash
-                self.C.connection.doSimpleCommand("LIST \"\" {}/%".format(args))
+                self.C.connection.doSimpleCommand(b"LIST \"\" %s/%%"%(args))
         except:
             if oldcb:
                 self.C.connection.cbs["list"] = oldcb
