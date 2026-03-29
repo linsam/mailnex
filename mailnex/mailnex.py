@@ -2183,7 +2183,11 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     def do_testq(self, text):
-        print(processImapData(text), self.C.settings)
+        """Test interpretation of IMAP data strings. For debugging purposes
+
+        TBD: This should be hidden"""
+        # TODO: hide this command
+        print(processImapData(text.encode("utf-8"), self.C.settings))
 
     @showExceptions
     def do_maildir(self, args):
