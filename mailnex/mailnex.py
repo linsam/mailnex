@@ -7092,6 +7092,9 @@ class Poller(object):
         self.scope.cancel()
     def start(self):
         self.tg.start_soon(self)
+    def close(self):
+        # LibUV has this be asynchronous, and a callback can free resources. We'll just call 'stop'
+        self.stop()
 
 class Timer(object):
     def __init__(self, task_group, initial_delay, repeat_delay, func, *args, **kwargs):
