@@ -2633,7 +2633,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # cache and be done, maybe)
         self.C.lastMessage -= 1
         # was the message unseen? If so, decrement self.status['unread']
-        p = b'%s.FLAGS'%str(msg)
+        p = b'%s.FLAGS'%(value)
         if p in self.C.cache:
             if b'\\Seen' not in self.C.cache[p]:
                 self.status['unread'] -= 1
@@ -5964,7 +5964,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s +FLAGS (\\Deleted)" % ",".join(map(str,msglist)))
+            self.C.connection.doSimpleCommand(b"STORE %s +FLAGS (\\Deleted)" % b",".join(map(lambda x: b'%d' % x, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -5987,7 +5987,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.virtfolder:
             msglist = [self.C.virtfolder[x - 1] for x in msglist]
         try:
-            self.C.connection.doSimpleCommand("STORE %s -FLAGS (\\Deleted)" % ",".join(map(str, msglist)))
+            self.C.connection.doSimpleCommand(b"STORE %s -FLAGS (\\Deleted)" % b",".join(map(lambda x: b'%d' % x, msglist)))
             # TODO: either run once per flag, or collect errors to show at
             # end.
         except Exception as ev:
@@ -5998,7 +5998,7 @@ class Cmd(cmdprompt.CmdPrompt):
     def do_expunge(self, args):
         """Flush deleted messages (actually remove them).
         """
-        self.C.connection.doSimpleCommand("EXPUNGE")
+        self.C.connection.doSimpleCommand(b"EXPUNGE")
 
     @showExceptions
     @needsConnection
