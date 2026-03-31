@@ -579,6 +579,9 @@ class imap4ClientConnection(object):
                     elif typ.upper() == b"SEARCH":
                         if self.cb_search:
                             self.cb_search(typ, data)
+                    elif typ.upper() == b"ESEARCH":
+                        if self.cb_search:
+                            self.cb_search(typ, data)
                     elif typ.upper() == b"STATUS":
                         # TODO: callback
                         pass
@@ -846,6 +849,26 @@ class imap4ClientConnection(object):
         oldsearch = self.cb_search
         self.cb_search = cb
         res, code, string = self.doSimpleCommand(b"SEARCH CHARSET %s %s" % (charset, query))
+        self.cb_search = oldsearch
+        if res != b"OK":
+            raise imap4Exception("Failed to do search: %s %s" % (res, string))
+        return searchres
+    def esearch(self, returnset, charset, query):
+        searchres = {}
+        returnset = returnset.encode("ascii")
+        charset = charset.encode("ascii")
+        query = query.encode("ascii") # TODO: Encode based on charset?
+        def cb(typ, data):
+            assert(typ == b"ESEARCH")
+            # TODO: Should process as imap data, but processImapData is in mailnex instead of here in imap4
+            assert(data.startswith(b'(TAG "')) # TODO we need to know what tag was sent, but that's in doSimple
+            _,data = data.split(b") ")
+            data = data.split()
+            for k,v in zip(data[0::2], data[1::2]):
+                searchres[k.decode('ascii')] = v.decode('ascii') # Presumes there are no duplicate keys, otherwise we'd need to decide to append or replace
+        oldsearch = self.cb_search
+        self.cb_search = cb
+        res, code, string = self.doSimpleCommand(b"SEARCH RETURN (%s) CHARSET %s %s" % (returnset, charset, query))
         self.cb_search = oldsearch
         if res != b"OK":
             raise imap4Exception("Failed to do search: %s %s" % (res, string))

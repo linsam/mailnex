@@ -2281,7 +2281,14 @@ class Cmd(cmdprompt.CmdPrompt):
             if not self.C.connection:
                 print("No connection. Give a location to this command to establish a connection.\nSee 'help folder' for more info.")
                 return
-            unseen = len(self.C.connection.search("utf-8", "UNSEEN"))
+            if not b'ESEARCH' in self.C.connection.caps:
+                unseen = len(self.C.connection.search("utf-8", "UNSEEN"))
+            else:
+                searchres = self.C.connection.esearch("COUNT", "utf-8", "UNSEEN")
+                if 'COUNT' in searchres:
+                    unseen = searchres['COUNT']
+                else:
+                    unseen = 0
             print("\"{}://{}@{}:{}/{}\": {} messages {} unread".format(
                 self.C.connection.mailnexProto,
                 self.C.connection.mailnexUser,
