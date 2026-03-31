@@ -5828,8 +5828,10 @@ class Cmd(cmdprompt.CmdPrompt):
                     # the user wants, they can see both.
                     date = date.astimezone(dateutil.tz.tzlocal())
                 try:
-                    subject = email.header.make_header(email.header.decode_header(envelope.subject))
-                except:
+                    subject = str(email.header.make_header(email.header.decode_header(envelope.subject.decode("ascii"))))
+                except Exception as ev:
+                    if self.C.settings.debug.general:
+                        print("Subject error",ev)
                     subject = envelope.subject
                 this = True if (num == self.C.currentMessage) else False
                 froms = [x[0] if not x[0] in [None, b'NIL'] else b"%s@%s" % (x[2], x[3]) for x in envelope.from_]
