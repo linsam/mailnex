@@ -2501,13 +2501,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 self.C.bgtimer.start(60*29, 60*29)
                 c.poller = Poller(self.C.tg, c.socket.fileno(), self.checkData)
                 c.poller.start()
-                #c.poller = pyuv.Poll(self.ptkevloop.realloop, c.socket.fileno())
-                #c.poller.start(pyuv.UV_READABLE, self.checkData)
                 c.doIdle()
             else:
-                pass
-                #self.C.bgtimer.stop()
-                #self.C.bgtimer.start(self.bgcheck, 1, 5)
+                self.C.bgtimer.stop()
+                self.C.bgtimer.start(self.bgcheck, 1, 5)
 
         except KeyboardInterrupt:
             print("Aborting")
