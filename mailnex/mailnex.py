@@ -4819,7 +4819,7 @@ class Cmd(cmdprompt.CmdPrompt):
         res = await self.runAProgramWithInput(["less","-R"], content)
         if res == 0:
             # TODO: Allow asynchronous mode. See do_print for details.
-            M.doSimpleCommand("STORE %s +FLAGS (\\Seen)" % index)
+            M.doSimpleCommand(b"STORE %d +FLAGS (\\Seen)" % index)
 
     @showExceptions
     @optionalNeeds(haveXapian, "Needs python-xapian package installed")
