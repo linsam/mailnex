@@ -181,9 +181,7 @@ def showExceptions(func):
 
     This will print a short exception unless the debug setting contains the exception flag, in which
     case a full stack trace will be shown."""
-    topException = None
-    def prep():
-        nonlocal topException
+    def prep(self):
         if not hasattr(self.C, "excTrack"):
             self.C.excTrack = True
         if self.C.excTrack:
@@ -191,8 +189,9 @@ def showExceptions(func):
             topException = True
         else:
             topException = False
+        return topException
 
-    def dealWithException(ev):
+    def dealWithException(self, ev, topException):
         if not topException:
             raise
         import traceback
@@ -211,22 +210,24 @@ def showExceptions(func):
     if is_async(func):
         @wraps(func)
         async def showExceptionsWrapper(self, args):
+            topException = prep(self)
             result = None
             try:
                 result = await func(self, args)
             except Exception as ev:
-                dealWithException(ev)
+                dealWithException(self, ev, topException)
             if topException:
                 self.C.excTrack = True
             return result
     else:
         @wraps(func)
         def showExceptionsWrapper(self, args):
+            topException = prep(self)
             result = None
             try:
                 result = func(self, args)
             except Exception as ev:
-                dealWithException(ev)
+                dealWithException(self, ev, topException)
             if topException:
                 self.C.excTrack = True
             return result
