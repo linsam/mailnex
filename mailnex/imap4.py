@@ -407,21 +407,23 @@ class imap4ClientConnection(object):
             self.socket.send(b"done\r\n")
             self.processUntilTag(b"T%d"%(self.tag))
         # TODO: Allow tags to be templated or something.
-        self.tag += 1
-        tagstr = b"T%i" % self.tag
-        imapcmd = b"%s %s\r\n" % (tagstr, cmd)
-        if self.debug:
-            print("Sending command: {}".format(repr(imapcmd)))
-        self.socket.send(imapcmd)
-        result = self.processUntilTag(tagstr)
-        if self.idling:
-            # TODO: maybe only return to idling after a delay?
-            # Could use a timer?
-            # If we go back to idling immediately, there's a lot
-            # of back-and-forth when the program using this lib
-            # does back-to-back simple commands, wasting bandwidth
-            # and time.
-            self.doIdle()
+        try:
+            self.tag += 1
+            tagstr = b"T%i" % self.tag
+            imapcmd = b"%s %s\r\n" % (tagstr, cmd)
+            if self.debug:
+                print("Sending command: {}".format(repr(imapcmd)))
+            self.socket.send(imapcmd)
+            result = self.processUntilTag(tagstr)
+        finally:
+            if self.idling:
+                # TODO: maybe only return to idling after a delay?
+                # Could use a timer?
+                # If we go back to idling immediately, there's a lot
+                # of back-and-forth when the program using this lib
+                # does back-to-back simple commands, wasting bandwidth
+                # and time.
+                self.doIdle()
         return result
 
     def processUntilTag(self, tagstr):
