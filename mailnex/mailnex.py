@@ -2286,7 +2286,7 @@ class Cmd(cmdprompt.CmdPrompt):
             else:
                 searchres = self.C.connection.esearch("COUNT", "utf-8", "UNSEEN")
                 if 'COUNT' in searchres:
-                    unseen = searchres['COUNT']
+                    unseen = int(searchres['COUNT'])
                 else:
                     unseen = 0
             print("\"{}://{}@{}:{}/{}\": {} messages {} unread".format(
