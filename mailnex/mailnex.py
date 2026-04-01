@@ -5852,7 +5852,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             # TODO: Show error in listing, or drop the header?
                             newfroms.append(u"<bad from>")
                 froms = newfroms
-                if self.C.virtfolderExtra:
+                if self.C.virtfolderExtra and num:
                     extra = self.C.virtfolderExtra[num - 1]
                     # extra[0] is leader info. True for is leader, False for
                     # is not leader, 2 for is leader without children
