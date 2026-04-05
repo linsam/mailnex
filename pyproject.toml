@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+
+# Additional files?
+#     '': ['README', 'USER.README', 'INSTALL', 'requirements.txt'],
+
+
+[project]
+name = "mailnex"
+version = "0.2alpha1"
+description = "Email client in the style of mailx"
+authors = [
+        { name = "John O'Meara" },
+]
+#license = "TBD" probably GPL? MIT? BSD? Need to review the libraries we use to see what we can use
+
+requires-python = ">= 3.10"
+dependencies = [
+  "Pygments==2.20.0",
+  "blessings==1.7",
+  "keyring==23.5",
+  "prompt-toolkit==3.0.28",
+  "pyxdg==0.27",
+  "wcwidth==0.2.5",
+  "python-magic==0.4.24",
+  "python-dateutil==2.8.1",
+  "anyio==4.13.0",
+]
+
+[project.scripts]
+mailnex = "mailnex.mailnex:main"
+
+[project.urls]
+Homepage = "http://linsam.homelinux.com/mailnex"
+#Documentation = "https://readthedocs.org"
+#Repository = "https://github.com/me/spam.git"
+#Issues = "https://github.com/me/spam/issues"
+#Changelog = "https://github.com/me/spam/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["mailnex"]
+#package_data = {
+#    '': ['README', 'USER.README', 'INSTALL', 'requirements.txt'],
+#},
