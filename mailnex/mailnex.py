@@ -2506,7 +2506,7 @@ class Cmd(cmdprompt.CmdPrompt):
             if b'IDLE' in c.caps:
                 self.C.bgtimer.stop()
                 self.C.bgtimer.start(60*29, 60*29)
-                c.poller = Poller(self.C.tg, c.socket.fileno(), self.checkData)
+                c.poller = Poller(self.C.tg, c.socket, self.checkData)
                 c.poller.start()
                 c.doIdle()
             else:
