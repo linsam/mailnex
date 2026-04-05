@@ -22,18 +22,18 @@ Installing from source
         run:
             python3 -m venv --system-site-packages env
             source env/bin/activate
-            python setup.py install
+            python3 -m pip install .
 
         Install python-xapian using your system package manager (e.g. apt-get install python-xapian)
         If you want it to remember passwords, install appropriate keyring managers (TODO: name the packages)
 
-        run directly: mailnex
+        run directly: env/bin/mailnex
 
     Method 2: (for when the above method results in problems with function calls)
         run:
             python3 -m venv env
             source env/bin/activate
-            python setup.py install
+            python3 -m pip install .
 
         To enable indexed searching features, follow instructions at
         https://gist.github.com/josezambrana/920909. We use version 1.2.23 instead
@@ -43,7 +43,7 @@ Installing from source
         If you want it to remember passwords, good luck. Probably your best bet is
         to do 'pip install keyring.alt' and configure plain-text password storage.
 
-        run directly: mailnex
+        run directly: env/bin/mailnex
 
 
 Running without installation
@@ -52,7 +52,7 @@ Running without installation
 
     Setup a virtualenv as above, then run:
 
-        python setup.py develop
+        python3 -m pip install -e .
 
     That adds a mailnex script to the virtualenv or system path that calls the
     code in the project directory and installs all dependencies. Then you can
@@ -64,7 +64,7 @@ System installation
 
     This is not recommended, because it ignores your system package manager
 
-        python setup.py install
+        python3 -m pip install .
 
     Then, run directly:
 
