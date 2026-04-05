@@ -146,7 +146,6 @@ import mailcap
 import shlex
 # Other
 import tempfile
-import uvloop
 import time
 from . import settings
 import subprocess
