@@ -102,14 +102,13 @@ class Completer(prompt_toolkit.completion.Completer):
                 #   (like source of this completion. Might be used to show
                 #   which address book an address completion is from.
                 yield prompt_toolkit.completion.Completion(i, start_position=-len(this_word))
-            raise StopIteration
+            return
         start_words = document.current_line.split(None,1)
         command = start_words[0]
         symbol = u"compl_{}".format(command)
         if symbol in dir(self.cmd):
             gen = getattr(self.cmd, symbol)(document, complete_event)
-            while True:
-                yield gen.next()
+            yield from gen
 
 class CmdPrompt(cmd.Cmd):
     """Subclass of Cmd that uses prompt_toolkit instead of readline/raw_input.
@@ -178,7 +177,7 @@ class CmdPrompt(cmd.Cmd):
                     #multiline = True,
                     #style = prompt_style,
                     #lexer = PygmentsLexer(PromptLexerFactory(self)),
-                    #completer = self.completer,
+                    completer = self.completer,
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
                     bottom_toolbar=self.toolbar,

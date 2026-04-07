@@ -4421,13 +4421,12 @@ class Cmd(cmdprompt.CmdPrompt):
         line = before + after
         # TODO: Find out which word this is. Look for pipe to abort completion
         if '|' in line:
-            raise StopIteration()
+            return
         count = len(before.split())
         if count != 3:
-            raise StopIteration()
+            return
         compl = pathCompleter(before.split()[-1])
-        while True:
-            yield compl.next()
+        yield from compl
     @showExceptions
     @needsConnection
     def do_write(self, args):

@@ -21,9 +21,10 @@ def pathCompleter(currentPath):
     except OSError:
         # Typically, file not found. Whatever the error, just
         # don't do completions.
+        return
         raise StopIteration
     # Remove paths that don't start with our query
-    paths = filter(lambda x: x.startswith(filename), paths)
+    paths = list(filter(lambda x: x.startswith(filename), paths))
     paths.sort()
     for i in paths:
         extra=None
