@@ -3889,15 +3889,15 @@ class Cmd(cmdprompt.CmdPrompt):
             resparts.append((o[0], o[1], d))
         return resparts
 
-    def lex_help(self, text, rest, res):
+    def lex_help(self, pos, text, rest, res):
         # TODO: we aren't highlighting if there is more than one space before
         # the help topic
         if "do_{}".format(rest) in dir(self):
-            res.append((cmdprompt.Generic.Heading, rest))
+            res.append((pos, cmdprompt.Generic.Heading, rest))
         elif "help_{}".format(rest) in dir(self):
-            res.append((cmdprompt.Generic.Heading, rest))
+            res.append((pos, cmdprompt.Generic.Heading, rest))
         else:
-            res.append((cmdprompt.Text, rest))
+            res.append((pos, cmdprompt.Text, rest))
     def compl_help(self, document, complete_event):
         topics = []
         this_word = document.get_word_before_cursor()
@@ -4384,34 +4384,34 @@ class Cmd(cmdprompt.CmdPrompt):
         struct = flattenStruct(struct)
         return struct
 
-    def lex_write(self, text, rest, res):
+    def lex_write(self, pos, text, rest, res):
         def checkMsg(tok):
             try:
                 msg = tok.split('.')
                 msg = list(map(int,msg))
             except:
-                res.append((cmdprompt.Generic.Error, tok))
+                res.append((pos, cmdprompt.Generic.Error, tok))
             else:
-                if msg[0] < 0 or msg[0] > self.C.lastMessage:
-                    res.append((cmdprompt.Generic.Error, tok))
+                if msg[0] < 0 or msg[0] > (self.C.lastMessage or 0):
+                    res.append((pos, cmdprompt.Generic.Error, tok))
                 else:
-                    res.append((cmdprompt.Generic.Heading, tok))
+                    res.append((pos, cmdprompt.Generic.Heading, tok))
         tok = rest.split()
         if len(tok) == 1:
             checkMsg(tok[0])
             rest = rest[len(tok[0]):]
             if len(rest):
                 # Catch spaces typed by user
-                res.append((cmdprompt.Generic.Normal, rest))
+                res.append((pos, cmdprompt.Generic.Normal, rest))
             return
         elif len(tok) == 2:
             checkMsg(tok[0])
             # TODO: Ideally, validate path or look for pipe
-            res.append((cmdprompt.Generic.Normal, rest[len(tok[0]):]))
+            res.append((pos, cmdprompt.Generic.Normal, rest[len(tok[0]):]))
             return
         else:
             # TODO: Look for pipe ('|') and such
-            res.append((cmdprompt.Generic.Normal, rest))
+            res.append((pos, cmdprompt.Generic.Normal, rest))
         return
     def compl_write(self, document, complete_event):
         topics = []

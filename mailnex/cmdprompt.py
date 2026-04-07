@@ -29,11 +29,11 @@ def PromptLexerFactory(cmd_obj):
         def __init__(self, **options):
             self.options = options
             Lexer.__init__(self, **options)
-        def get_tokens_unprocessed(self, text):
+        def get_tokens_unprocessed_old(self, text):
             raise Exception("Just use get_tokens!")
-        def get_tokens(self, text):
+        def get_tokens_unprocessed(self, text):
             if not self.cmd.lexerEnabled:
-                return [(Token.Text, text)]
+                return [(0, Token.Text, text)]
             res = []
             data=text.split(" ", 1)
             command = data[0] if len(data) else ""
@@ -42,9 +42,9 @@ def PromptLexerFactory(cmd_obj):
                 return []
             if len(data) > 0:
                 if u"do_{}".format(command) in dir(self.cmd):
-                    res.append((Generic.Inserted, command))
+                    res.append((0, Generic.Inserted, command))
                 else:
-                    res.append((Token.Text, text))
+                    res.append((0, Token.Text, text))
                     return res
             if len(data) > 1:
                 if u"lex_{}".format(command) in dir(self.cmd):
@@ -53,10 +53,10 @@ def PromptLexerFactory(cmd_obj):
                     # this generates its own token, does Pygments waste
                     # terminal bandwidth sending extra codes for the one
                     # space?
-                    res.append((Token.Text, " "))
-                    getattr(self.cmd, "lex_{}".format(command))(text, rest, res)
+                    res.append((len(data) + 1, Token.Text, " "))
+                    getattr(self.cmd, "lex_{}".format(command))(len(data) + 1, text, rest, res)
                 else:
-                    res.append((Token.Text, " " + rest))
+                    res.append((len(data) + 1, Token.Text, " " + rest))
             return res
         cmd = cmd_obj
         name = 'Prompt'
@@ -176,7 +176,7 @@ class CmdPrompt(cmd.Cmd):
                     gpt,
                     #multiline = True,
                     #style = prompt_style,
-                    #lexer = PygmentsLexer(PromptLexerFactory(self)),
+                    lexer = PygmentsLexer(PromptLexerFactory(self)),
                     completer = self.completer,
                     history = self.history,
                     auto_suggest = prompt_toolkit.auto_suggest.AutoSuggestFromHistory(),
