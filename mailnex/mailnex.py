@@ -7122,7 +7122,8 @@ class Timer(object):
                 self.func(*self.args, **self.kwargs)
                 await anyio.sleep(self.repeat_delay)
     def stop(self):
-        self.scope.cancel()
+        if self.running and self.scope:
+            self.scope.cancel()
         self.running = False
     def start(self, initial_delay, repeat_delay, func=None, *args, **kwargs):
         if self.running:
