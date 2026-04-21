@@ -121,11 +121,11 @@ class editorCmds(object):
         """Add a line that starts with a '~' character"""
         # User wants to start the line with a tidle
         self.message.set_payload(self.message.get_payload() + line[1:] + '\r\n')
-    def run(self):
+    async def run(self):
         while True:
             try:
                 # TODO: allow tabs in the input
-                line = self.singleprompt("", completer=self.cmdCmpl)
+                line = await self.singleprompt("", completer=self.cmdCmpl)
                 # TODO: Allow ctrl+c to abort the message, but not mailnex
                 # (e.g. at this stage, two ctrl+c would be needed to exit
                 # mailnex. The first to abort the message, the second to exit
@@ -292,11 +292,11 @@ class editorCmds(object):
         self.C.printInfo("Message abandoned")
         return False
     @noarg
-    def do_h(self, line):
-        newto = self.singleprompt("To: ", default=self.message['To'] or '', completer=self.getAddressCompleter())
-        newcc = self.singleprompt("Cc: ", default=self.message['Cc'] or '', completer=self.getAddressCompleter())
-        newbcc = self.singleprompt("Bcc: ", default=self.message['Bcc'] or '', completer=self.getAddressCompleter())
-        newsubject = self.singleprompt("Subject: ", default=self.message['Subject'] or '')
+    async def do_h(self, line):
+        newto = await self.singleprompt("To: ", default=self.message['To'] or '', completer=self.getAddressCompleter())
+        newcc = await self.singleprompt("Cc: ", default=self.message['Cc'] or '', completer=self.getAddressCompleter())
+        newbcc = await self.singleprompt("Bcc: ", default=self.message['Bcc'] or '', completer=self.getAddressCompleter())
+        newsubject = await self.singleprompt("Subject: ", default=self.message['Subject'] or '')
         if newto == "":
             del self.message['To']
         elif 'To' in self.message:
@@ -427,7 +427,7 @@ class editorCmds(object):
             os.unlink(f[1])
             #TODO: If editHeaders is set, retrieve those headers
 
-    def at(self, line):
+    async def at(self, line):
         parts = line.split(None, 1)
         if len(parts) == 2:
             filename = parts[1]
@@ -452,7 +452,7 @@ class editorCmds(object):
             self.C.printInfo("No attachments yet.")
         while True:
             try:
-                line = self.singleprompt("attachment> ")
+                line = await self.singleprompt("attachment> ")
             except EOFError:
                 line = 'q'
             except KeyboardInterrupt:

@@ -202,7 +202,7 @@ class CmdPrompt(cmd.Cmd):
         """Set the prompt string"""
         self.prompt = newprompt
 
-    def singleprompt(self, prompt, ispassword=False, default=u'', titlefunc=None, completer=None):
+    async def singleprompt(self, prompt, ispassword=False, default=u'', titlefunc=None, completer=None):
         origPrompt = self.prompt
         self.prompt = prompt
         origHistory = self.history
@@ -222,7 +222,7 @@ class CmdPrompt(cmd.Cmd):
         self.lexerEnabled = False
         #self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
         try:
-            text = self.cli.prompt(self.prompt)
+            text = await self.cli.prompt_async(self.prompt)
         finally:
             self.prompt = origPrompt
             #self.cli.application.buffer.history = origHistory

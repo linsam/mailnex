@@ -2246,7 +2246,7 @@ class Cmd(cmdprompt.CmdPrompt):
             print("Please select clear or cleardec")
         return
     @showExceptions
-    def do_folder(self, args):
+    async def do_folder(self, args):
         """Connect to the given mailbox, or show info about the current connection.
 
         With no arguments, gives an overview of the current connection
@@ -2429,7 +2429,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # particular accounts (or enabling for particular accounts
                     # only).
                     while True:
-                        line = self.singleprompt("Save password to keyring (yes/no)? ").lower().strip()
+                        line = await self.singleprompt("Save password to keyring (yes/no)? ").lower().strip()
                         if line == 'y' or line == 'yes':
                             print(" Saving...")
                             try:
@@ -2518,7 +2518,7 @@ class Cmd(cmdprompt.CmdPrompt):
         # Finally, print stats about the connection
         # We already print this when called with no CLI arguments, so... just
         # call ourselves with empty CLI arguments to display it.
-        self.do_folder("")
+        await self.do_folder("")
         # Finally finally, if 'headers' or 'headers_folder' is set, display
         # headers
         if self.C.settings.headers_folder if self.C.settings.headers_folder.value is not None else self.C.settings.headers:
@@ -4480,7 +4480,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
     @showExceptions
     @needsConnection
-    def do_open(self, args):
+    async def do_open(self, args):
         """Open a message part (e.g. attachment) in an external viewer.
 
         Takes a message sub-part notation. E.g. 670.1.2 is part 2 of part 1 of
@@ -4575,7 +4575,7 @@ class Cmd(cmdprompt.CmdPrompt):
             outfile.write(data)
             outfile.flush()
             # TODO: make asking a parameter.
-            res = self.singleprompt("Launch viewer %r? [y/N] " % fullcmd).lower()
+            res = await self.singleprompt("Launch viewer %r? [y/N] " % fullcmd).lower()
             if res != 'y' and res != 'yes':
                 return
             # TODO: Support opening in the background (should check cap for
@@ -4921,23 +4921,23 @@ class Cmd(cmdprompt.CmdPrompt):
         print(content)
 
     @showExceptions
-    def do_mail(self, args):
+    async def do_mail(self, args):
         """Compose and send a message"""
         # TODO: Completion of email addresses
         if args:
             to = args
         else:
             # TODO: Support completions from, e.g. Khard
-            to = self.singleprompt("To: ")
+            to = await self.singleprompt("To: ")
         # Default is space separated:
         to = to.split()
-        subject = self.singleprompt("Subject: ")
+        subject = await self.singleprompt("Subject: ")
         newmsg = email.mime.text.MIMEText("")
         newmsg['To'] = ", ".join(to)
         newmsg['Subject'] = subject
         if self.C.settings.autobcc:
             newmsg['Bcc'] = self.C.settings.autobcc.value
-        self.editMessage(newmsg)
+        await self.editMessage(newmsg)
 
     @showExceptions
     @needsConnection
@@ -5140,7 +5140,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if sent:
             M.doSimpleCommand("STORE %s +FLAGS (\\Answered)" % index)
 
-    def editMessage(self, message):
+    async def editMessage(self, message):
         """Run message composer until it is sent or the user aborts.
 
         Returns True if sent, False if not sent
@@ -5149,13 +5149,13 @@ class Cmd(cmdprompt.CmdPrompt):
         self.C.printInfo("Type your message. End with single '.' on a line, or EOF.\nUse '~?' on a line for help.")
         editor = composer.editorCmds(self.C, message, self.singleprompt, self.cli, self.getAddressCompleter, self.runAProgramStraight, composer.editorCompleter())
         while True:
-            if editor.run() == False:
+            if await editor.run() == False:
                 return False
             self.C.printInfo("Sending message...")
 
             try:
                 origbcc = message.get_all('bcc',[])
-                res = self.sendMessage(editor, message)
+                res = await self.sendMessage(editor, message)
             except Exception as ev:
                 # First, reset the BCC field, as sendMessage removes it before
                 # trying to send
@@ -5176,7 +5176,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 break
         return res
 
-    def sendMessage(self, editor, message):
+    async def sendMessage(self, editor, message):
 
         message.set_payload(quopri.encodestring(message.get_payload().encode('utf-8')))
         message.set_charset("utf-8")
@@ -5296,7 +5296,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 # TODO: Better key selection interface. E.g. should have a
                 # header line, allow showing more details for a key
                 enumerateKeys(keys)
-                keysel = self.singleprompt("Select key number (default 1): ", default="")
+                keysel = await self.singleprompt("Select key number (default 1): ", default="")
                 if keysel == "":
                     keysel = '1'
                 keys = [keys[int(keysel) - 1]]
@@ -5346,7 +5346,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     if len(kl) > 1:
                         print("Multiple keys ({}) found for {}!".format(len(kl), r))
                         enumerateKeys(kl)
-                        keysel = self.singleprompt("Select key number (default 1): ", default="")
+                        keysel = await self.singleprompt("Select key number (default 1): ", default="")
                         if keysel == "":
                             keysel = '1'
                         kl = [kl[int(keysel) - 1]]
@@ -5537,7 +5537,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 if prompt_to_save:
                     # TODO: Make a common function with the IMAP side
                     while True:
-                        line = self.singleprompt("Save password to keyring (yes/no)? ").lower().strip()
+                        line = await self.singleprompt("Save password to keyring (yes/no)? ").lower().strip()
                         if line == 'y' or line == 'yes':
                             print(" Saving...")
                             try:
