@@ -2429,7 +2429,7 @@ class Cmd(cmdprompt.CmdPrompt):
                     # particular accounts (or enabling for particular accounts
                     # only).
                     while True:
-                        line = await self.singleprompt("Save password to keyring (yes/no)? ").lower().strip()
+                        line = (await self.singleprompt("Save password to keyring (yes/no)? ")).lower().strip()
                         if line == 'y' or line == 'yes':
                             print(" Saving...")
                             try:
