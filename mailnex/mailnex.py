@@ -3878,7 +3878,18 @@ class Cmd(cmdprompt.CmdPrompt):
                         print("Successfully decoded as", charset)
                     realcharset = charset
             else:
-                d = dstr
+                # No charset was given. Try ascii, then utf-8, then cp-1252
+                # TODO: Set realcharset on the first one found? or track guessed charset separately?
+                try:
+                    d = dstr.decode('ascii')
+                except:
+                    try:
+                        d = dstr.decode('utf-8')
+                    except:
+                        try:
+                            d = dstr.decode('windows-1252')
+                        except:
+                            d = "Part %s: failed to decode as ascii, utf-8, and cp1252 (guessed, as no encoding specified)"
                 realcharset = None
             if o[1] and hasattr(o[1], 'attrs') and o[1].attrs and 'format' in o[1].attrs and o[1].attrs['format'].lower() == 'flowed':
                 #TODO: Flowed format handling
