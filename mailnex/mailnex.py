@@ -2456,6 +2456,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 print("Failed to login")
                 if 'imap_string' in dir(ev):
                     print("  Server said:", repr(ev.imap_string))
+                if self.C.settings.debug.exception:
+                    raise
                 return
         try:
             c.clearCB("exists")
