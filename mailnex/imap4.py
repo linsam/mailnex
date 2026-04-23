@@ -719,8 +719,8 @@ class imap4ClientConnection(object):
         if self.isTls():
             raise imap4Exception("Already in TLS mode")
         # Run STARTTLS command, wait for go ahead
-        res, code, string = self.doSimpleCommand("STARTTLS")
-        if res != 'OK':
+        res, code, string = self.doSimpleCommand(b"STARTTLS")
+        if res != b'OK':
             raise imap4Exception("No TLS on server")
         # TODO: Support client certificate
         self.origsocket = self.socket
@@ -763,7 +763,7 @@ class imap4ClientConnection(object):
             password=password.encode("utf8")
 
         res, code, string = self.doSimpleCommand(b"LOGIN \"%s\" \"%s\"" % (username, password))
-        if (res == 'OK'):
+        if (res == b'OK'):
             self.state = STATE_AUTH
     def select(self, box = None):
         if box is None:
@@ -832,14 +832,14 @@ class imap4ClientConnection(object):
         def fetch_cb(message, data):
             fetchlist.append((message, data))
         self.cb_fetch = fetch_cb
-        res, code, string = self.doSimpleCommand("uid fetch %s %s" % (message, what))
+        res, code, string = self.doSimpleCommand(b"uid fetch %s %s" % (message, what))
         self.cb_fetch = oldcb
-        if res != 'OK':
+        if res != b'OK':
             raise imap4Exception("Failed to uid fetch: %s %s" % (res, string))
         return fetchlist
     def getCapabilities(self):
-        res, code, string = self.doSimpleCommand("CAPABILITY")
-        if res != "OK":
+        res, code, string = self.doSimpleCommand(b"CAPABILITY")
+        if res != b"OK":
             raise imap4Exception("Failed to get capability: %s %s" %(res, string))
         return self.caps
     def search(self, charset, query):
