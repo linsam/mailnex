@@ -82,14 +82,13 @@ class editorCompleter(cmdprompt.prompt_toolkit.completion.Completer):
         line = document.current_line_before_cursor
         if not line.startswith("~@ "):
             # Only support completing filenames for now
-            raise StopIteration()
+            return
         # TODO: Break out filename completer into separate function,
         # to be reused by the attachment editor and possibly other
         # places.
         currentPath = line[3:]
         compl = pathCompleter(currentPath)
-        while True:
-            yield compl.next()
+        yield from compl
 
 class editorCmds(object):
     """Similar to the regular command class, but we only run commands if the line starts with a '~'"""

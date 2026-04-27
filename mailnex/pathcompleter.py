@@ -22,7 +22,6 @@ def pathCompleter(currentPath):
         # Typically, file not found. Whatever the error, just
         # don't do completions.
         return
-        raise StopIteration
     # Remove paths that don't start with our query
     paths = list(filter(lambda x: x.startswith(filename), paths))
     paths.sort()

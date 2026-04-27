@@ -2117,7 +2117,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 res = s.wait()
                 if res != 0 or len(results) == 0:
                     #print("res:",res,"len",len(results))
-                    raise StopIteration()
+                    return
 
                 for res in results:
                     if len(res) > 1:

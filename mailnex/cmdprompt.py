@@ -222,7 +222,7 @@ class CmdPrompt(cmd.Cmd):
         self.lexerEnabled = False
         #self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
         try:
-            text = await self.cli.prompt_async(self.prompt)
+            text = await self.cli.prompt_async(self.prompt, completer=completer)
         finally:
             self.prompt = origPrompt
             #self.cli.application.buffer.history = origHistory
