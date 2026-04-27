@@ -2147,7 +2147,7 @@ class Cmd(cmdprompt.CmdPrompt):
         print("next message:", self.C.nextMessage)
 
     @showExceptions
-    def do_account(self, args):
+    async def do_account(self, args):
         """List defined accounts, or run commands for an account
 
         account             list accounts
@@ -2178,7 +2178,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 startline = firstLine[1]
                 postFolder = self.processConfig(filename, startline, list(map(lambda x: x[2], ac)))
                 if postFolder:
-                    self.do_folder(postFolder)
+                    await self.do_folder(postFolder)
 
     @showExceptions
     def do_testq(self, text):
@@ -7078,7 +7078,7 @@ async def interact(invokeOpts):
         C.tg = tg
         C.bgtimer = Timer(tg, 1, 5, cmd.bgcheck, None)
         if postConfFolder:
-            cmd.do_folder(postConfFolder)
+            await cmd.do_folder(postConfFolder)
         try:
             await cmd.cmdloop()
         except KeyboardInterrupt:
