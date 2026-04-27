@@ -87,6 +87,9 @@ class editorCompleter(cmdprompt.prompt_toolkit.completion.Completer):
         # to be reused by the attachment editor and possibly other
         # places.
         currentPath = line[3:]
+        if currentPath.startswith("#"):
+            # TODO: complete message attachments (perhaps showing headlines?)
+            return
         compl = pathCompleter(currentPath)
         yield from compl
 
