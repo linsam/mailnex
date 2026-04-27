@@ -188,7 +188,7 @@ class editorCmds(object):
             if len(parts) != 1:
                 topic = parts[1]
                 if topic == 'all':
-                    funcs = filter(lambda x: x.startswith('do_'), dir(self))
+                    funcs = list(filter(lambda x: x.startswith('do_'), dir(self)))
                     maxlen = max(map(lambda x: len(x), funcs))
                     i = 0
                     outstr=['Commands:']
