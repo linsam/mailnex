@@ -418,6 +418,8 @@ class MessageList(object):
         if iterable:
             for i in iterable:
                 self.add(i)
+    def __repr__(self) -> str:
+        return repr(self.ranges)
     def __nonzero__(self):
         return len(self.ranges) != 0
     # Python 3 compat
