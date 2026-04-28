@@ -2048,7 +2048,7 @@ class Cmd(cmdprompt.CmdPrompt):
             data = self.C.connection.fetch(msgset.imapListStr(), b'(FLAGS)')
             for d in data:
                 r = processImapData(d[1], self.C.settings)[0]
-                self.C.cache["%s.%s"%(d[0], b'FLAGS')] = getResultPart(b'FLAGS', r)
+                self.C.cache[b"%s.%s"%(d[0], b'FLAGS')] = getResultPart(b'FLAGS', r)
 
         # Build a fetch list
         flist = MessageList()
@@ -3659,7 +3659,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         if haveGpg:
                             inner = struct.tag.split('.')[1:]
                             encpart = ".".join(inner + ['2'])
-                            data = self.cacheFetch(index, 'b(BODY.PEEK[%s])' % (encpart))[0]
+                            data = self.cacheFetch(index, b'(BODY.PEEK[%s])' % (encpart))[0]
                             message = getResultPart(b"BODY[%s]"%(encpart), data[1])
                             ctx = gpg.Context()
                             skipEncrypted = False
