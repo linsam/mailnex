@@ -641,10 +641,16 @@ def unpackStruct(data, options, depth=1, tag=b"", predesc=""):
             if not isinstance(data[i], list):
                 break
         info = data[i:]
+        # e.g. info = [b'alternative', [b'boundary', b'000000000000250bfe06503372f5'], None, None, None]
+        # Let's decode some of the bytes to str at this level
+        if isinstance(info[0], bytes):
+            info[0] = info[0].decode('ascii')
+        if isinstance(info[1][0], bytes):
+            info[1][0] = info[1][0].decode('ascii')
         this = structureMultipart(tag, *info)
-        if data[i + 2] and data[i + 2][0] and data[i + 2][0] == "attachment":
+        if data[i + 2] and data[i + 2][0] and data[i + 2][0] == b"attachment":
             extra = " (attachment)"
-        elif data[i + 2] and data[i + 2][0] and data[i + 2][0] == "inline":
+        elif data[i + 2] and data[i + 2][0] and data[i + 2][0] == b"inline":
             extra = " (inline)"
         if options.debug.struct:
             print("%s   %s%s/%s%s" % (tag, predesc, "multipart", data[i], extra))
@@ -653,6 +659,8 @@ def unpackStruct(data, options, depth=1, tag=b"", predesc=""):
             this.addSub(unpackStruct(dat, options, depth + 1, tag + b'.' + b'%d'%(j)))
             j += 1
     else:
+        data[0] = data[0].decode('ascii')
+        data[1] = data[1].decode('ascii')
         # If we are message/rfc822, then we have further subdivision!
         if data[0].lower() == "message" and data[1].lower() == "rfc822":
             this = structureMessage(tag, *data)
@@ -3757,9 +3765,9 @@ class Cmd(cmdprompt.CmdPrompt):
             # TODO XXX: Preprocess control chars out of all strings before
             # display to terminal!
             structureStrings.append("%s   %s/%s%s %s" % (
-                struct.tag,
+                struct.tag.decode('ascii'),
                 struct.type_,
-                struct.subtype.decode('ascii'),
+                struct.subtype,
                 extra,
                 sigres if sigres else "",
                 ))
@@ -3767,7 +3775,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # First pass, we'll just grab all text/plain parts. Later we'll
             # want to check disposition, and later we'll want to deal with
             # multipart/alternative better (and multipart/related)
-            if (allParts and struct.type_ == b"text") or (not allParts and struct.type_ == b"text" and struct.subtype == b"plain"):
+            if (allParts and struct.type_ == "text") or (not allParts and struct.type_ == "text" and struct.subtype == "plain"):
                 # TODO: write the following a bit more efficiently. Like,
                 # split only once, use second part of return only, perhaps?
                 # TODO: Is skip ever true?
@@ -5660,7 +5668,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         pass
             else:
                 disp = ""
-            print("{}{}   {}/{}{}".format(index, part, p.type_, p.subtype, disp))
+            print("{}{}   {}/{}{}".format(index, part.decode('ascii'), p.type_, p.subtype, disp))
 
     def getRows(self, adjust=0):
         """Gets the number of headline rows based on user preference.
