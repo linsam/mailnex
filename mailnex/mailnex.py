@@ -659,18 +659,18 @@ def unpackStruct(data, options, depth=1, tag=b"", predesc=""):
             this.addSub(unpackStruct(dat, options, depth + 1, tag + b'.' + b'%d'%(j)))
             j += 1
     else:
-        data[0] = data[0].decode('ascii')
-        data[1] = data[1].decode('ascii')
+        mtype = data[0].decode('ascii')
+        msubtype = data[1].decode('ascii')
         # If we are message/rfc822, then we have further subdivision!
-        if data[0].lower() == "message" and data[1].lower() == "rfc822":
-            this = structureMessage(tag, *data)
+        if mtype.lower() == "message" and msubtype.lower() == "rfc822":
+            this = structureMessage(tag, mtype, msubtype, *data[2:])
             if data[11] and data[11][0] and data[11][0] == "attachment":
                 extra = " (attachment)"
             elif data[11] and data[11][0] and data[11][0] == "inline":
                 extra = " (inline)"
             this.addSub(unpackStruct(data[8], options, depth + 1, tag, "message/rfc822%s, which is " % (extra)))
         else:
-            this = structureLeaf(tag, *data)
+            this = structureLeaf(tag, mtype, msubtype, *data[2:])
             if data[0].lower() == "text":
                 if data[9] and data[9][0] and data[9][0] == "attachment":
                     extra = " (attachment)"
