@@ -4920,7 +4920,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @needsConnection
     @argsToMessageList
     @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
-    def do_show(self, msglist):
+    async def do_show(self, msglist):
         """Show the raw, unprocessed message
 
         Unlike `print` or `Print`, this fetches the message fresh from the
@@ -4944,9 +4944,7 @@ class Cmd(cmdprompt.CmdPrompt):
             body = getResultPart(b'BODY[TEXT]', parts)
             content += "Message {}:\n".format(index) + headers.decode() + body.decode()
         # TODO: Process content for control chars?
-        # TODO: Restore external pager
-        #res = self.runAProgramWithInput(["less"], content)
-        print(content)
+        res = await self.runAProgramWithInput(["less"], content.encode('utf-8'))
 
     @showExceptions
     async def do_mail(self, args):
