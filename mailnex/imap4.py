@@ -47,6 +47,9 @@ class imap4Exception(Exception):
     """Root exception for all exceptions raised by this imap4 module"""
 class imap4NoConnect(imap4Exception):
     """Exception for connection failure"""
+    def __init__(self, string, lower=None, *args):
+        super().__init__(string, *args)
+        self.lower=lower
 
 class imap4ClientConnection(object):
     # Connections can be happily in several states:
@@ -615,8 +618,7 @@ class imap4ClientConnection(object):
         try:
             targets = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, 0)
         except socket.gaierror as ev:
-            print("   ", ev.strerror)
-            raise imap4NoConnect("unable to connect")
+            raise imap4NoConnect(f"Failed to get address information for host {host}", lower=ev)
 
         # TODO: should we iterate through targets in order, randomly, or
         # randomly by address family (that is, try IPv6 first, then IPv4, then

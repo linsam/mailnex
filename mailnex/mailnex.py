@@ -2397,6 +2397,11 @@ class Cmd(cmdprompt.CmdPrompt):
             c.mailnexBox = box
             try:
                 c.connect(host, port=port)
+            except imap4.imap4NoConnect as ev:
+                print(f"Failed to connect: {ev}: {ev.lower}")
+                return
+
+            try:
                 if c.isTls():
                     print("Info: Connection already secure")
                 elif proto == "imap+plain":
