@@ -222,7 +222,7 @@ class CmdPrompt(cmd.Cmd):
         self.lexerEnabled = False
         #self.cli.application.buffer.document = prompt_toolkit.document.Document(default)
         try:
-            text = await self.cli.prompt_async(self.prompt, completer=completer)
+            text = await self.cli.prompt_async(self.prompt, completer=completer, default=default)
         finally:
             self.prompt = origPrompt
             #self.cli.application.buffer.history = origHistory
@@ -351,25 +351,14 @@ class CmdPrompt(cmd.Cmd):
         self.ptkevloop.realloop.run()
         self.ttyBusy = False
         return res
-    def runAProgramStraight(self, args):
+    async def runAProgramStraight(self, args):
         """Run a program without anything special. Leaves stdin/stdout/stderr alone.
 
         This should be run when the prompt is inactive."""
-        res=[]
-        def finish(proc,status,signal):
-            proc.close()
-            proc.loop.stop()
-            res.append(status)
-        stdio = [
-                uvloop.StdIO(fd=sys.stdin.fileno(), flags=uvloop.UV_INHERIT_FD),
-                uvloop.StdIO(fd=sys.stdout.fileno(), flags=uvloop.UV_INHERIT_FD),
-                uvloop.StdIO(fd=sys.stderr.fileno(), flags=uvloop.UV_INHERIT_FD),
-                ]
         self.ttyBusy = True
-        s = uvloop.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
-        self.ptkevloop.realloop.run()
+        result = await anyio.run_process(command=args, stdout=None, stderr=None, stdin=None)
         self.ttyBusy = False
-        return res[0]
+        return result.returncode
     def runAProgramGetOutput(self, args):
         """Run a program obtaining standard output as a string. Leaves stdin/stderr alone.
 

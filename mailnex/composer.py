@@ -10,6 +10,7 @@ import tempfile
 from . import cmdprompt
 from .exceptions import MailnexException
 from .pathcompleter import *
+import inspect
 
 haveGpg = False
 haveGpgme = False
@@ -159,7 +160,11 @@ class editorCmds(object):
 
                 func = 'do_{}'.format(func)
                 if func in dir(self):
-                    res = getattr(self, func)(line)
+                    func = getattr(self, func)
+                    if inspect.iscoroutinefunction(func):
+                        res = await func(line)
+                    else:
+                        res = func(line)
                     # TODO: Check if the function is supposed to allow args
                 else:
                     res = self.default(line)
@@ -379,16 +384,11 @@ class editorCmds(object):
         print(repr(self.message.get_payload()))
     @noarg
     def do_p(self, line):
-        # Well, we have to dance here to get the payload. Pretty sure
-        # we must be doing this wrong.
-        orig = self.message.get_payload()
-        self.message.set_payload(orig.encode('utf-8'))
         print(self.message.as_string())
-        self.message.set_payload(orig)
         #print("Message\nTo: %s\nSubject: %s\n\n%s" % (to, subject, self.messageText))
     @noarg
-    def do_v(self, line):
-        f=tempfile.mkstemp()
+    async def do_v(self, line):
+        f=tempfile.mkstemp(suffix='.eml', prefix='mailnex-')
         #TODO: If editHeaders is set, also save the headers
         os.write(f[0], self.message.get_payload().encode('utf-8'))
 
@@ -417,12 +417,12 @@ class editorCmds(object):
             # For whatever reason, vim complains the input isn't from
             # the terminal unless we redirect it ourselves. I'm
             # guessing prompt_toolkit changed python's stdin somehow
-            res = self.runAProgramStraight(["/bin/sh","-c", editor + " " + f[1]])
+            res = await self.runAProgramStraight(["/bin/sh","-c", editor + " " + f[1]])
         if res != 0:
             self.C.printWarning("Edit aborted; message unchanged")
         else:
             os.lseek(f[0], 0, os.SEEK_SET)
-            fil = os.fdopen(f[0])
+            fil = os.fdopen(f[0], mode='rb')
             self.message.set_payload(fil.read().decode('utf-8'))
             fil.close()
             del fil
