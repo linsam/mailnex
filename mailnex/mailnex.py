@@ -4969,7 +4969,7 @@ class Cmd(cmdprompt.CmdPrompt):
     @needsConnection
     @argsToMessageList
     @updateMessageSelectionAtEnd(UMSAE_DEFAULT)
-    def do_reply(self, msglist):
+    async def do_reply(self, msglist):
         C = self.C
         M = C.connection
         lastMessage = len(self.C.virtfolder) if self.C.virtfolder else self.C.lastMessage
@@ -4991,7 +4991,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 return
             index = self.C.virtfolder[index - 1]
         parts = self.getTextPlainParts(index)
-        hdrs = processHeaders(parts[0][2])
+        hdrs = processHeaders(parts[0][2].encode('ascii'))
         # The spec doesn't say specifically how to handle replies, leaving it
         # up to individual implementations.
         # They give an example where the Reply-To or From is used for the new
@@ -5003,36 +5003,36 @@ class Cmd(cmdprompt.CmdPrompt):
         # the list.
         # TODO: Allow a user preference setting for how to do this. Maybe
         # allow a setting of 'ask' to prompt for each message.
-        if 'to' in hdrs:
+        if b'to' in hdrs:
             # There can be multiple 'to' lines, theoretically. Lets merge them
             # and then split the components
-            to = ",".join(hdrs['to']).split(',')
+            to = ",".join(hdrs[b'to']).split(',')
         else:
             to = []
-        if 'cc' in hdrs:
-            cc = ",".join(hdrs['cc']).split(',')
+        if b'cc' in hdrs:
+            cc = ",".join(hdrs[b'cc']).split(',')
         else:
             cc = []
         # TODO: What if the message has BCC headers? Warn the user? Prompt?
         # Discard? Sheepishly discarding for now. Need to see what mailx does,
         # I guess.
-        if 'subject' in hdrs:
+        if b'subject' in hdrs:
             # Take the first subject we find.
-            subj = hdrs['subject'][0]
+            subj = hdrs[b'subject'][0]
             if not subj.lower().startswith("re: "):
                 subject = "Re: " + subj
             else:
                 subject = subj
         else:
             subject = "Re:"
-        if 'from' in hdrs:
-            from_ = hdrs['from'][0]
+        if b'from' in hdrs:
+            from_ = hdrs[b'from'][0]
         else:
             #TODO: Print a warngin? An error? From is one of only 2 mandatory
             # fields. Not having it breaks many assumptions.
             from_ = "unkown"
         # Prepend the sender to the to list
-        if 'reply-to' in hdrs:
+        if b'reply-to' in hdrs:
             # RFC2822 only allows 0 or 1 'reply-to' header in a message. If
             # there are actually more than 1 present, we have to decide which
             # to pick. Viable options are to pick the first, or pick the last,
@@ -5044,7 +5044,7 @@ class Cmd(cmdprompt.CmdPrompt):
             # attackers header instead of the legit one. TODO: use the last
             # header on these grounds? Actually do some DKIM checks before
             # picking a header?
-            to[0:0] = [hdrs['reply-to'][0]]
+            to[0:0] = [hdrs[b'reply-to'][0]]
         else:
             to[0:0] = [from_]
         # TODO: Notify the user if something looks a tad fishy here. For
@@ -5162,9 +5162,9 @@ class Cmd(cmdprompt.CmdPrompt):
         if self.C.settings.autobcc:
             newmsg['Bcc'] = self.C.settings.autobcc.value
         print("Message to %s, replying to %s, subject %s" % (", ".join(to), from_, subject))
-        sent = self.editMessage(newmsg)
+        sent = await self.editMessage(newmsg)
         if sent:
-            M.doSimpleCommand("STORE %s +FLAGS (\\Answered)" % index)
+            M.doSimpleCommand(b"STORE %d +FLAGS (\\Answered)" % index)
 
     async def editMessage(self, message):
         """Run message composer until it is sent or the user aborts.
