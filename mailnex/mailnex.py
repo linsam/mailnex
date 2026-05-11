@@ -2100,6 +2100,8 @@ class Cmd(cmdprompt.CmdPrompt):
             """This class currently requires code that creates objects of this to
             set an attribute "settings" that will have the searchcmd in it."""
             def get_completions(self, document, complete_event):
+                if self.settings.addresssearchcmd.value == "":
+                    return
                 before = document.current_line_before_cursor
                 after = document.current_line_after_cursor
                 # Simple first pass, use comma separation.
@@ -2112,7 +2114,11 @@ class Cmd(cmdprompt.CmdPrompt):
                 this = thisstart + thisend
                 prefix = " " if this.startswith(" ") else ""
                 this = this.strip()
-                s = subprocess.Popen(self.settings.addresssearchcmd.value.split() + [this], stdin=None, stdout=subprocess.PIPE)
+                try:
+                    s = subprocess.Popen(self.settings.addresssearchcmd.value.split() + [this], stdin=None, stdout=subprocess.PIPE)
+                except Exception as ev:
+                    # TODO: Log that we failed? Don't want to spam the screen
+                    return
                 results=[]
                 for i in range(10):
                     res = s.stdout.readline().strip()
