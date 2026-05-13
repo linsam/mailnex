@@ -2122,6 +2122,7 @@ class Cmd(cmdprompt.CmdPrompt):
                 results=[]
                 for i in range(10):
                     res = s.stdout.readline().strip()
+                    res = res.decode('utf-8')
                     #print(i,repr(res))
                     if res == "":
                         break
@@ -6707,7 +6708,7 @@ class Cmd(cmdprompt.CmdPrompt):
 
 def getOptionsSet():
     options = settings.Options()
-    options.addOption(settings.StringOption("addresssearchcmd", "khard email", doc="""Command to use for searching addresses
+    options.addOption(settings.StringOption("addresssearchcmd", "khard email -p", doc="""Command to use for searching addresses
     Used for address completion (e.g. in the ~h command when editing a message).
     Command output is expected to be the address, a tab, the name, and then
     optionally another tab and an identifier (e.g. name of address book or
