@@ -5883,6 +5883,14 @@ class Cmd(cmdprompt.CmdPrompt):
                             # TODO: Show error in listing, or drop the header?
                             newfroms.append(u"<bad from>")
                 froms = newfroms
+
+                tos = [b"%s@%s" % (x[2], x[3]) for x in envelope.to]
+                for_me = False
+                for t in tos:
+                    if t.decode('utf-8') in self.C.settings.highlightto.value:
+                        for_me = True
+                        break
+
                 if self.C.virtfolderExtra and num:
                     extra = self.C.virtfolderExtra[num - 1]
                     # extra[0] is leader info. True for is leader, False for
@@ -5929,7 +5937,10 @@ class Cmd(cmdprompt.CmdPrompt):
                 else:
                     lindent = ""
 
-                resset.append((num, headline.format(**{
+                wrap=""
+                if for_me:
+                    wrap="\x1b[1m"
+                resset.append((num, wrap + headline.format(**{
                         'attr': attr,
                         'this': '>' if this else ' ',
                         'num': num,
@@ -5937,6 +5948,7 @@ class Cmd(cmdprompt.CmdPrompt):
                         'date': date.strftime("%04Y-%02m-%02d %02H:%02M:%02S"),
                         'subject': subject,
                         'flags': " ".join(map(lambda x: x.decode('ascii'), flags)),
+                        'for_me': for_me,
                         'from': froms[0],
                         'leader': leader,
                         'level': level,
@@ -6890,6 +6902,7 @@ def getOptionsSet():
         'Subject',
         ], doc="Prefered order of headers. Headers not mentioned in this list are displayed in the order of the message. Set this to empty in order to not re-order any headers for display."))
     options.addOption(settings.BoolOption('headerorderend', False, doc="Set to display the preferred headers (those mentioned in 'headerorder') at the end of the headers list. Clear to display preferred headers at the start."))
+    options.addOption(settings.FlagsOption("highlightto", [], doc="Set a list of email addresses to highlight when matching in listings."))
     options.addOption(settings.FlagsOption("ignoredheaders", [
         'content-transfer-encoding',
         'in-reply-to',
