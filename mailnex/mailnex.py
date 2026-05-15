@@ -5891,6 +5891,13 @@ class Cmd(cmdprompt.CmdPrompt):
                         if t.decode('utf-8') in self.C.settings.highlightto.value:
                             for_me = True
                             break
+                rel_me = False
+                if envelope.cc:
+                    ccs = [b"%s@%s" % (x[2], x[3]) for x in envelope.cc]
+                    for c in ccs:
+                        if c.decode('utf-8') in self.C.settings.highlightto.value:
+                            rel_me = True
+                            break
 
                 if self.C.virtfolderExtra and num:
                     extra = self.C.virtfolderExtra[num - 1]
@@ -5941,6 +5948,8 @@ class Cmd(cmdprompt.CmdPrompt):
                 wrap=""
                 if for_me:
                     wrap="\x1b[1m"
+                elif not rel_me:
+                    wrap="\x1b[2m"
                 resset.append((num, wrap + headline.format(**{
                         'attr': attr,
                         'this': '>' if this else ' ',
