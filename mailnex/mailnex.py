@@ -4179,7 +4179,7 @@ class Cmd(cmdprompt.CmdPrompt):
                             break
                     if not ienc:
                         if hasattr(part[1], 'realcharset'):
-                            ienc = part[1].realcharset
+                            ienc = part[1].realcharset.decode("ascii")
                         else:
                             ienc = 'utf-8'
                     if ienc == 'same' and hasattr(part[1], 'realcharset'):
