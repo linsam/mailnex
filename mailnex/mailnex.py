@@ -5884,12 +5884,13 @@ class Cmd(cmdprompt.CmdPrompt):
                             newfroms.append(u"<bad from>")
                 froms = newfroms
 
-                tos = [b"%s@%s" % (x[2], x[3]) for x in envelope.to]
                 for_me = False
-                for t in tos:
-                    if t.decode('utf-8') in self.C.settings.highlightto.value:
-                        for_me = True
-                        break
+                if envelope.to:
+                    tos = [b"%s@%s" % (x[2], x[3]) for x in envelope.to]
+                    for t in tos:
+                        if t.decode('utf-8') in self.C.settings.highlightto.value:
+                            for_me = True
+                            break
 
                 if self.C.virtfolderExtra and num:
                     extra = self.C.virtfolderExtra[num - 1]
