@@ -356,7 +356,7 @@ class CmdPrompt(cmd.Cmd):
 
         This should be run when the prompt is inactive."""
         self.ttyBusy = True
-        result = await anyio.run_process(command=args, stdout=None, stderr=None, stdin=None)
+        result = await anyio.run_process(command=args, check=False, stdout=None, stderr=None, stdin=None)
         self.ttyBusy = False
         return result.returncode
     def runAProgramGetOutput(self, args):
