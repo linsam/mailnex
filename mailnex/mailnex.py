@@ -4109,7 +4109,7 @@ class Cmd(cmdprompt.CmdPrompt):
         headerstr += '\r\n'
         return headerstr
 
-    def partsToString(self, parts, allHeaders=False):
+    async def partsToString(self, parts, allHeaders=False):
         # parts[0] is None or 'info' or the tag of the message part
         # parts[1] is None or 'header' or the struct object for the message
         # part
@@ -4198,10 +4198,10 @@ class Cmd(cmdprompt.CmdPrompt):
                             outfile.write(encdata)
                             outfile.flush()
                             cmd = printfStyle.replace(cmd, {'s': s, 't': t, 'f': outfile.name})
-                            status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], b"")
+                            status, data = await self.runAProgramAsFilter(['/bin/sh', '-c', cmd], b"")
                     else:
                         cmd = printfStyle.replace(cmd, {'s': s, 't': t})
-                        status, data = self.runAProgramAsFilter(['/bin/sh', '-c', cmd], encdata)
+                        status, data = await self.runAProgramAsFilter(['/bin/sh', '-c', cmd], encdata)
                     if status == 0:
                         oenc = None
                         settingsearch = [
@@ -4672,7 +4672,7 @@ class Cmd(cmdprompt.CmdPrompt):
         parts = self.getTextPlainParts(index)
         # TODO: This code copied from do_print.
         # Should be made common. See also TODOs from there.
-        body = self.partsToString(parts)
+        body = await self.partsToString(parts)
         content = b"\033[7mMessage %i:\033[0m\n" % index
         content += body.encode('utf-8')
         res = await self.runAProgramWithInput(["less","-R"], content)
@@ -4776,7 +4776,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(parts) < 2:
             print("Message has no displayable parts")
             return
-        body = self.partsToString(parts)
+        body = await self.partsToString(parts)
 
         # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
         # for styling
@@ -4847,7 +4847,7 @@ class Cmd(cmdprompt.CmdPrompt):
         if len(parts) < 2:
             print("Message has no displayable parts")
             return
-        body = self.partsToString(parts, True)
+        body = await self.partsToString(parts, True)
 
         # TODO: Use terminfo/termcap (or perhaps pygments or prompt_toolkit)
         # for styling

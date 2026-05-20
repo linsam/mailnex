@@ -311,46 +311,18 @@ class CmdPrompt(cmd.Cmd):
         result = await anyio.run_process(command=args, input=data, check=False, stdout=None, stderr=None)
         self.ttyBusy = False
         return result.returncode
-    def runAProgramAsFilter(self, args, data):
+    async def runAProgramAsFilter(self, args, data):
         """Run a program with the given input. Return the output. Leaves stderr alone.
 
-        This should be run when the prompt is inactive."""
-        res=[None, b""]
-        done=[0]
-        def finish(proc,status,signal):
-            proc.close()
-            proc.loop.stop()
-            res[0] = status
-        com = uvloop.Pipe(self.ptkevloop.realloop, True)
-        como = uvloop.Pipe(self.ptkevloop.realloop, True)
-        stdio = [
-                uvloop.StdIO(stream=com, flags=uvloop.UV_CREATE_PIPE | uvloop.UV_READABLE_PIPE),
-                uvloop.StdIO(stream=como, flags=uvloop.UV_CREATE_PIPE | uvloop.UV_WRITABLE_PIPE),
-                uvloop.StdIO(fd=sys.stderr.fileno(), flags=uvloop.UV_INHERIT_FD),
-                ]
+        This should be run when the prompt is inactive.
+
+        returns a tuple of return code and stdout data.
+	"""
         self.ttyBusy = True
-        s = uvloop.Process.spawn(self.ptkevloop.realloop, args, stdio=stdio, exit_callback=finish)
-        def closeWhenDone(handle, error):
-            # TODO: Maybe report error?
-            handle.close()
-        def doneWriting(handle, error):
-            # TODO: Maybe report error?
-            if done[0]:
-                closeWhenDone(handle, error)
-            done[0] = True
-        def readCb(handle, data, error):
-            if data is None:
-                handle.stop_read()
-                if done[0]:
-                    closeWhenDone(handle, error)
-                done[0] = True
-                return
-            res[1] += data
-        como.start_read(readCb)
-        com.write(data, closeWhenDone)
-        self.ptkevloop.realloop.run()
+        result = await anyio.run_process(command=args, input=data, check=False, stderr=None)
+        breakpoint()
         self.ttyBusy = False
-        return res
+        return (result.returncode, result.stdout)
     async def runAProgramStraight(self, args):
         """Run a program without anything special. Leaves stdin/stdout/stderr alone.
 
