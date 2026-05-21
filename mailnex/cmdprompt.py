@@ -308,9 +308,20 @@ class CmdPrompt(cmd.Cmd):
 
         This should be run when the prompt is inactive."""
         self.ttyBusy = True
-        result = await anyio.run_process(command=args, input=data, check=False, stdout=None, stderr=None)
+        try:
+            result = await anyio.run_process(command=args, input=data, check=False, stdout=None, stderr=None)
+            ret = result.returncode
+        except* BrokenPipeError as ev:
+            print("Broken pipe")
+            ret = 0
+        except* anyio.BrokenResourceError as ev:
+            print("Probably broken pipe")
+            ret = 0
+        except* Exception as ev:
+            print("Error running external program:", ev)
+            ret = -1
         self.ttyBusy = False
-        return result.returncode
+        return ret
     async def runAProgramAsFilter(self, args, data):
         """Run a program with the given input. Return the output. Leaves stderr alone.
 
