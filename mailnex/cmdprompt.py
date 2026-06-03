@@ -331,7 +331,6 @@ class CmdPrompt(cmd.Cmd):
 	"""
         self.ttyBusy = True
         result = await anyio.run_process(command=args, input=data, check=False, stderr=None)
-        breakpoint()
         self.ttyBusy = False
         return (result.returncode, result.stdout)
     async def runAProgramStraight(self, args):
